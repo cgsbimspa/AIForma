@@ -53,6 +53,7 @@ if (['.txt', '.md'].includes(extension)) {
       const operators = await page.getOperatorList();
       const hasImages = operators.fnArray.some(op => [OPS.paintImageXObject, OPS.paintInlineImageXObject, OPS.paintImageMaskXObject].includes(op));
       if (!text.trim() || hasImages) {
+        if (!ocr.available()) { warn('ocr_limit'); textlessPages++; page.cleanup(); continue; }
         try {
           const base = page.getViewport({ scale: 1 }), scale = Math.min(2, 2600 / base.width, 3500 / base.height), viewport = page.getViewport({ scale });
           const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));

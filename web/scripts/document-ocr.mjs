@@ -23,5 +23,5 @@ export function createOcr(warn) {
     } catch { warn('ocr_unavailable'); await worker?.terminate(); worker = undefined; return null; }
     finally { clearTimeout(timer); }
   }
-  return { recognize, close: async () => { await worker?.terminate(); } };
+  return { recognize, available: () => operations < 12 && Date.now() < deadline, close: async () => { await worker?.terminate(); } };
 }
