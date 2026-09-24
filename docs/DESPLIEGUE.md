@@ -36,6 +36,14 @@
 
 ## Actualizaciones futuras
 
+### Asistente IA — 24 de septiembre de 2026
+
+- Commit `2c996de`: explorador Forma, selección de alcance y asistente OpenAI.
+- Publicación `dpl_7wZBEztWxZQvtcPFM4SeiXZi2V7y` en estado Ready, aplicada a `app.cgsbim.cl`.
+- OpenAI configurado como secreto del servidor; conexión real y contrato de herramientas comprobados. Prueba de contrato con datos identificados como TEST, sin sustituir datos del explorador.
+- 16 pruebas automáticas, ESLint y compilación Next.js aprobados. Endpoints de datos y chat rechazan consultas anónimas con HTTP 401.
+- El consentimiento adicional `data:read` quedó preparado en Autodesk para verificar las carpetas de la cuenta real. Su estado se actualizará tras la autorización.
+
 Realizar los cambios dentro de este proyecto, ejecutar `npm run build` y `npm run typecheck` desde `web`, y subir los commits a `main`. Vercel está configurado para construir la aplicación desde `web` usando Node.js 24.x y `npm ci`.
 
 ## Límites
