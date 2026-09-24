@@ -23,8 +23,7 @@
       viewer.setTheme("light-theme");
       report("loading", "Cargando la versión y vista seleccionadas…");
       Autodesk.Viewing.Document.load("urn:" + input.urn, doc => {
-        console.info("Quantity viewer geometry identifiers", JSON.stringify(doc.getRoot().search({type: "geometry"}).map(node => ({guid: node.data.guid, viewableID: node.data.viewableID, name: node.data.name, role: node.data.role}))));
-        const matches = doc.getRoot().search({ guid: input.viewId, type: "geometry" });
+        const matches = doc.getRoot().search({ guid: input.geometryId, type: "geometry" });
         if (matches.length !== 1) { clearTimeout(timeout); fail("La vista seleccionada no está disponible en el modelo publicado. Selecciona otra vista de esta versión."); return; }
         viewer.addEventListener(Autodesk.Viewing.GEOMETRY_LOADED_EVENT, () => { clearTimeout(timeout); if (!done) { viewer.fitToView(); report("ready", "Vista seleccionada cargada"); done = true; } });
         viewer.loadDocumentNode(doc, matches[0]).catch(() => { clearTimeout(timeout); fail("No se pudo cargar la geometría de esta vista. Verifica sus permisos y su publicación en Autodesk."); });

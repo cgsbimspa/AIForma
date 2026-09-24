@@ -1,10 +1,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomBytes} from 'node:crypto';
-import {manifestRoots,packViewerGrant,readViewerGrant,viewerOwner,viewerResource} from '../lib/quantities/viewer.ts';
+import {manifestRoots,packViewerGrant,readViewerGrant,viewerOwner,viewerResource,resolveViewerGeometry} from '../lib/quantities/viewer.ts';
 
 // TEST-only source manifests. No real credentials or model data.
 const urn='TEST_MODEL_V3',root=`urn:adsk.viewing:fs.file:${urn}/`;
+test('metadata and viewer GUIDs are linked only by the published viewableID, never by name or default view',()=>{
+ const geometry=(guid,viewableID,name='TEST same name')=>({type:'geometry',role:'3d',guid,viewableID,name});
+ const viewer={children:[geometry('TEST_SVF','TEST_REVIT_VIEW'),geometry('TEST_OTHER','TEST_OTHER_VIEW')]};
+ const metadata={derivatives:[{children:[geometry('TEST_SVF2','TEST_REVIT_VIEW')]}]};
+ assert.equal(resolveViewerGeometry('TEST_SVF2',viewer,metadata),'TEST_SVF');
+ assert.equal(resolveViewerGeometry('TEST_SVF',viewer,{}),'TEST_SVF');
+ assert.throws(()=>resolveViewerGeometry('TEST_SVF2',viewer,{children:[geometry('TEST_SVF2','TEST_UNKNOWN')]}),/view_unavailable/);
+ assert.throws(()=>resolveViewerGeometry('TEST_SVF2',{children:[geometry('TEST_SVF','TEST_REVIT_VIEW'),geometry('TEST_DUP','TEST_REVIT_VIEW')]},metadata),/view_unavailable/);
+ assert.throws(()=>resolveViewerGeometry('TEST_SVF2',viewer,{children:[geometry('TEST_SVF2',undefined)]}),/view_unavailable/);
+});
 test('viewer grant binds the verified version/view to the same signed-in session, expires and rejects tampering',()=>{
  const key=randomBytes(32),grant={owner:viewerOwner('TEST_SESSION'),urn,viewId:'TEST_VIEW',roots:[root],expiresAt:1000};
  const ticket=packViewerGrant(grant,key);

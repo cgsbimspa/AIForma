@@ -10,7 +10,7 @@ import { projectScope, specialtyCode } from "@/lib/quantities/contracts";
 import { createQuantityStore } from "@/lib/quantities/store";
 import { modelVersion, modelVersions, modelViews, verifiedSource } from "@/lib/quantities/autodesk";
 import { compareRuns, processingBlocker } from "@/lib/quantities/engine";
-import { manifestRoots, packViewerGrant, viewerOwner } from "@/lib/quantities/viewer";
+import { manifestRoots, packViewerGrant, viewerOwner, resolveViewerGeometry } from "@/lib/quantities/viewer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -58,7 +58,9 @@ export async function POST(request: NextRequest) {
       if (!source.version.modelId || !source.view) throw new DataError("viewer_derivative_unavailable", 422);
       const urn = source.version.modelId;
       const manifest = await get(token, new URL(`https://developer.api.autodesk.com/derivativeservice/v2/manifest/${encodeURIComponent(urn)}`), fetch, request.signal);
-      const ticket = packViewerGrant({ owner: viewerOwner(session.id ?? token), urn, viewId: source.view.id, roots: manifestRoots(manifest), expiresAt: Date.now() + 60 * 60_000 }, config.key);
+      const metadataManifest = await get(token, new URL(`https://developer.api.autodesk.com/modelderivative/v2/designdata/${encodeURIComponent(urn)}/manifest`), fetch, request.signal);
+      const geometryId = resolveViewerGeometry(source.view.id, manifest, metadataManifest);
+      const ticket = packViewerGrant({ owner: viewerOwner(session.id ?? token), urn, viewId: source.view.id, geometryId, roots: manifestRoots(manifest), expiresAt: Date.now() + 60 * 60_000 }, config.key);
       return response({ frameUrl: `/api/quantities/viewer-frame?ticket=${ticket}`, versionId: source.version.id, viewId: source.view.id });
     }
     if (command.action === "views") {

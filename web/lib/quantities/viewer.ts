@@ -6,11 +6,36 @@ import { DataError } from "../autodesk/data.ts";
 export const viewerSdkVersion = "7.119.0";
 const aad = Buffer.from("ai-forma-viewer-v1");
 const grantSchema = z.object({
-  owner: z.string(), urn: z.string().regex(/^[\w=-]+$/), viewId: z.string().min(1),
+  owner: z.string(), urn: z.string().regex(/^[\w=-]+$/), viewId: z.string().min(1), geometryId: z.string().min(1).optional(),
   roots: z.array(z.string().min(1)).min(1).max(100), expiresAt: z.number(),
 });
 export type ViewerGrant = z.infer<typeof grantSchema>;
 export const viewerOwner = (sessionId: string) => createHash("sha256").update(sessionId).digest("hex");
+
+function geometryNodes(manifest: unknown): Record<string, unknown>[] {
+  const nodes: Record<string, unknown>[] = [];
+  function walk(value: unknown, depth = 0) {
+    if (!value || typeof value !== "object" || depth > 30) return;
+    if (Array.isArray(value)) { value.forEach(v => walk(v, depth + 1)); return; }
+    const node = value as Record<string, unknown>;
+    if (node.type === "geometry") nodes.push(node);
+    for (const value of Object.values(node)) if (typeof value === "object") walk(value, depth + 1);
+  }
+  walk(manifest); return nodes;
+}
+// Metadata (SVF2) and the SVF viewer may assign different derivative GUIDs.
+// Only an explicit shared Revit viewableID establishes correspondence.
+export function resolveViewerGeometry(viewId: string, viewerManifest: unknown, metadataManifest: unknown): string {
+  const viewerNodes = geometryNodes(viewerManifest);
+  const direct = viewerNodes.filter(n => n.guid === viewId);
+  if (direct.length === 1) return viewId;
+  const source = geometryNodes(metadataManifest).filter(n => n.guid === viewId);
+  const ids = [...new Set(source.map(n => n.viewableID).filter(id => typeof id === "string" && id.length))];
+  if (ids.length !== 1) throw new DataError("view_unavailable", 409);
+  const matches = viewerNodes.filter(n => n.viewableID === ids[0] && source.some(s => s.role === n.role));
+  if (matches.length !== 1 || typeof matches[0].guid !== "string") throw new DataError("view_unavailable", 409);
+  return matches[0].guid;
+}
 
 // The manifest is fetched server-side from the already verified model version.
 // Only resource namespaces actually present in this manifest are authorized.
