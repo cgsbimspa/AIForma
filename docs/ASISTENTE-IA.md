@@ -34,6 +34,22 @@ Fuentes técnicas: [Data Management APS](https://aps.autodesk.com/data-managemen
 
 ## Búsqueda recursiva y texto documental
 
+## Preguntar sobre la selección
+
+El selector del chat permite Buscar, Preguntar, Resumir y Extraer datos. Los tres modos documentales requieren elegir un archivo o carpeta; una carpeta incluye sus descendientes. Nunca recurren a otros proyectos, búsquedas globales ni resultados previos para completar una respuesta. La selección se verifica otra vez en Autodesk en cada consulta. No se admite historial como fuente de evidencia: cada pregunta debe ser autocontenida.
+
+La ruta privada POST /api/assistant/documents valida sesión, origen, cuerpo y alcance. Lee versiones actuales del alcance, extrae texto mediante el worker existente y asigna referencias a página, párrafo, línea o fila/hoja. Los textos seleccionados se envían a OpenAI mediante Responses con store:false, sin tokens Autodesk, URLs firmadas ni herramientas de navegación. No se suben archivos a un almacén persistente de OpenAI. store:false no implica retención cero del proveedor.
+
+Cada bloque de respuesta requiere una cita. El servidor comprueba el identificador del pasaje y la coincidencia literal (sólo permite diferencias de espacios), construye la ubicación/ruta/versión/enlace desde sus propios datos y rechaza cifras que no aparezcan en las citas. En Extraer datos, los valores son citas literales, no valores generados. Para Preguntar y Resumir, una segunda llamada revisa que las afirmaciones, condiciones, negaciones y unidades estén respaldadas por las citas y su contexto. Si un bloque no pasa, se retiene la respuesta completa. Sin texto disponible no se llama al modelo.
+
+La síntesis se identifica como interpretación de IA y se distingue de las citas literales. El revisor semántico es un filtro probabilístico, no una demostración de verdad ni garantía absoluta contra errores. Las citas y la cobertura quedan visibles para comprobación. No se ejecutan cálculos ni se certifica cumplimiento; extraer lo que un documento recomienda no certifica que sea correcto, esté aprobado o se haya ejecutado. El contenido de documentos se trata como datos no confiables y nunca puede ampliar el alcance.
+
+Límites por consulta: hasta 8 documentos descargados, 40 listados, 120.000 caracteres y 1.500 pasajes, con presupuesto de lectura de 85 segundos antes de iniciar más tareas; el total tiene límite de 270 segundos. Se conservan los límites de formato y 25 MB por archivo. La respuesta incluye documentos procesados, estados de lectura, límites alcanzados y tareas pendientes; no se afirma cobertura completa cuando hay omisiones. No existe continuación del análisis por cursor: se selecciona un alcance menor para revisar lo pendiente.
+
+Validación: pruebas TEST para citas alteradas/ajenas, cifras inventadas, extracción no literal, rechazo del revisor, datos ausentes, cálculo no implementado, aislamiento del archivo elegido y límites de cobertura. La comprobación real de Responses utiliza exclusivamente contenido identificado como TEST antes de probar documentos autorizados en producción. Contrato de salida basado en [Structured Outputs oficial](https://developers.openai.com/api/docs/guides/structured-outputs); un esquema válido por sí solo no verifica las afirmaciones.
+
+## Detalle del buscador
+
 OpenAI interpreta la consulta en grupos de términos visibles. El servidor recorre todas las subcarpetas y páginas accesibles del alcance elegido; prioriza rutas coincidentes y continúa con el resto. Busca en nombres, rutas y texto extraído con normalización de mayúsculas, tildes y separadores. No hay un índice persistente ni búsqueda semántica sobre documentos; las variantes de términos propuestas por la IA se muestran al usuario.
 
 Formatos: PDF con capa de texto (página), DOCX (párrafo extraído), XLSX (hoja, fila y celdas), TXT/MD (línea) y CSV (registro). Máximo 25 MB por original, 1000 páginas PDF, 2 millones de caracteres y 20 segundos por extracción. Los PDF escaneados sin texto se identifican como OCR requerido; no se simula reconocimiento. Un nombre/ruta coincidente no se presenta como coincidencia dentro del contenido.
