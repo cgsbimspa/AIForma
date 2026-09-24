@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Boxes, Plus, ArrowLeft, ArrowRight, Box, ShieldCheck, RefreshCw, PanelLeftClose, PanelLeftOpen, Save, ExternalLink } from "lucide-react";
 import { AutodeskConnection } from "./autodesk-connection";
 import { QuantitySourcePicker } from "./quantity-source-picker";
@@ -44,11 +44,12 @@ export function QuantityWorkspace() {
     catch (e) { setError((e as Error).message); } finally { setBusy(false); }
   }
   const project = projects.find(p => p.id === projectId);
+  const projectScope = useMemo<QuantityProject>(() => ({ kind: "project", hubId, projectId }), [hubId, projectId]);
   return <div className="page-content quantity-page">
     <div className="quantity-heading"><div><p className="eyebrow">MODELO + REGLAS + TRAZABILIDAD</p><h1>Cubicaciones</h1><p className="page-description">Configura la fuente. Conserva cada versión. Compara con evidencia.</p></div><AutodeskConnection/></div>
     <div className="quantity-project-bar"><label>Cuenta Autodesk<select value={hubId} disabled={busy} onChange={e => { setHubId(e.target.value); setProjectId(""); setProjects([]); setNextPage(null); }}><option value="">Seleccionar cuenta</option>{hubs.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}</select></label><label>Proyecto<select value={projectId} disabled={!hubId || busy} onChange={e => setProjectId(e.target.value)}><option value="">Seleccionar proyecto</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>{nextPage !== null && <button className="quantity-secondary" disabled={busy} onClick={() => void moreProjects()}>Más proyectos</button>}<button className="quantity-icon-button" aria-label="Volver a consultar proyectos de Autodesk" disabled={busy} onClick={() => setRetry(n => n + 1)}><RefreshCw size={17}/></button>{busy && <span role="status">Consultando Autodesk…</span>}</div>
     {error && <p role="alert" className="quantity-error">{error}</p>}
-    {project ? <ProjectQuantities key={`${hubId}:${projectId}`} project={{ kind: "project", hubId, projectId }} name={project.name}/> : <section className="quantity-welcome quantity-panel"><div className="quantity-welcome-icon"><Boxes size={32}/></div><h2>Configuración de Cubicaciones</h2><p>Selecciona un proyecto de Autodesk para agregar sus especialidades y configurar las fuentes BIM.</p><div className="quantity-flow"><span>Especialidad</span><ArrowRight/><span>Plantilla</span><ArrowRight/><span>RVT + versión + vista</span><ArrowRight/><span>Cubicación</span></div><p className="quantity-help">Se mostrarán únicamente los proyectos y archivos accesibles para tu cuenta.</p></section>}
+    {project ? <ProjectQuantities key={`${hubId}:${projectId}`} project={projectScope} name={project.name}/> : <section className="quantity-welcome quantity-panel"><div className="quantity-welcome-icon"><Boxes size={32}/></div><h2>Configuración de Cubicaciones</h2><p>Selecciona un proyecto de Autodesk para agregar sus especialidades y configurar las fuentes BIM.</p><div className="quantity-flow"><span>Especialidad</span><ArrowRight/><span>Plantilla</span><ArrowRight/><span>RVT + versión + vista</span><ArrowRight/><span>Cubicación</span></div><p className="quantity-help">Se mostrarán únicamente los proyectos y archivos accesibles para tu cuenta.</p></section>}
   </div>;
 }
 
