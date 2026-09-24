@@ -6,6 +6,11 @@ import { z } from "zod";
 import { DataError } from "../autodesk/data.ts";
 export const parsedSchema = z.object({ status: z.enum(["parsed", "ocr_required", "no_text"]), nextPage: z.number().int().positive().optional(), pageStart: z.number().int().positive().optional(), pageEnd: z.number().int().nonnegative().optional(), partial: z.boolean().optional(), warnings: z.array(z.string()).optional(), pages: z.number().int().positive().optional(), textlessPages: z.number().int().nonnegative(), segments: z.array(z.object({ text: z.string().max(2000000), location: z.string(), page: z.number().optional(), paragraph: z.number().optional(), line: z.number().optional(), sheet: z.string().optional(), row: z.number().optional(), slide: z.number().optional(), method: z.literal("ocr").optional(), confidence: z.number().min(0).max(100).optional() })).max(20000) });
 export type ParsedDocument = z.infer<typeof parsedSchema>;
+export function parseWorkerOutput(output: string) {
+  const marker = "\nAIFORMA_RESULT:", index = output.lastIndexOf(marker);
+  if (index < 0) throw new DataError("parse_failed", 422);
+  return parsedSchema.parse(JSON.parse(output.slice(index + marker.length)));
+}
 export async function parseDocument(bytes: Buffer, name: string, signal?: AbortSignal, options: { startPage?: number; detail?: "plan" } = {}): Promise<ParsedDocument> {
   signal?.throwIfAborted();
   const startPage = options.startPage ?? 1;
@@ -24,7 +29,7 @@ export async function parseDocument(bytes: Buffer, name: string, signal?: AbortS
       signal?.addEventListener("abort", abort, { once: true }); if (signal?.aborted) abort();
       child.stdout.on("data", chunk => { output += chunk.toString(); if (output.length > 12_000_000) fail("parse_limit"); });
       child.on("error", () => fail("parse_failed"));
-      child.on("exit", code => { if (settled) return; if (code !== 0) { console.warn("[document-parser]", code, diagnostic); return fail("parse_failed"); } try { const result = parsedSchema.parse(JSON.parse(output)); settled = true; cleanup(); accept(result); } catch { fail("parse_failed"); } });
+      child.on("exit", code => { if (settled) return; if (code !== 0) { console.warn("[document-parser]", code, diagnostic); return fail("parse_failed"); } try { const result = parseWorkerOutput(output); settled = true; cleanup(); accept(result); } catch (error) { console.warn("[document-parser-invalid-output]", error instanceof z.ZodError ? error.issues.map(i=>({code:i.code,path:i.path})).slice(0,10) : error instanceof Error ? error.name : "unknown", {length:output.length,hasMarker:output.includes("\nAIFORMA_RESULT:")}); fail("parse_failed"); } });
     });
   } finally { await rm(directory, { recursive: true, force: true }); }
 }

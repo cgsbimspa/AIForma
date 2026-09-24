@@ -2,6 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {isDocumentQuestion,needsPlanReading} from '../lib/assistant/intent.ts';
 import {planRegions,readPlanRegions} from '../scripts/plan-ocr.mjs';
+import {parseWorkerOutput} from '../lib/documents/parser.ts';
+
+test('PDF diagnostic output cannot corrupt or become evidence in the parser response',()=>{
+ const result={status:'parsed',textlessPages:0,segments:[{text:'TEST literal evidence',location:'Página 1',page:1}]};
+ assert.deepEqual(parseWorkerOutput('Warning: TEST font diagnostic\nAIFORMA_RESULT:'+JSON.stringify(result)),result);
+ assert.throws(()=>parseWorkerOutput('Warning: TEST AVENIDA FALSA'));
+ assert.throws(()=>parseWorkerOutput('\nAIFORMA_RESULT:{broken}'));
+});
 
 test('content questions bypass folder-name search without turning navigation into document reading',()=>{
  for(const q of ['que calles indica aledañas','¿Qué nombres de calles aparecen en el plano?','Cuál es el valor neto','Explícame lo que indica el documento']) assert.equal(isDocumentQuestion(q),true,q);

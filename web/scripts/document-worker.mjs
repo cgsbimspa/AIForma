@@ -105,4 +105,4 @@ if (['.txt', '.md'].includes(extension)) {
   }
 } else throw new Error('UNSUPPORTED');
 } finally { await ocr.close(); }
-process.stdout.write(JSON.stringify({ segments, pages: pages || undefined, nextPage, ...((extension === ".pdf" || /^\.(png|jpe?g|webp|tiff?|gif)$/.test(extension)) ? { pageStart: startPage, pageEnd } : {}), textlessPages, partial: warnings.size > 0, warnings: [...warnings], status: segments.length ? 'parsed' : 'no_text' }));
+process.stdout.write('\nAIFORMA_RESULT:' + JSON.stringify({ segments, pages: pages || undefined, nextPage, ...((extension === ".pdf" || /^\.(png|jpe?g|webp|tiff?|gif)$/.test(extension)) ? { pageStart: startPage, pageEnd } : {}), textlessPages, partial: warnings.size > 0, warnings: [...warnings], status: segments.length ? 'parsed' : 'no_text' }));
