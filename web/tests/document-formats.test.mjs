@@ -25,6 +25,9 @@ test('scanned PDF pages and TIFF scans yield OCR citations at the actual page',a
   const chunks=[Buffer.from('%PDF-1.4\n')],offsets=[];for(let i=0;i<objects.length;i++){offsets.push(chunks.reduce((n,b)=>n+b.length,0));chunks.push(Buffer.from(`${i+1} 0 obj\n`),objects[i],Buffer.from('\nendobj\n'));}
   const xref=chunks.reduce((n,b)=>n+b.length,0);chunks.push(Buffer.from(`xref\n0 6\n0000000000 65535 f \n${offsets.map(n=>String(n).padStart(10,'0')+' 00000 n ').join('\n')}\ntrailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`));
   const doc=await parseDocument(Buffer.concat(chunks),'TEST-scan.pdf'),hit=findExcerpts(doc,[['mecanica','suelos']])[0];assert.ok(hit);assert.equal(hit.page,1);assert.equal(hit.method,'ocr');assert.match(hit.location,/Página 1/);
+  const plan=await parseDocument(Buffer.concat(chunks),'TEST-plan.pdf',undefined,{detail:'plan'});
+  const planHit=plan.segments.find(s=>s.text.includes('MECANICA DE SUELOS')&&s.confidence>=75);
+  assert.ok(planHit);assert.match(planHit.location,/Página 1.*zona fila/);assert.equal(planHit.method,'ocr');
   const tiff=await parseDocument(await sharp(testImage()).tiff().toBuffer(),'TEST-scan.tiff');assert.ok(findExcerpts(tiff,[['mecanica','suelos']]).length);
 });
 
