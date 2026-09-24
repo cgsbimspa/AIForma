@@ -1,4 +1,5 @@
 /* global Autodesk */
+import { installPropertyInspector } from "./quantity-properties.js";
 // Real Autodesk SDK viewer. Never fall back to the model's default geometry:
 // the server-verified geometry GUID must be present in this exact version.
 (() => {
@@ -48,7 +49,15 @@
       Autodesk.Viewing.Document.load("urn:" + input.urn, doc => {
         const matches = doc.getRoot().search({ guid: input.geometryId, type: "geometry" });
         if (matches.length !== 1) { clearTimeout(timeout); fail("La vista seleccionada no está disponible en el modelo publicado. Selecciona otra vista de esta versión."); return; }
-        viewer.addEventListener(Autodesk.Viewing.GEOMETRY_LOADED_EVENT, () => { clearTimeout(timeout); if (!done) { viewer.fitToView(); report("ready", "Vista seleccionada cargada"); done = true; } });
+        viewer.addEventListener(Autodesk.Viewing.GEOMETRY_LOADED_EVENT, () => {
+          clearTimeout(timeout);
+          if (!done) {
+            viewer.fitToView(); report("ready", "Vista seleccionada cargada"); done = true;
+            void installPropertyInspector(viewer).catch(() => {
+              status.hidden=false;status.textContent="La paleta completa no está disponible. Las propiedades estándar no confirman una lectura completa.";
+            });
+          }
+        });
         viewer.loadDocumentNode(doc, matches[0]).catch(() => { clearTimeout(timeout); fail("No se pudo cargar la geometría de esta vista. Verifica sus permisos y su publicación en Autodesk."); });
       }, () => { clearTimeout(timeout); fail("No se pudo leer el modelo publicado en Autodesk. Vuelve a cargar o abre la versión en Autodesk."); });
     });
