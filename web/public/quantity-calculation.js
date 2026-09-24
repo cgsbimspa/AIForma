@@ -1,4 +1,4 @@
-import { associateSubspecialty, classificationRule, normalizeClassification, parameter } from './quantity-classification.js';
+import { associateSubspecialty, classificationRule, elementFloor, normalizeClassification } from './quantity-classification.js';
 
 export const viewQuantityRules = [
   { metric: 'concrete_volume_m3', name: 'Hormigón', parameter: 'Volumen', unit: 'm³', apsUnit: 'cubicMeters' },
@@ -31,7 +31,6 @@ export function buildViewCalculation(elements, binding, now = new Date().toISOSt
     const rules = viewQuantityRules.filter(rule => rule.metric === 'concrete_volume_m3'
       ? e.specialties.includes('Hormigón')
       : sub === 'Acero Galvanizado' && (e.specialties.includes('Cubierta') || e.specialties.includes('Acero Galvanizado')));
-    const level = parameter(e.properties, 'Nivel');
     for (const rule of rules) {
       const quantity=readQuantity(e.properties,rule);
       if(e.externalId&&externalCounts.get(e.externalId)>1){quantity.quantity=null;quantity.issue='Identificador externo repetido en la vista; cantidad no confirmada';}
@@ -39,7 +38,7 @@ export function buildViewCalculation(elements, binding, now = new Date().toISOSt
         specialty: e.specialties.includes('Cubierta') ? 'Cubierta' : rule.metric === 'concrete_volume_m3' ? 'Hormigón' : 'Acero Galvanizado',
         subspecialty: sub || e.subspecialty || 'Subespecialidad no disponible',
         typeName: e.typeName || 'Tipo no disponible',
-        floor: level.ambiguous || !level.value ? 'Piso no verificado' : String(level.originals.find(v => typeof v === 'number' || normalizeClassification(v))),
+        floor: elementFloor(e.properties),
         unit: rule.unit, ...quantity });
     }
   }

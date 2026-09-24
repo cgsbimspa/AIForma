@@ -1,7 +1,7 @@
 /* global Autodesk */
 import { installPropertyInspector } from "./quantity-properties.js";
 import { buildViewCalculation } from "./quantity-calculation.js";
-import { readViewClassification, selectClassifiedElements, classificationRule } from "./quantity-classification.js";
+import { readViewClassification, classificationInventory, matchesClassification, classificationRule } from "./quantity-classification.js";
 // Real Autodesk SDK viewer. Never fall back to the model's default geometry:
 // the server-verified geometry GUID must be present in this exact version.
 (() => {
@@ -18,9 +18,9 @@ import { readViewClassification, selectClassifiedElements, classificationRule } 
     if(event.origin!==window.location.origin||event.source!==window.parent||data?.viewId!==input.viewId||data.urn!==input.urn||!viewer?.model)return;
     if(data.type==='aiforma-viewer-action') {
       const ids=viewer.getSelection();
-      if(data.action==='showAll')viewer.showAll();
-      else if(ids.length&&data.action==='isolate'){viewer.showAll();viewer.isolate(ids);viewer.fitToView(ids);}
-      else if(ids.length&&data.action==='hide')viewer.hide(ids);
+      if(data.action==='showAll'){viewer.setGhosting(false);viewer.showAll();}
+      else if(ids.length&&(data.action==='isolate'||data.action==='attenuate')){viewer.setGhosting(data.action==='attenuate');viewer.showAll();viewer.isolate(ids);viewer.fitToView(ids);}
+      else if(ids.length&&data.action==='hide'){viewer.setGhosting(false);viewer.hide(ids);}
       return;
     }
     if(data.type==='aiforma-viewer-calculate' && Number.isSafeInteger(data.requestId)) {
@@ -35,26 +35,26 @@ import { readViewClassification, selectClassifiedElements, classificationRule } 
     const revision=++selectionRevision;
     const filterKey=JSON.stringify([data.filteredElementIds,data.classificationFilter??null]);
     try {
-      if (filterKey!==visibilityFilterKey && data.filteredElementIds === null && data.classificationFilter && (data.classificationFilter.specialty || data.classificationFilter.subspecialty)) {
-        const { specialty, subspecialty } = data.classificationFilter;
-        if (typeof specialty !== 'string' || typeof subspecialty !== 'string') return;
-        classificationReport('loading', 'Leyendo Especialidad y Sub Especialidad de los elementos de esta vista…');
-        const elements = await classified();
-        if (revision !== selectionRevision) return;
-        const selected = selectClassifiedElements(elements, specialty, subspecialty);
-        viewer.showAll();
-        if (selected.length) viewer.isolate(selected); else viewer.hide(viewer.model.getRootId());
-        const unavailable = elements.filter(e => !e.specialties.length).length;
-        classificationReport(selected.length ? 'ready' : 'empty', `${selected.length} de ${elements.length} elementos de la vista coinciden. Criterios de asociación v${classificationRule.version}. ${unavailable} sin clasificación disponible o con parámetros ambiguos.`);
-        visibilityFilterKey=filterKey;
-      }
       if(filterKey!==visibilityFilterKey) {
-        const map=data.filteredElementIds!==null?await mapping():null;if(revision!==selectionRevision)return;
-        if(map&&data.filteredElementIds.some(id=>!Object.hasOwn(map,id)))throw Error('unmapped_filter');
-        viewer.showAll();
-        if(data.filteredElementIds?.length===0)viewer.hide(viewer.model.getRootId());
-        else viewer.isolate(data.filteredElementIds===null?[]:data.filteredElementIds.map(id=>map[id]));
-        classificationReport('idle','');visibilityFilterKey=filterKey;
+        let selected=[];
+        if(data.filteredElementIds!==null) {
+          const map=await mapping();
+          if(data.filteredElementIds.some(id=>!Object.hasOwn(map,id)))throw Error('unmapped_filter');
+          selected=data.filteredElementIds.map(id=>map[id]);
+        } else if(data.classificationFilter) {
+          const filter=data.classificationFilter;
+          if(!['specialty','subspecialty','floor'].every(key=>typeof filter[key]==='string'))return;
+          const elements=await classified();
+          const active=Boolean(filter.specialty||filter.subspecialty||filter.floor);
+          selected=active?classificationInventory(elements).filter(e=>matchesClassification(e,filter)).map(e=>e.dbId):[];
+          classificationReport('ready',active?`${selected.length} de ${elements.length} elementos seleccionados por los filtros. Criterios v${classificationRule.version}.`:'Sin filtros: modelo completo.');
+        }
+        if(revision!==selectionRevision)return;
+        viewer.setGhosting(false);viewer.showAll();
+        applyingSelection=true;viewer.select(selected);applyingSelection=false;
+        window.parent.postMessage({type:'aiforma-viewer',state:'selection-count',count:viewer.getSelection().length,viewId:input.viewId,urn:input.urn},window.location.origin);
+        visibilityFilterKey=filterKey;
+        return;
       }
       if(!data.highlightedElementIds.length)return;
       const map=await mapping();if(revision!==selectionRevision)return;
@@ -96,6 +96,8 @@ import { readViewClassification, selectClassifiedElements, classificationRule } 
           clearTimeout(timeout);
           if (!done) {
             viewer.fitToView(); report("ready", "Vista seleccionada cargada"); done = true;
+            void classified().then(elements=>window.parent.postMessage({type:'aiforma-viewer',state:'inventory',elements:classificationInventory(elements),viewId:input.viewId,urn:input.urn},window.location.origin)).catch(()=>classificationReport('error','No se pudieron cargar las opciones de filtros de esta vista.'));
+
             void installPropertyInspector(viewer).catch(() => {
               status.hidden=false;status.textContent="La paleta completa no está disponible. Las propiedades estándar no confirman una lectura completa.";
             });

@@ -1,7 +1,7 @@
 // Classification supplied by the user on 2026-09-24. These rules select
 // elements; they do not define volume, formwork, weight or length quantities.
 export const classificationRule = {
-  id: 'cgs-structure-classification', version: '3',
+  id: 'cgs-structure-classification', version: '4',
   concreteSubspecialties: ['Emplantillado', 'Muro', 'Losa', 'Losa Fundación', 'Fundación', 'Viga Fundacion', 'Pilar', 'Hormigón', 'Enfierradura', 'Metalcon', 'Acero Galvanizado'],
 };
 export const normalizeClassification = value => typeof value === 'string'
@@ -13,13 +13,13 @@ export const subspecialtyCriteria = [
   { group: 'Fundaciones', aliases: ['Fundación', 'Fundaciones', 'Losa Fundación', 'Losas Fundación', 'Losa de Fundación', 'Losas de Fundación', 'Losa Fund', 'Losas Fund', 'Losa Fun', 'Losas Fun', 'Losa de Fund', 'Losa de Fun'] },
   { group: 'Vigas de Fundación', aliases: ['Viga Fundación', 'Vigas Fundación', 'Viga de Fundación', 'Vigas de Fundación', 'Viga Fund', 'Vigas Fund', 'Viga Fun', 'Vigas Fun', 'Viga de Fund', 'Viga de Fun'] },
   { group: 'Losas', aliases: ['Losa', 'Losas'] },
+  { group: 'Vigas', aliases: ['Viga', 'Vigas'] },
   { group: 'Muros', aliases: ['Muro', 'Muros'] },
   { group: 'Pilares', aliases: ['Pilar', 'Pilares'] },
   { group: 'Emplantillado', aliases: ['Emplantillado', 'Emplantillados'] },
   { group: 'Hormigón', aliases: ['Hormigón'] },
   { group: 'Enfierradura', aliases: ['Enfierradura', 'Enfierraduras'] },
-  { group: 'Metalcon', aliases: ['Metalcon'] },
-  { group: 'Acero Galvanizado', aliases: ['Acero Galvanizado', 'Acero Galv', 'Ac Galvanizado', 'Ac Galv'] },
+  { group: 'Acero Galvanizado', aliases: ['Acero Galvanizado', 'Acero Galv', 'Ac Galvanizado', 'Ac Galv', 'Metalcon', 'Metlcon', 'Metal con'] },
   { group: 'Placas de techumbre', aliases: ['Placas de techumbre', 'Placa de techumbre'] },
 ];
 const normalizeLabel = value => normalizeClassification(value).replace(/[._\-/]+/g, ' ').trim().replace(/\s+/g, ' ');
@@ -53,7 +53,8 @@ export function classifyProperties(properties) {
   // Explicit type rules take priority over legacy specialty labels. An OSB
   // board is not steel merely because another field mentions Metalcon.
   const label = normalizeLabel(type.value);
-  const steel = /(?:^|\s)(?:40ca085|viga perfil|metalcon)(?:\s|$)/.test(label);
+  const metalcon = value => /(?:^|\s)met(?:al|l)\s*con(?:\s|\d|$)/.test(normalizeLabel(value));
+  const steel = /(?:^|\s)(?:40ca085|viga perfil)(?:\s|$)/.test(label) || metalcon(label);
   const board = /(?:^|\s)(?:pl|placa|placas|tablero|tableros)\s+osb(?:\s|$)/.test(label);
   if (type.ambiguous || steel && board) return { specialties: [], subspecialty: '', status: 'ambiguous', ...evidence };
   if (steel || board) {
@@ -61,13 +62,35 @@ export function classifyProperties(properties) {
     return { ...evidence, specialties: ['Cubierta'], subspecialty: group, status: 'read', association: { ...associateSubspecialty(group), original: evidence.typeName, parameter: 'Nombre de tipo' } };
   }
   if (specialty.ambiguous || subspecialty.ambiguous) return { specialties: [], subspecialty: '', status: 'ambiguous', ...evidence };
+  if (association.group === 'Acero Galvanizado' || specialty.value === 'acero galvanizado' || metalcon(specialty.value) || metalcon(subspecialty.value)) return { ...evidence, specialties: ['Cubierta'], subspecialty: 'Acero Galvanizado', status: 'read' };
+  if (association.group === 'Placas de techumbre' || ['planchas','placas de techumbre'].includes(specialty.value)) return { ...evidence, specialties: ['Cubierta'], subspecialty: 'Placas de techumbre', status: 'read' };
   if (specialty.value === 'cubierta') return { specialties: ['Cubierta'], subspecialty: subspecialty.value, status: 'read', ...evidence };
   const specialties = [];
   // Preserve the user's OR; one element can qualify for multiple filters.
   if (specialty.value === 'hormigon' || association.group !== null && association.group !== 'Placas de techumbre') specialties.push('Hormigón');
   if (specialty.value === 'enfierradura') specialties.push('Enfierradura');
   if (specialty.value === 'acero galvanizado') specialties.push('Acero Galvanizado');
-  return { specialties, subspecialty: subspecialty.value, status: !specialty.value && !subspecialty.value ? 'missing' : 'read', ...evidence };
+  const beam = /^v\s*\d+(?:[.,]\d+)?\s*\/\s*\d+(?:[.,]\d+)?(?:\s|$)/.test(type.value);
+  return { ...evidence, specialties, subspecialty: beam ? 'Vigas' : subspecialty.value, status: !specialty.value && !subspecialty.value && !beam ? 'missing' : 'read', ...(beam ? {association:{...associateSubspecialty('Vigas'),original:evidence.typeName,parameter:'Nombre de tipo'}} : {}) };
+}
+
+export function elementFloor(properties) {
+  const level = parameter(properties, 'Nivel');
+  return level.ambiguous || !level.value ? 'Piso no verificado' : String(level.originals.find(v => typeof v === 'number' || normalizeClassification(v)));
+}
+export function classificationInventory(elements) {
+  return elements.map(e => ({dbId:e.dbId, specialties:e.specialties, subspecialty:associateSubspecialty(e.subspecialty).group ?? e.subspecialty, floor:elementFloor(e.properties)}));
+}
+export function matchesClassification(e, filter) {
+  return (!filter.specialty || e.specialties.includes(filter.specialty)) && (!filter.subspecialty || e.subspecialty === filter.subspecialty) && (!filter.floor || e.floor === filter.floor);
+}
+export function classificationFacets(elements, filter) {
+  const unique = values => [...new Set(values.filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es',{numeric:true}));
+  return {
+    specialties:unique(elements.filter(e=>matchesClassification(e,{...filter,specialty:''})).flatMap(e=>e.specialties)),
+    subspecialties:unique(elements.filter(e=>matchesClassification(e,{...filter,subspecialty:''})).map(e=>e.subspecialty)),
+    floors:unique(elements.filter(e=>matchesClassification(e,{...filter,floor:''})).map(e=>e.floor)),
+  };
 }
 
 // Only objects owning geometry in the selected published view are inspected.

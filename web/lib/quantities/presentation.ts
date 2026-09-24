@@ -9,7 +9,7 @@ export const quantityMetrics = [
   {key:"reinforcement_weight_kg", name:"Fe", unit:"kg"},
   {key:"galvanized_steel_length_ml", name:"Acero Galvanizado", unit:"ml"},
 ] as const;
-export const filterSpecialties = ["Hormigón", "Enfierradura", "Acero Galvanizado", "Cubierta"];
+export const filterSpecialties = ["Hormigón", "Enfierradura", "Cubierta"];
 export const filterSubspecialties = subspecialtyCriteria.map(c => c.group);
 export const visibleQuantityMetrics = (specialty:string) => quantityMetrics.filter(m=>m.key !== "formwork_area_m2" || !specialty || specialty === "Hormigón");
 export type Metric = typeof quantityMetrics[number]["key"];

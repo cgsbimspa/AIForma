@@ -3,6 +3,9 @@ import { associateSubspecialty } from '../../public/quantity-classification.js';
 import { sumVerified } from '../../public/quantity-calculation.js';
 import type { Metric, QuantityFiltersValue, QuantityTableRow } from './presentation.ts';
 
+export const inventorySchema=z.array(z.object({dbId:z.number().int().nonnegative(),specialties:z.array(z.string()),subspecialty:z.string(),floor:z.string()}));
+export type ClassificationInventory=z.infer<typeof inventorySchema>;
+
 export const liveCalculationSchema = z.object({
   urn:z.string().min(1), viewId:z.string().min(1), calculatedAt:z.string().datetime(),
   engine:z.literal('published-view-quantities-v1'),ruleId:z.literal('cgs-structure-classification'),ruleVersion:z.string(),
@@ -22,7 +25,7 @@ export type LiveCalculation = z.infer<typeof liveCalculationSchema>;
 export type CalculationEvent = {state:'loading'|'error';message:string} | {state:'complete';data:LiveCalculation};
 export function presentLiveCalculation(data:LiveCalculation,filter:QuantityFiltersValue) {
   const sub=associateSubspecialty(filter.subspecialty).group;
-  const records=data.records.filter(r=>(!filter.specialty||r.specialty===filter.specialty)&&(!filter.subspecialty||sub!==null&&associateSubspecialty(r.subspecialty).group===sub)&&(!filter.floor||r.floor===filter.floor));
+  const records=data.records.filter(r=>(!filter.specialty||r.specialty===filter.specialty)&&(!filter.subspecialty||r.subspecialty===filter.subspecialty||sub!==null&&associateSubspecialty(r.subspecialty).group===sub)&&(!filter.floor||r.floor===filter.floor));
   const totals:Record<Metric,number|null>={concrete_volume_m3:null,galvanized_steel_length_ml:null,formwork_area_m2:null,reinforcement_weight_kg:null};
   const coverage=(['concrete_volume_m3','galvanized_steel_length_ml'] as const).map(metric=>{
     const selected=records.filter(r=>r.metric===metric),read=selected.filter(r=>r.quantity!==null);

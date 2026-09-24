@@ -7,10 +7,10 @@ import {visibleQuantityMetrics, projectQuantityRows, filterQuantityRows, filterS
 const prop = (displayName, displayValue) => ({displayName, displayValue});
 test('user classification respects the concrete OR, accents, strict other specialties and no inferred quantities', () => {
   assert.deepEqual(classifyProperties([prop('ESPECIALIDAD',' HORMIGON ')]).specialties,['Hormigón']);
-  for (const sub of classificationRule.concreteSubspecialties) assert.ok(classifyProperties([prop('Sub Especialidad',sub)]).specialties.includes('Hormigón'));
+  for (const sub of classificationRule.concreteSubspecialties.filter(s=>!['Metalcon','Acero Galvanizado'].includes(s))) assert.ok(classifyProperties([prop('Sub Especialidad',sub)]).specialties.includes('Hormigón'));
   assert.deepEqual(classifyProperties([prop('Especialidad','Enfierradura'),prop('Sub Especialidad','Enfierradura')]).specialties,['Hormigón','Enfierradura']);
-  assert.deepEqual(classifyProperties([prop('Especialidad','Metalcon')]).specialties,[]);
-  assert.deepEqual(classifyProperties([prop('Especialidad','Acero Galvanizado'),prop('Sub Especialidad','Metalcon')]).specialties,['Hormigón','Acero Galvanizado']);
+  assert.deepEqual(classifyProperties([prop('Especialidad','Metalcon')]).specialties,['Cubierta']);
+  assert.deepEqual(classifyProperties([prop('Especialidad','Acero Galvanizado'),prop('Sub Especialidad','Metalcon')]).specialties,['Cubierta']);
   assert.deepEqual(classifyProperties([prop('Especialidad','Hormigón armado')]).specialties,[]);
   assert.equal(classifyProperties([]).status,'missing');
   assert.equal(classifyProperties([prop('Especialidad','Hormigón'),prop('Especialidad','Otra')]).status,'ambiguous');
@@ -22,7 +22,7 @@ test('controlled label associations group foundation slabs before generic slabs 
   for (const value of ['Losa Fundacion','LOSA FUN','Losa Fun.',' Losa_de_Fundación ', 'Losa-Fund', 'Fundación','Fundaciones']) {
     const associated=associateSubspecialty(value);
     assert.equal(associated.group,'Fundaciones'); assert.equal(associated.original,value);
-    assert.equal(associated.ruleVersion,'3');
+    assert.equal(associated.ruleVersion,'4');
     const classified=classifyProperties([prop('Sub Especialidad',value)]);
     assert.deepEqual(classified.originalSubspecialties,[value]);
     assert.ok(classified.specialties.includes('Hormigón'));

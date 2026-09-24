@@ -104,3 +104,11 @@ Cada lectura conserva dbId, externalId si existe, parámetro, categoría, valor 
 La transmisión entre iframe y mesa valida mismo origen, ventana, URN, vista, requestId y esquema. Cambiar archivo/versión/vista descarta la presentación anterior. Las sumas se conservan en esta sesión de la mesa y NO se guardan en el historial; no permiten comparación histórica como si fueran QuantityRuns.
 
 Aislar selección, Ocultar selección y Mostrar todo operan sobre la selección nativa del visor. Son cambios de visibilidad, no cambios del conjunto sumado. La sincronización de selección ya no reaplica el filtro sobre cada clic nativo, evitando deshacer una ocultación manual.
+
+## Criterios v4 y filtros enlazados
+
+- Metalcon, Metlcon y variantes con sufijos de perfil se asocian a Cubierta / Acero Galvanizado, también cuando aparecen en Especialidad o Sub Especialidad. Las placas de techumbre pertenecen a Cubierta. Los valores originales no se modifican.
+- Nombre de tipo V xx/yy se asocia a Vigas; conserva la especialidad demostrada por los parámetros originales.
+- Las opciones de los tres filtros se obtienen de los elementos con geometría de la vista (incluidos elementos sin métrica calculada). Cada lista aplica los otros dos filtros; los pisos contradictorios permanecen como Piso no verificado.
+- Aplicar un filtro selecciona sus dbIds reales, incluyendo el piso. No oculta automáticamente. Aislar selección oculta el resto; Atenuar resto lo muestra atenuado; Ocultar selección oculta los seleccionados; Mostrar todo restaura la visibilidad. Estas acciones no cambian las sumas.
+- El inventario se comparte sólo desde el iframe de la versión/vista activa y se valida antes de poblar las listas. Se reutiliza la lectura de propiedades de esa vista.

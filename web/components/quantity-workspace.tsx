@@ -8,11 +8,11 @@ import { matchingRun, projectQuantityRows, filterQuantityRows, quantityTotals, t
 import { AutodeskConnection } from "./autodesk-connection";
 import { QuantitySourcePicker } from "./quantity-source-picker";
 import { QuantityResults } from "./quantity-results";
-import { liveCalculationSchema, presentLiveCalculation, type CalculationEvent, type LiveCalculation } from "@/lib/quantities/live";
+import { liveCalculationSchema, presentLiveCalculation, type ClassificationInventory, type CalculationEvent, type LiveCalculation } from "@/lib/quantities/live";
 import { QuantityLiveEvidence } from "./quantity-live-evidence";
 import { QuantityViewer } from "./quantity-viewer";
 import { quantitySpecialties, specialtyName } from "@/lib/quantities/catalog";
-import { classificationRule, subspecialtyCriteria } from "@/public/quantity-classification.js";
+import { classificationFacets, classificationRule, subspecialtyCriteria } from "@/public/quantity-classification.js";
 import { quantityState, processingBlocker } from "@/lib/quantities/engine";
 import { quantityBrowse, quantityCommand, quantityResponse } from "@/lib/quantities/client";
 import type { Entry } from "@/lib/autodesk/data";
@@ -126,6 +126,8 @@ function QuantityDesk({ project, configuration, templates, runs, historyPartial,
   const [request,setRequest]=useState<{key:string;id:number}|null>(null);
   const [calculationState,setCalculationState]=useState<{key:string;busy:boolean;message:string}|null>(null);
   const [evidenceOpen,setEvidenceOpen]=useState(false);
+  const [inventory,setInventory]=useState<{key:string;data:ClassificationInventory}|null>(null);
+  const receiveInventory=useCallback((data:ClassificationInventory)=>setInventory({key:sourceKey,data}),[sourceKey]);
   const live=calculation?.key===sourceKey?calculation.data:null;
   const livePresentation=useMemo(()=>live?presentLiveCalculation(live,filters):null,[live,filters]);
   const calculating=calculationState?.key===sourceKey&&calculationState.busy;
@@ -163,7 +165,7 @@ function QuantityDesk({ project, configuration, templates, runs, historyPartial,
     setBusy(true); setError("");
     try {
       const available = await quantityCommand<{ views: ModelView[] }>(project, { action: "views", file: source.scope, versionId: latest.id });
-      setViews(available.views); setSource({ ...source, version: latest, view: available.views.find(v => v.id === source.view?.id) ?? null });
+      setFilters({specialty:"",subspecialty:"",floor:""}); setSelectedIds([]); setViews(available.views); setSource({ ...source, version: latest, view: available.views.find(v => v.id === source.view?.id) ?? null });
     } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
   }
   async function loadViews() {
@@ -177,7 +179,7 @@ function QuantityDesk({ project, configuration, templates, runs, historyPartial,
       const result=await quantityCommand<{latest:ModelVersion}>(project,{action:"versions",file:source.scope});
       if(result.latest.id===source.version.id){setSettings(true);return;}
       const data=await quantityCommand<{views:ModelView[]}>(project,{action:"views",file:source.scope,versionId:result.latest.id});
-      setViews(data.views);setSource({...source,version:result.latest,view:data.views.find(v=>v.id===source.view?.id)??null});setSelectedIds([]);
+      setViews(data.views);setSource({...source,version:result.latest,view:data.views.find(v=>v.id===source.view?.id)??null});setSelectedIds([]);setFilters({specialty:"",subspecialty:"",floor:""});
     }catch(e){setError((e as Error).message);}finally{setBusy(false);}
   }
   const activeRun=matchingRun(runs,source,templateId);
@@ -186,7 +188,7 @@ function QuantityDesk({ project, configuration, templates, runs, historyPartial,
   const totals=livePresentation?.totals??quantityTotals(filtered,projected.unavailable);
   const priorProjection=comparison&&comparison.current.id===activeRun?.id?projectQuantityRows(comparison.previous):null;
   const previousTotals=priorProjection?quantityTotals(filterQuantityRows(priorProjection.rows,filters),priorProjection.unavailable):undefined;
-  const floors=[...new Set(live?live.records.map(r=>r.floor):projected.rows.map(r=>r.floor))];
+  const facets=useMemo(()=>classificationFacets(inventory?.key===sourceKey?inventory.data:[],filters),[inventory,sourceKey,filters]);
   const filterIds=useMemo(()=>!live&&projected.rows.length?[...new Set(filtered.flatMap(r=>r.elementIds))]:null,[projected.rows,filtered,live]);
   const availableViews=views.some(v=>v.id===source?.view?.id)?views:source?.view?[source.view,...views]:views;
   return <div className="quantity-desk-stage">
@@ -196,10 +198,10 @@ function QuantityDesk({ project, configuration, templates, runs, historyPartial,
     <div className="quantity-desk-board">
       <section className="quantity-model quantity-panel" aria-label="Modelo BIM"><div className="quantity-panel-heading"><Box size={20}/><div><h2>Modelo BIM</h2><p>Explora la vista publicada y los elementos de tu modelo.</p></div><button className="quantity-secondary" onClick={()=>setSettings(true)}><Settings2 size={16}/>Configurar archivo y vista</button></div>
         <div className="quantity-model-context" title={source?.path}><strong>{source?.fileName??"Archivo RVT no seleccionado"}</strong><span>{source?.view?.name??"Vista no seleccionada"} · {source?"V"+source.version.number:"Versión no disponible"}</span></div>
-        <QuantityViewer project={project} source={source} highlightedElementIds={selectedIds} filteredElementIds={filterIds} onSelectElements={setSelectedIds} classificationFilter={configuration.specialtyCode === "structure" ? filters : undefined} calculationRequest={request?.key===sourceKey?request.id:0} onCalculation={receiveCalculation}/>
+        <QuantityViewer project={project} source={source} highlightedElementIds={selectedIds} filteredElementIds={filterIds} onSelectElements={setSelectedIds} classificationFilter={configuration.specialtyCode === "structure" ? filters : undefined} calculationRequest={request?.key===sourceKey?request.id:0} onCalculation={receiveCalculation} onInventory={receiveInventory}/>
         <div className="quantity-model-bottom"><span>{live?"Sumas de vista · V"+source?.version.number:activeRun?"Ejecución: V"+activeRun.source.version.number:"Cubicación no procesada"}</span><span>{latest?"Última publicación: V"+latest.number:"Publicación por verificar"}</span><button className="quantity-text-button" disabled={!configuration.source||busy} onClick={()=>void checkVersion(configuration.id)}><RefreshCw size={12}/>Verificar versión</button></div>
       </section>
-      <div className="quantity-data-column"><QuantityFilters value={filters} floors={floors} onChange={v=>{setFilters(v);setSelectedIds([]);}}/><QuantitySummaryCards totals={totals} previousTotals={previousTotals} blocker={blocker} specialty={filters.specialty} onRequirements={()=>setSettings(true)} onProcess={configuration.specialtyCode==="structure"?calculate:undefined} processDisabled={!source?.view||Boolean(calculating)} calculating={Boolean(calculating)}/>
+      <div className="quantity-data-column"><QuantityFilters value={filters} floors={facets.floors} specialties={facets.specialties} subspecialties={facets.subspecialties} onChange={v=>{setFilters(v);setSelectedIds([]);}}/><QuantitySummaryCards totals={totals} previousTotals={previousTotals} blocker={blocker} specialty={filters.specialty} onRequirements={()=>setSettings(true)} onProcess={configuration.specialtyCode==="structure"?calculate:undefined} processDisabled={!source?.view||Boolean(calculating)} calculating={Boolean(calculating)}/>
       {calculationState?.key===sourceKey&&<div className="quantity-live-notice"><span role="status">{calculationState.message}</span>{live&&<button className="quantity-text-button" onClick={()=>setEvidenceOpen(true)}>Ver cobertura y fuentes · Sin historial</button>}</div>}<QuantityTable specialty={filters.specialty} rows={livePresentation?.rows??filtered} totals={totals} hasRun={Boolean(live||activeRun)} unavailable={live?0:projected.unavailable} onSelect={setSelectedIds} selectedIds={selectedIds}/></div>
     </div>
     <footer className="quantity-workspace-footer"><ShieldCheck size={13}/><span>{live?"Sumas de elementos clasificados en la vista publicada. No guardadas en el historial.":projected.rows.length?"Cantidades vinculadas a la versión y vista seleccionadas.":"Clasificación por parámetros del modelo · Cantidades pendientes de reglas de cálculo."}</span><span>{changed?"Cambios sin guardar":latest?"Verificado: "+new Date(latest.fetchedAt).toLocaleString("es-CL"):"Fuente pendiente de verificación"}</span></footer>
@@ -215,7 +217,7 @@ function QuantityDesk({ project, configuration, templates, runs, historyPartial,
         {error&&<p className="quantity-error" role="alert">{error}</p>}
         {savedSuccessfully&&!changed&&<p className="quantity-save-notice" role="status">Configuración guardada en el proyecto.</p>}
         <button className="quantity-primary quantity-save" disabled={busy} onClick={() => void save()}><Save size={15}/>{saving ? "Guardando…" : "Guardar configuración"}</button>
-        <div className="quantity-process"><button className="quantity-primary" disabled={configuration.specialtyCode!=="structure"||!source?.view||Boolean(calculating)||busy} onClick={calculate}>{calculating?"Procesando…":"Procesar Cubicación"}</button><p className="quantity-help">{configuration.specialtyCode==="structure"?"Suma Volumen (m³) de Hormigón y Longitud (ml) de Acero Galvanizado en esta vista. Valida unidades y muestra datos faltantes. Estas sumas no se guardan como ejecuciones históricas.":blocker}</p>{configuration.specialtyCode === "structure" && <div className="quantity-template-definition"><strong>Reglas de selección recibidas</strong><p>Hormigón: Especialidad = Hormigón, o Sub Especialidad = {classificationRule.concreteSubspecialties.join(", ")}.</p><p>Enfierradura: Especialidad = Enfierradura.</p><p>Metalcon / Acero Galvanizado: Especialidad = Acero Galvanizado.</p><p>Moldaje se muestra al seleccionar Hormigón.</p><details><summary>Ver asociaciones de subespecialidad · v{classificationRule.version}</summary>{subspecialtyCriteria.map(c=><p key={c.group}><strong>{c.group}:</strong> {c.aliases.join(" · ")}</p>)}<p>Se admiten mayúsculas, acentos y separadores. Se conserva el texto original; los nombres sin una asociación definida no se asignan por parecido.</p></details><p>Cubierta: tipos 40CA085, Viga Perfil y Metalcon → Acero Galvanizado; PL OSB / Placa OSB → Placas de techumbre. Estas reglas por tipo tienen prioridad.</p><strong>Pendiente</strong><p>Moldaje, peso de Fe y guardado de ejecuciones históricas. Si existen varios parámetros Nivel con valores distintos, se indica Piso no verificado.</p></div>}{runs[0] && <p className="quantity-help">Último procesamiento: {new Date(runs[0].completedAt).toLocaleString("es-CL")}</p>}</div>
+        <div className="quantity-process"><button className="quantity-primary" disabled={configuration.specialtyCode!=="structure"||!source?.view||Boolean(calculating)||busy} onClick={calculate}>{calculating?"Procesando…":"Procesar Cubicación"}</button><p className="quantity-help">{configuration.specialtyCode==="structure"?"Suma Volumen (m³) de Hormigón y Longitud (ml) de Acero Galvanizado en esta vista. Valida unidades y muestra datos faltantes. Estas sumas no se guardan como ejecuciones históricas.":blocker}</p>{configuration.specialtyCode === "structure" && <div className="quantity-template-definition"><strong>Reglas de selección recibidas</strong><p>Hormigón: Especialidad = Hormigón, o Sub Especialidad = {classificationRule.concreteSubspecialties.join(", ")}.</p><p>Enfierradura: Especialidad = Enfierradura.</p><p>Metalcon / Metlcon y derivados: Cubierta → Acero Galvanizado.</p><p>Moldaje se muestra al seleccionar Hormigón.</p><details><summary>Ver asociaciones de subespecialidad · v{classificationRule.version}</summary>{subspecialtyCriteria.map(c=><p key={c.group}><strong>{c.group}:</strong> {c.aliases.join(" · ")}</p>)}<p>Se admiten mayúsculas, acentos y separadores. Se conserva el texto original; los nombres sin una asociación definida no se asignan por parecido.</p></details><p>Cubierta: tipos 40CA085, Viga Perfil y Metalcon → Acero Galvanizado; PL OSB / Placa OSB → Placas de techumbre. Estas reglas por tipo tienen prioridad.</p><strong>Pendiente</strong><p>Moldaje, peso de Fe y guardado de ejecuciones históricas. Si existen varios parámetros Nivel con valores distintos, se indica Piso no verificado.</p></div>}{runs[0] && <p className="quantity-help">Último procesamiento: {new Date(runs[0].completedAt).toLocaleString("es-CL")}</p>}</div>
       </div></section>{versionError&&<p className="quantity-error">{versionError}</p>}{source&&latest&&latest.number>source.version.number&&<button className="quantity-secondary" disabled={busy} onClick={()=>void selectLatest()}>Usar última publicación: V{latest.number}</button>}</DialogContent></Dialog>
     <Dialog open={evidenceOpen} onOpenChange={setEvidenceOpen}><DialogContent className="quantity-page quantity-modal quantity-history-modal"><DialogTitle>Cobertura y fuentes de las sumas</DialogTitle><DialogDescription>{source?.fileName} · V{source?.version.number} · {source?.view?.name}. Lectura de propiedades publicadas de esta vista.</DialogDescription>{live&&<QuantityLiveEvidence calculation={live} filters={filters}/>}</DialogContent></Dialog>
     <Dialog open={historyTab!==null} onOpenChange={open=>{if(!open)setHistoryTab(null);}}><DialogContent className="quantity-page quantity-modal quantity-history-modal"><DialogTitle>{historyTab==="compare"?"Comparación de ejecuciones":"Versiones procesadas"}</DialogTitle><DialogDescription>Consulta ejecuciones reales sin modificar la configuración ni sobrescribir resultados.</DialogDescription>{historyTab&&<QuantityResults key={historyTab} project={project} runs={runs} partial={historyPartial} initialTab={historyTab} onComparison={setComparison}/>}</DialogContent></Dialog>
