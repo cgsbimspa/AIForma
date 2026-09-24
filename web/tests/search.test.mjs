@@ -19,11 +19,11 @@ function testPdf(text) {
   const xref=Buffer.byteLength(pdf);pdf+=`xref\n0 6\n0000000000 65535 f \n${offsets.slice(1).map(o=>String(o).padStart(10,'0')+' 00000 n ').join('\n')}\ntrailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
   return Buffer.from(pdf);
 }
-test('isolated PDF extraction preserves real page and exact text; blank PDFs require OCR',async()=>{
+test('isolated PDF extraction preserves real page and exact text; blank PDFs attempt OCR without inventing text',async()=>{
   const parsed=await parseDocument(testPdf('TEST Mecanica de suelos, informe original.'),'TEST.pdf');
   assert.equal(parsed.pages,1);assert.equal(parsed.segments[0].page,1);
   const hits=findExcerpts(parsed,[['mecánica','suelos']]);assert.equal(hits.length,1);assert.match(hits[0].excerpt,/TEST Mecanica de suelos/);assert.equal(hits[0].location,'Página 1');
-  const blank=await parseDocument(testPdf(''),'TEST-scan.pdf');assert.equal(blank.status,'ocr_required');
+  const blank=await parseDocument(testPdf(''),'TEST-scan.pdf');assert.equal(blank.status,'no_text');assert.ok(blank.warnings.includes('ocr_no_text'));assert.equal(blank.segments.length,0);
 });
 test('TXT and CSV preserve line or record references',async()=>{
   const txt=await parseDocument(Buffer.from('TEST primera línea\nTEST mecánica de suelos'),'TEST.txt');
@@ -122,4 +122,35 @@ test('inaccessible nested folders leave explicit incomplete coverage, never a ve
   const state=await startSearch('TEST_TOKEN',scope,[['unfindable']],Date.now()+60000,fixtureFetch);
   const result=await advanceSearch(state,'TEST_TOKEN',undefined,{fetcher:(url,init)=>String(url).includes('/contents')?Promise.resolve(new Response(null,{status:403})):fixtureFetch(url,init)});
   assert.equal(result.hits.length,0);assert.ok(result.warnings.includes('forbidden'));assert.ok(result.issues[0].path.includes('TEST raíz'));
+});
+
+test('guided folder and filename stages never download or parse documents; hits carry a verified selectable path', async()=>{
+  for (const [stage, terms, kind] of [['folders', [['subcarpeta']], 'folders'], ['files', [['informe']], 'items']]) {
+    const state=await startSearch('TEST_TOKEN',scope,terms,Date.now()+60000,fixtureFetch,undefined,stage);
+    const fetcher=async(url,init)=>{assert.ok(!String(url).includes('signeds3download'));return fixtureFetch(url,init);};
+    const result=await advanceSearch(state,'TEST_TOKEN',undefined,{fetcher,parser:()=>assert.fail('Metadata stage attempted parsing'),milliseconds:60000});
+    assert.equal(result.stage,stage);assert.equal(result.done,true);assert.equal(result.hits.length,1);assert.equal(result.hits[0].type,kind);
+    assert.deepEqual(result.hits[0].scope,stage==='folders'?folderScope:fileScope);
+    assert.equal(result.stats.documentsRead,0);assert.equal(result.stats.unread,0);
+    const key=randomBytes(32);assert.equal(unpackCursor(packCursor(state,key),key,'TEST_TOKEN').stage,stage);
+  }
+});
+
+test('stages do not confuse a parent folder match with a filename or content match', async()=>{
+  for (const stage of ['files','content']) {
+    const state=await startSearch('TEST_TOKEN',scope,[['subcarpeta']],Date.now()+60000,fixtureFetch,undefined,stage);
+    const result=await advanceSearch(state,'TEST_TOKEN',undefined,{fetcher:fixtureFetch,milliseconds:60000});
+    assert.equal(result.hits.length,0);assert.equal(result.done,true);
+  }
+});
+
+test('filename search includes unsupported proprietary formats without implying their contents were read', async()=>{
+  const fetcher=async(url,init)=>{
+    const r=await fixtureFetch(url,init), data=await r.json();
+    if(Array.isArray(data.data))for(const entry of data.data)if(entry.type==='items')entry.attributes.name='TEST informe.rvt';
+    return Response.json(data);
+  };
+  const state=await startSearch('TEST_TOKEN',scope,[['informe']],Date.now()+60000,fetcher,undefined,'files');
+  const result=await advanceSearch(state,'TEST_TOKEN',undefined,{fetcher,milliseconds:60000});
+  assert.equal(result.hits[0].name,'TEST informe.rvt');assert.equal(result.hits[0].contentStatus,undefined);assert.equal(result.stats.unread,0);
 });

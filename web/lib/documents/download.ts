@@ -2,7 +2,7 @@ import { z } from "zod";
 import { DataError, get, officialWebUrl } from "../autodesk/data.ts";
 
 export const documentByteLimit = 25 * 1024 * 1024;
-export const supportedDocument = /\.(pdf|docx|xlsx|txt|csv|md)$/i;
+export const supportedDocument = /\.(pdf|docx|xlsx|txt|csv|md|pptx?|png|jpe?g|webp|tiff?|gif)$/i;
 export const versionSchema = z.object({ data: z.object({ id: z.string().min(1).max(1024), type: z.literal("versions"), attributes: z.object({ name: z.string().min(1), versionNumber: z.number().int().positive(), storageSize: z.number().nonnegative().optional() }), relationships: z.object({ item: z.object({ data: z.object({ id: z.string(), type: z.literal("items") }) }), storage: z.object({ data: z.object({ id: z.string() }) }).optional() }), links: z.object({ webView: z.object({ href: z.string() }).optional() }).optional() }) });
 export type DocumentVersion = { id: string; number: number; name: string; webUrl?: string; storage?: string; size?: number; endpoint: string; fetchedAt: string };
 export async function itemTip(token: string, project: string, item: string, fetcher: typeof fetch = fetch, signal?: AbortSignal): Promise<DocumentVersion> {

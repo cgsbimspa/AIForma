@@ -7,10 +7,10 @@ export const documentQuestionSchema = z.object({
   question: z.string().trim().min(1).max(2000),
 }).strict();
 export type DocumentMode = z.infer<typeof documentQuestionSchema>["mode"];
-export type DocumentSource = { id: string; name: string; path: string; itemId: string; projectId: string; version?: number; versionId?: string; webUrl?: string; endpoint: string; fetchedAt: string; status: string };
-export type Passage = { id: string; documentId: string; location: string; text: string };
+export type DocumentSource = { id: string; name: string; path: string; itemId: string; projectId: string; version?: number; versionId?: string; webUrl?: string; endpoint: string; fetchedAt: string; status: string; warnings?: string[] };
+export type Passage = { id: string; documentId: string; location: string; method?: "ocr"; confidence?: number; text: string };
 export type DocumentEvidence = { sources: DocumentSource[]; passages: Passage[]; partial: boolean; warnings: string[]; pending: number; scopePath: string };
-export type Citation = { segmentId: string; quote: string; location: string; source: DocumentSource };
+export type Citation = { segmentId: string; quote: string; location: string; method?: "ocr"; confidence?: number; source: DocumentSource };
 export type DocumentAnswer = {
   kind: "document_answer"; mode: DocumentMode; status: "answered" | "not_available" | "unsupported" | "unverified";
   blocks: { label: string; text: string; citations: Citation[] }[];

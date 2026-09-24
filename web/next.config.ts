@@ -5,8 +5,8 @@ const nextConfig: NextConfig = {
   // Compile fresh assets so published indicators match the current source.
   experimental: { turbopackFileSystemCacheForBuild: false },
   outputFileTracingIncludes: {
-    "/api/assistant/documents": ["./worker/document-worker.mjs", "./node_modules/pdfjs-dist/legacy/build/*", "./node_modules/pdfjs-dist/package.json", "./node_modules/@napi-rs/canvas*/**/*"],
-    "/api/assistant/search": ["./worker/document-worker.mjs", "./node_modules/pdfjs-dist/legacy/build/*", "./node_modules/pdfjs-dist/package.json", "./node_modules/@napi-rs/canvas*/**/*"],
+    "/api/assistant/documents": ["./worker/**/*", "./node_modules/tesseract.js-core/**/*", "./node_modules/sharp/**/*", "./node_modules/@img/**/*", "./node_modules/detect-libc/**/*", "./node_modules/semver/**/*", "./node_modules/pdfjs-dist/legacy/build/*", "./node_modules/pdfjs-dist/package.json", "./node_modules/@napi-rs/canvas*/**/*"],
+    "/api/assistant/search": ["./worker/**/*", "./node_modules/tesseract.js-core/**/*", "./node_modules/sharp/**/*", "./node_modules/@img/**/*", "./node_modules/detect-libc/**/*", "./node_modules/semver/**/*", "./node_modules/pdfjs-dist/legacy/build/*", "./node_modules/pdfjs-dist/package.json", "./node_modules/@napi-rs/canvas*/**/*"],
   },
 };
 

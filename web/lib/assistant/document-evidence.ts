@@ -42,13 +42,15 @@ export async function collectDocumentEvidence(token: string, scope: DataScope, e
           const version = await itemTip(token, task.projectId, task.entry.id, fetcher, signal);
           Object.assign(source, { version: version.number, versionId: version.id, webUrl: version.webUrl ?? source.webUrl, endpoint: version.endpoint, fetchedAt: version.fetchedAt });
           const parsed = await parser(await downloadDocument(token, version, fetcher, signal), version.name, signal);
-          source.status = parsed.status === "parsed" ? parsed.textlessPages ? "partial_text" : "read" : parsed.status;
+          source.warnings = parsed.warnings;
+          source.status = parsed.status === "parsed" ? parsed.textlessPages || parsed.partial ? "partial_text" : "read" : parsed.status;
+          if (parsed.segments.some(s => s.method === "ocr")) { result.warnings.push("Se utilizó OCR: el texto reconocido puede contener errores. Comprueba las citas en el original."); }
           for (const segment of parsed.segments) {
             // Bounded passages preserve the parser's page/paragraph/worksheet location.
             for (let offset = 0; offset < segment.text.length; offset += 4000) {
               const text = segment.text.slice(offset, Math.min(offset + 4000, offset + characterLimit - characters));
               if (!text || result.passages.length >= 1500) { source.status = "context_limit"; break; }
-              result.passages.push({ id: `S${result.passages.length + 1}`, documentId: source.id, location: segment.location, text }); characters += text.length;
+              result.passages.push({ id: `S${result.passages.length + 1}`, documentId: source.id, location: segment.location, method: segment.method, confidence: segment.confidence, text }); characters += text.length;
               if (text.length < Math.min(4000, segment.text.length - offset)) source.status = "context_limit";
             }
             if (characters >= characterLimit || result.passages.length >= 1500) { source.status = "context_limit"; break; }

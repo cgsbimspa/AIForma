@@ -32,8 +32,8 @@ export function bindDocumentDraft(raw: unknown, evidence: DocumentEvidence, mode
       const segment = evidence.passages.find(s => s.id === citation.segmentId);
       const source = evidence.sources.find(s => s.id === segment?.documentId);
       const quote = segment && exactQuote(segment.text, citation.quote);
-      if (!source || !segment || !quote) throw new DataError("document_unverified", 422);
-      return { segmentId: segment.id, quote, location: segment.location, source };
+      if (!source || !segment || !quote || (segment.method === "ocr" && (segment.confidence ?? 0) < 75)) throw new DataError("document_unverified", 422);
+      return { segmentId: segment.id, quote, location: segment.location, method: segment.method, confidence: segment.confidence, source };
     });
     // Extraction values are literal. The model cannot generate a calculated value.
     if (mode === "extract" && !citations.some(c => canonical(c.quote) === canonical(block.text))) throw new DataError("document_unverified", 422);
@@ -71,6 +71,7 @@ export async function answerDocuments(evidence: DocumentEvidence, question: stri
     "Cada bloque debe tener citas con segmentId exacto y quote textual contigua del pasaje, conservando negaciones, unidades y contexto. label sólo es un tema/campo breve, no una nueva afirmación. Toda afirmación de text debe estar sustentada directamente por sus citas; evita inferencias, suposiciones y conclusiones por el nombre del archivo. No añadas enlaces ni referencias escritos en text; el servidor los construye. Máximo 8 bloques, breves y útiles. No añadas cifras ni fechas que no aparezcan literalmente en las citas.",
     "Si falta evidencia suficiente, status not_available y blocks vacío. No asegures inexistencia de un dato en toda la selección: sólo has leído los pasajes disponibles. Si no puedes cubrir toda una pregunta, abstente en lugar de completarla con conocimiento general. Si la lectura es parcial, cualquier resumen es sólo del texto disponible.",
     "Cálculos nuevos, validación de cumplimiento, dictámenes, recomendaciones propias o inferencias técnicas NO están implementados: status unsupported y blocks vacío. Sí puedes EXTRAER lo que el documento declara o recomienda, dejando claro que lo dice el documento; no certifiques su veracidad ni su cumplimiento. Un texto que menciona otro informe no es evidencia del contenido de ese otro informe. No confundas requisitos con obras ejecutadas ni propuestas con hechos realizados.",
+    "Los pasajes method=ocr son texto reconocido automáticamente y pueden contener errores. No corrijas ni adivines caracteres o cifras. Si confidence < 75, no lo uses como respaldo de un dato: abstente si no hay evidencia digital independiente.",
   ].join("\n");
   const raw = await structuredResponse(config, instructions, { question, mode, partial: evidence.partial, documents: evidence.sources.map(s => ({ id: s.id, name: s.name })), passages: evidence.passages }, draftFormat, fetcher, signal);
   let blocks: DocumentAnswer["blocks"], draft: z.infer<typeof draftSchema>;

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowUp, BrainCircuit, Building2, ChevronDown, ChevronRight, CircleCheck, Database, File, Folder, FolderOpen, Globe2, LoaderCircle, MessageSquare, RefreshCw, Search, ShieldCheck, Square, Trash2, Unplug } from "lucide-react";
 import type { DataPage, DataQuery, DataScope, Entry } from "@/lib/autodesk/data";
 import type { Source } from "@/lib/assistant/chat";
-import type { SearchBatch, SearchTerms } from "@/lib/search/contracts";
+import type { SearchBatch, SearchTerms, SearchStage, SearchHit } from "@/lib/search/contracts";
 import { SearchResults } from "./search-results";
 import { DocumentAnswer } from "./document-answer";
 import type { DocumentAnswer as DocumentAnswerData, DocumentMode } from "@/lib/assistant/document-contracts";
@@ -53,7 +53,7 @@ export function AssistantWorkspace() {
   </div>;
 }
 function PanelHeading({ icon, title, subtitle, children }: { icon: React.ReactNode; title: string; subtitle: string; children?: React.ReactNode }) { return <header className="assistant-panel-heading"><span className="panel-heading-icon">{icon}</span><div><h2>{title}</h2><p>{subtitle}</p></div>{children}</header>; }
-type Selection = { scope: DataScope; label: string; path?: string };
+type Selection = { initialMode?: DocumentMode | "search"; scope: DataScope; label: string; path?: string };
 function ConnectedWorkspace({ aiConfigured, invalidate }: { aiConfigured: boolean; invalidate: (code: string) => void }) {
   const [selection, setSelection] = useState<Selection>({ scope: { kind: "all" }, label: "Toda mi base de Forma" });
   const [revision, setRevision] = useState(0);
@@ -67,7 +67,7 @@ function ConnectedWorkspace({ aiConfigured, invalidate }: { aiConfigured: boolea
       <div className="forma-tree" key={revision}><Branch query={{ operation: "hubs", hubId: null, projectId: null, folderId: null, page: 0 }} selection={selection} select={setSelection} invalidate={invalidate} filter={filter}/></div>
       <footer className="explorer-footer"><ShieldCheck size={15}/><span>Sólo lectura · Abre las carpetas para ver su contenido. Los permisos de Autodesk se respetan.</span></footer>
     </section>
-    <ChatPanel key={scopeKey} selection={selection} aiConfigured={aiConfigured} invalidate={invalidate}/>
+    <ChatPanel key={scopeKey} select={setSelection} selection={selection} aiConfigured={aiConfigured} invalidate={invalidate}/>
   </div>;
 }
 type BranchProps = { query: DataQuery; selection: Selection; select: (selection: Selection) => void; invalidate: (code: string) => void; filter: string; folderIds?: string[]; path?: string };
@@ -126,20 +126,20 @@ function TreeRow(props: BranchProps & { entry: Entry }) {
   </div>{!leaf && open && <div className="tree-children"><Branch {...props} query={next} folderIds={entry.type === "folders" ? [...folderIds, entry.id] : []} path={entry.type === "hubs" ? "" : path}/></div>}</div>;
 }
 type Message = { role: "user" | "assistant"; content: string; sources?: Source[]; search?: SearchBatch; answer?: DocumentAnswerData };
-function ChatPanel({ selection, aiConfigured, invalidate }: { selection: Selection; aiConfigured: boolean; invalidate: (code: string) => void }) {
+function ChatPanel({ selection, select, aiConfigured, invalidate }: { select: (selection: Selection) => void; selection: Selection; aiConfigured: boolean; invalidate: (code: string) => void }) {
   const documentSelection = selection.scope.kind === "file" || selection.scope.kind === "folder";
-  const [mode, setMode] = useState<DocumentMode | "search">(documentSelection ? "ask" : "search");
+  const [mode, setMode] = useState<DocumentMode | "search">(selection.initialMode ?? "search");
   const [messages, setMessages] = useState<Message[]>([]), [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
   const [activeSearch, setActiveSearch] = useState<number | null>(null);
   const controller = useRef<AbortController | null>(null), bottom = useRef<HTMLDivElement | null>(null);
   useEffect(() => () => controller.current?.abort(), []);
   useEffect(() => { bottom.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }); }, [messages.length, busy, error]);
-  async function search(index: number, terms: SearchTerms, abort: AbortController, previous?: SearchBatch) {
+  async function search(index: number, terms: SearchTerms, abort: AbortController, previous?: SearchBatch, stage: SearchStage = previous?.stage ?? (selection.scope.kind === "file" ? "files" : "folders")) {
     setActiveSearch(index);
     let current = previous;
     for (let batch = 0; batch < 15 && !abort.signal.aborted; batch++) {
-      const response = await fetch("/api/assistant/search", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scope: selection.scope, terms, cursor: current?.cursor ?? null }), signal: abort.signal });
+      const response = await fetch("/api/assistant/search", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scope: selection.scope, stage, terms, cursor: current?.cursor ?? null }), signal: abort.signal });
       const result = await response.json();
       if (!response.ok) { invalidate(result.error); throw new Error(result.error); }
       if (abort.signal.aborted) return;
@@ -158,9 +158,24 @@ function ChatPanel({ selection, aiConfigured, invalidate }: { selection: Selecti
     catch (e) { if (!abort.signal.aborted) setError(errorText(e instanceof Error ? e.message : "unavailable")); }
     finally { if (!abort.signal.aborted) setBusy(false); }
   }
+  async function nextStage(previous: SearchBatch, stage: SearchStage) {
+    if (busy) return;
+    const index = messages.length + 1;
+    setMessages([...messages, { role: "user", content: stage === "files" ? "Sí, buscar también en nombres de archivos." : "Sí, buscar dentro de los archivos." }, { role: "assistant", content: stage === "files" ? "Revisando nombres de archivos…" : "Leyendo documentos y reconociendo texto en imágenes…" }]);
+    setMode("search"); setBusy(true); setError("");
+    const abort = new AbortController(); controller.current = abort;
+    try { await search(index, previous.terms, abort, undefined, stage); }
+    catch (e) { if (!abort.signal.aborted) setError(errorText(e instanceof Error ? e.message : "unavailable")); }
+    finally { if (!abort.signal.aborted) setBusy(false); }
+  }
+  function selectHit(hit: SearchHit) { if (hit.scope) select({ initialMode: hit.type === "items" ? "ask" : "search", scope: hit.scope, label: hit.name, path: hit.path }); }
   async function send(text: string, requestedMode = mode) {
     if (!text.trim() || busy || !aiConfigured) return;
     if (requestedMode !== "search" && !documentSelection) { setError("Selecciona un archivo o una carpeta para preguntar sobre sus documentos."); return; }
+    const lastSearch = messages.at(-1)?.search;
+    if (requestedMode === "search" && lastSearch && /^(sí|si|sí,? busca|si,? busca|continuar|sí por favor|si por favor)[.!]?$/i.test(text.trim())) {
+      if (lastSearch.stage !== "content") { setDraft(""); await nextStage(lastSearch, lastSearch.stage === "folders" ? "files" : "content"); return; }
+    }
     const outgoing: Message[] = [...messages, { role: "user", content: text.trim() }];
     setMessages(outgoing); setDraft(""); setBusy(true); setError("");
     const abort = new AbortController(); controller.current = abort;
@@ -169,7 +184,7 @@ function ChatPanel({ selection, aiConfigured, invalidate }: { selection: Selecti
       const result = await response.json();
       if (!response.ok) { invalidate(result.error); throw new Error(result.error); }
       if (!abort.signal.aborted) {
-        if (result.kind === "search") { setMessages([...outgoing, { role: "assistant", content: "Buscando coincidencias en subcarpetas, archivos y contenido…" }]); await search(outgoing.length, result.terms, abort); }
+        if (result.kind === "search") { setMessages([...outgoing, { role: "assistant", content: "Buscando primero en nombres de carpetas…" }]); await search(outgoing.length, result.terms, abort); }
         else if (result.kind === "document_answer") setMessages([...outgoing, { role: "assistant", content: "Respuesta documental con evidencia.", answer: result }]);
         else setMessages([...outgoing, { role: "assistant", content: result.text, sources: result.sources }]);
       }
@@ -181,13 +196,13 @@ function ChatPanel({ selection, aiConfigured, invalidate }: { selection: Selecti
     <PanelHeading icon={<BrainCircuit size={21}/>} title="Tu asistente de proyectos" subtitle="OpenAI · Consultas con fuentes"><button type="button" className="icon-button" disabled={busy || !messages.length} aria-label="Limpiar conversación" title="Limpiar conversación" onClick={() => { setMessages([]); setError(""); }}><Trash2 size={16}/></button></PanelHeading>
     <div className="chat-scope"><span className="small-label">{selection.scope.kind === "file" ? "SÓLO ESTE ARCHIVO" : selection.scope.kind === "folder" ? "CARPETA Y SUBCARPETAS" : "CONSULTANDO"}</span><span>{selection.scope.kind === "file" ? <File size={14}/> : selection.scope.kind === "folder" ? <Folder size={14}/> : <Database size={14}/>}<span>{selection.path ?? selection.label}</span></span></div>
     <div className="chat-messages" aria-live="polite" aria-relevant="additions text">
-      {!messages.length && <div className="panel-empty chat-intro"><span className="chat-orb"><BrainCircuit size={33}/></span><h3>¿Qué quieres saber de tus documentos?</h3><p>Busca archivos o pregunta, resume y extrae información del archivo o carpeta seleccionada. Las respuestas incluyen evidencia del texto leído.</p>{documentSelection && <div className="document-suggestions"><button type="button" className="chat-suggestion" disabled={busy || !aiConfigured} onClick={() => { setMode("summary"); void send("Resume los puntos principales de los documentos seleccionados, con citas.", "summary"); }}>Resumir selección</button><button type="button" className="chat-suggestion" disabled={busy || !aiConfigured} onClick={() => { setMode("extract"); setDraft("Extrae los objetivos y responsabilidades que se indican en los documentos seleccionados."); }}>Extraer datos con citas</button></div>}<button className="chat-suggestion" type="button" disabled={!aiConfigured || busy} onClick={() => void send(suggestion, "search")}><MessageSquare size={16}/>{suggestion}<ChevronRight size={16}/></button><div className="evidence-note"><ShieldCheck size={16}/> Cada resultado conserva su fuente Autodesk.</div></div>}
-      {messages.map((message, index) => <article className={`chat-message message-${message.role}`} key={index}><span className="message-author">{message.role === "user" ? "Tú" : "Asistente IA"}</span>{message.answer ? <DocumentAnswer answer={message.answer}/> : message.search ? <SearchResults result={message.search} busy={busy && activeSearch === index} resume={() => void resume(index)}/> : <div className="message-body">{message.content}</div>}{!!message.sources?.length && <details className="message-sources"><summary>{message.sources.length} {message.sources.length === 1 ? "fuente consultada" : "fuentes consultadas"}</summary>{message.sources.map(source => <div key={source.id} className="source-detail"><strong>[{source.id}] {source.label}</strong><time dateTime={source.fetchedAt}>{new Date(source.fetchedAt).toLocaleString("es-CL")}</time><code>{source.endpoint}</code><span>{source.returnedCount} elementos en la página {source.page + 1}{source.nextPage !== null ? " · Hay más páginas" : ""}{source.partial ? " · Resultado parcial" : ""}</span></div>)}</details>}</article>)}
+      {!messages.length && <div className="panel-empty chat-intro"><span className="chat-orb"><BrainCircuit size={33}/></span><h3>¿Qué quieres saber de tus documentos?</h3><p>Dime qué necesitas encontrar. Primero revisaré nombres de carpetas; después podrás buscar nombres de archivos y, finalmente, su contenido. Selecciona un resultado para preguntar, resumir o extraer datos con citas.</p>{documentSelection && <div className="document-suggestions"><button type="button" className="chat-suggestion" disabled={busy || !aiConfigured} onClick={() => { setMode("summary"); void send("Resume los puntos principales de los documentos seleccionados, con citas.", "summary"); }}>Resumir selección</button><button type="button" className="chat-suggestion" disabled={busy || !aiConfigured} onClick={() => { setMode("extract"); setDraft("Extrae los objetivos y responsabilidades que se indican en los documentos seleccionados."); }}>Extraer datos con citas</button></div>}<button className="chat-suggestion" type="button" disabled={!aiConfigured || busy} onClick={() => void send(suggestion, "search")}><MessageSquare size={16}/>{suggestion}<ChevronRight size={16}/></button><div className="evidence-note"><ShieldCheck size={16}/> Cada resultado conserva su fuente Autodesk.</div></div>}
+      {messages.map((message, index) => <article className={`chat-message message-${message.role}`} key={index}><span className="message-author">{message.role === "user" ? "Tú" : "Asistente IA"}</span>{message.answer ? <DocumentAnswer answer={message.answer}/> : message.search ? <SearchResults result={message.search} busy={busy && activeSearch === index} disabled={busy} resume={() => void resume(index)} nextStage={stage => void nextStage(message.search!, stage)} select={selectHit}/> : <div className="message-body">{message.content}</div>}{!!message.sources?.length && <details className="message-sources"><summary>{message.sources.length} {message.sources.length === 1 ? "fuente consultada" : "fuentes consultadas"}</summary>{message.sources.map(source => <div key={source.id} className="source-detail"><strong>[{source.id}] {source.label}</strong><time dateTime={source.fetchedAt}>{new Date(source.fetchedAt).toLocaleString("es-CL")}</time><code>{source.endpoint}</code><span>{source.returnedCount} elementos en la página {source.page + 1}{source.nextPage !== null ? " · Hay más páginas" : ""}{source.partial ? " · Resultado parcial" : ""}</span></div>)}</details>}</article>)}
       {busy && <div className="chat-working" role="status"><LoaderCircle className="spin" size={17}/><span>{mode === "search" ? "Consultando Forma y preparando la respuesta…" : "Leyendo la selección y revisando la respuesta contra sus citas. Puede tardar unos minutos…"}</span></div>}
       {error && <p className="assistant-error chat-error" role="alert">{error}</p>}
       {!aiConfigured && <p className="assistant-error chat-error" role="alert">{errorText("ai_not_configured")}</p>}
       <div ref={bottom}/>
     </div>
-    <div className="document-mode-picker" role="group" aria-label="Tipo de consulta">{([["search", "Buscar"], ["ask", "Preguntar"], ["summary", "Resumir"], ["extract", "Extraer datos"]] as const).map(([value, label]) => <button key={value} type="button" aria-pressed={mode === value} disabled={busy || (value !== "search" && !documentSelection)} onClick={() => setMode(value)}>{label}</button>)}{!documentSelection && <small>Selecciona un archivo o carpeta para preguntar, resumir o extraer datos.</small>}</div><form className="chat-composer" onSubmit={e => { e.preventDefault(); void send(draft); }}><div className="composer-input"><textarea aria-label="Tu consulta al asistente" placeholder={aiConfigured ? mode === "search" ? "Busca un documento o texto dentro de tus archivos…" : mode === "summary" ? "¿Qué aspectos quieres resumir de la selección?" : mode === "extract" ? "Indica qué campos o datos quieres extraer…" : "Escribe una pregunta completa sobre la selección…" : "OpenAI pendiente de configuración"} value={draft} onChange={e => setDraft(e.target.value)} disabled={busy || !aiConfigured} maxLength={2000} rows={2} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send(draft); } }}/>{busy ? <button className="send-button" type="button" aria-label="Detener consulta" title="Detener consulta" onClick={() => { controller.current?.abort(); setBusy(false); setError(mode === "search" ? "Consulta detenida. Los resultados ya recibidos son parciales; puedes continuar la búsqueda." : "Consulta documental detenida. No se generó una respuesta nueva."); }}><Square size={17}/></button> : <button className="send-button" type="submit" disabled={!draft.trim() || !aiConfigured} aria-label="Enviar consulta"><ArrowUp size={20}/></button>}</div><p>{mode === "search" ? "Busca en subcarpetas y texto de PDF, DOCX, XLSX, TXT, CSV y MD. Hasta 25 MB por archivo. Los PDF sin texto requieren OCR." : "Sólo la selección activa. Se envía a OpenAI el texto extraído para responder con citas. Hasta 8 documentos y 120.000 caracteres por consulta; cualquier lectura incompleta se indica. Cada pregunta vuelve a consultar sus fuentes."}</p></form>
+    <div className="document-mode-picker" role="group" aria-label="Tipo de consulta">{([["search", "Buscar"], ["ask", "Preguntar"], ["summary", "Resumir"], ["extract", "Extraer datos"]] as const).map(([value, label]) => <button key={value} type="button" aria-pressed={mode === value} disabled={busy || (value !== "search" && !documentSelection)} onClick={() => setMode(value)}>{label}</button>)}{!documentSelection && <small>Selecciona un archivo o carpeta para preguntar, resumir o extraer datos.</small>}</div><form className="chat-composer" onSubmit={e => { e.preventDefault(); void send(draft); }}><div className="composer-input"><textarea aria-label="Tu consulta al asistente" placeholder={aiConfigured ? mode === "search" ? "¿Qué buscas? Primero revisaré nombres de carpetas…" : mode === "summary" ? "¿Qué aspectos quieres resumir de la selección?" : mode === "extract" ? "Indica qué campos o datos quieres extraer…" : "Escribe una pregunta completa sobre la selección…" : "OpenAI pendiente de configuración"} value={draft} onChange={e => setDraft(e.target.value)} disabled={busy || !aiConfigured} maxLength={2000} rows={2} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send(draft); } }}/>{busy ? <button className="send-button" type="button" aria-label="Detener consulta" title="Detener consulta" onClick={() => { controller.current?.abort(); setBusy(false); setError(mode === "search" ? "Consulta detenida. Los resultados ya recibidos son parciales; puedes continuar la búsqueda." : "Consulta documental detenida. No se generó una respuesta nueva."); }}><Square size={17}/></button> : <button className="send-button" type="submit" disabled={!draft.trim() || !aiConfigured} aria-label="Enviar consulta"><ArrowUp size={20}/></button>}</div><p>{mode === "search" ? "Búsqueda por etapas: carpetas → archivos → contenido. Texto de PDF, Word, Excel, PPT/PPTX e imágenes mediante OCR. Máximo 25 MB por archivo. El texto OCR puede contener errores; comprueba el original." : "Sólo la selección activa. Se envía a OpenAI el texto extraído para responder con citas. Hasta 8 documentos y 120.000 caracteres por consulta; cualquier lectura incompleta se indica. Cada pregunta vuelve a consultar sus fuentes."}</p></form>
   </section>;
 }

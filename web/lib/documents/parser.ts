@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve, relative } from "node:path";
 import { z } from "zod";
 import { DataError } from "../autodesk/data.ts";
-export const parsedSchema = z.object({ status: z.enum(["parsed", "ocr_required", "no_text"]), pages: z.number().int().positive().optional(), textlessPages: z.number().int().nonnegative(), segments: z.array(z.object({ text: z.string().max(2000000), location: z.string(), page: z.number().optional(), paragraph: z.number().optional(), line: z.number().optional(), sheet: z.string().optional(), row: z.number().optional() })).max(20000) });
+export const parsedSchema = z.object({ status: z.enum(["parsed", "ocr_required", "no_text"]), partial: z.boolean().optional(), warnings: z.array(z.string()).optional(), pages: z.number().int().positive().optional(), textlessPages: z.number().int().nonnegative(), segments: z.array(z.object({ text: z.string().max(2000000), location: z.string(), page: z.number().optional(), paragraph: z.number().optional(), line: z.number().optional(), sheet: z.string().optional(), row: z.number().optional(), slide: z.number().optional(), method: z.literal("ocr").optional(), confidence: z.number().min(0).max(100).optional() })).max(20000) });
 export type ParsedDocument = z.infer<typeof parsedSchema>;
 export async function parseDocument(bytes: Buffer, name: string, signal?: AbortSignal): Promise<ParsedDocument> {
   signal?.throwIfAborted();
@@ -13,11 +13,11 @@ export async function parseDocument(bytes: Buffer, name: string, signal?: AbortS
   try {
     const file = join(directory, "document"); await writeFile(file, bytes, { mode: 0o600 });
     return await new Promise((accept, reject) => {
-      const child = spawn(process.execPath, ["--max-old-space-size=256", resolve("worker/document-worker.mjs"), file, name], { windowsHide: true, stdio: ["ignore", "pipe", "ignore"], env: { NODE_ENV: process.env.NODE_ENV, PATH: process.env.PATH, SystemRoot: process.env.SystemRoot } });
+      const child = spawn(process.execPath, ["--max-old-space-size=512", resolve("worker/document-worker.mjs"), file, name], { windowsHide: true, stdio: ["ignore", "pipe", "ignore"], env: { NODE_ENV: process.env.NODE_ENV, PATH: process.env.PATH, SystemRoot: process.env.SystemRoot } });
       let output = "", settled = false;
       const cleanup = () => { clearTimeout(timer); signal?.removeEventListener("abort", abort); };
       const fail = (code: string) => { if (settled) return; settled = true; child.kill(); cleanup(); reject(new DataError(code, 422)); };
-      const abort = () => fail("parse_cancelled"), timer = setTimeout(() => fail("parse_timeout"), 20_000);
+      const abort = () => fail("parse_cancelled"), timer = setTimeout(() => fail("parse_timeout"), 75_000);
       signal?.addEventListener("abort", abort, { once: true }); if (signal?.aborted) abort();
       child.stdout.on("data", chunk => { output += chunk.toString(); if (output.length > 12_000_000) fail("parse_limit"); });
       child.on("error", () => fail("parse_failed"));

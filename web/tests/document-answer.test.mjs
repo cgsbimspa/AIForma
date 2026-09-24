@@ -28,6 +28,12 @@ test('extracted values must equal a literal source quote, not a generated or cal
   const bound=bindDocumentDraft({...draft,blocks:[{...draft.blocks[0],text:sentence}]},evidence,'extract');
   assert.equal(bound[0].text,sentence);
 });
+
+test('OCR citations preserve recognition provenance and low-confidence text cannot support a generated assertion',()=>{
+  const recognized={...evidence,passages:[{...evidence.passages[0],method:'ocr',confidence:95,location:'Página 2 · OCR'}]};
+  const bound=bindDocumentDraft(draft,recognized,'ask');assert.equal(bound[0].citations[0].method,'ocr');assert.equal(bound[0].citations[0].location,'Página 2 · OCR');
+  assert.throws(()=>bindDocumentDraft(draft,{...recognized,passages:[{...recognized.passages[0],confidence:40}]},'ask'),/document_unverified/);
+});
 test('independent review rejects a changed condition even when the citation is genuine',async()=>{
   let calls=0;
   const result=await answerDocuments(evidence,'¿Qué recomienda el texto?','ask',config,async(url,init)=>{

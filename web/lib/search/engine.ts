@@ -5,7 +5,7 @@ import { downloadDocument, itemTip, supportedDocument } from "../documents/downl
 import { parseDocument } from "../documents/parser.ts";
 import type { ParsedDocument } from "../documents/parser.ts";
 import { matchesTerms } from "./contracts.ts";
-import type { FileTask, SearchHit, SearchIssue, SearchMatch, SearchState, SearchTerms } from "./contracts.ts";
+import type { FileTask, SearchHit, SearchIssue, SearchMatch, SearchState, SearchTerms, SearchStage } from "./contracts.ts";
 import { ownerOf } from "./cursor.ts";
 
 export function findExcerpts(document: ParsedDocument, terms: SearchTerms): SearchMatch[] {
@@ -13,30 +13,30 @@ export function findExcerpts(document: ParsedDocument, terms: SearchTerms): Sear
   for (const segment of document.segments) {
     for (let start = 0; start < segment.text.length; start += 450) {
       const excerpt = segment.text.slice(start, start + 900);
-      if (matchesTerms(excerpt, terms)) { result.push({ kind: "text", location: segment.location, excerpt, ...(segment.page ? { page: segment.page } : {}), start }); break; }
+      if (matchesTerms(excerpt, terms)) { result.push({ kind: "text", location: segment.location, excerpt, ...(segment.page ? { page: segment.page } : {}), start, ...(segment.method ? { method: segment.method, confidence: segment.confidence } : {}) }); break; }
       if (start + 900 >= segment.text.length) break;
     }
     if (result.length === 4) break;
   }
   return result;
 }
-export async function startSearch(token: string, scope: DataScope, terms: SearchTerms, expiresAt: number, fetcher: typeof fetch = fetch, signal?: AbortSignal): Promise<SearchState> {
+export async function startSearch(token: string, scope: DataScope, terms: SearchTerms, expiresAt: number, fetcher: typeof fetch = fetch, signal?: AbortSignal, stage: SearchStage = "content"): Promise<SearchState> {
   if (scope.kind === "folder" || scope.kind === "file") {
     const location = await verifyLocation(token, scope, fetcher, signal);
     const queue: SearchState["queue"] = scope.kind === "folder"
-      ? [{ kind: "list", query: location.query, path: location.path, project: location.project.name }]
-      : [{ kind: "file", hubId: scope.hubId, projectId: scope.projectId, project: location.project.name, entry: location.entry, path: location.path, endpoint: location.evidence.endpoint, fetchedAt: location.evidence.fetchedAt, nameHit: false }];
-    return { schema: 1, owner: ownerOf(token), expiresAt: Math.min(expiresAt, Date.now() + 3_600_000), scope, terms, queue, seen: [], warnings: [], stats: { folders: 0, files: scope.kind === "file" ? 1 : 0, documentsRead: 0, unread: 0, matched: 0, requests: 0 }, startedAt: new Date().toISOString() };
+      ? [{ kind: "list", folderIds: scope.folderIds, query: location.query, path: location.path, project: location.project.name }]
+      : [{ kind: "file", folderIds: scope.folderIds, hubId: scope.hubId, projectId: scope.projectId, project: location.project.name, entry: location.entry, path: location.path, endpoint: location.evidence.endpoint, fetchedAt: location.evidence.fetchedAt, nameHit: false }];
+    return { schema: 1, stage, owner: ownerOf(token), expiresAt: Math.min(expiresAt, Date.now() + 3_600_000), scope, terms, queue, seen: [], warnings: [], stats: { folders: 0, files: scope.kind === "file" ? 1 : 0, documentsRead: 0, unread: 0, matched: 0, requests: 0 }, startedAt: new Date().toISOString() };
   }
   const project = scope.kind === "project" ? await verifyProject(token, scope.hubId, scope.projectId, fetcher, signal) : null;
   const q = querySchema.parse(scope.kind === "project" ? { operation: "roots", hubId: scope.hubId, projectId: scope.projectId } : { operation: "hubs" });
-  return { schema: 1, owner: ownerOf(token), expiresAt: Math.min(expiresAt, Date.now() + 3_600_000), scope, terms, queue: [{ kind: "list", query: q, path: project?.name ?? "", project: project?.name ?? "" }], seen: [], warnings: [], stats: { folders: 0, files: 0, documentsRead: 0, unread: 0, matched: 0, requests: 0 }, startedAt: new Date().toISOString() };
+  return { schema: 1, stage, owner: ownerOf(token), expiresAt: Math.min(expiresAt, Date.now() + 3_600_000), scope, terms, queue: [{ kind: "list", query: q, path: project?.name ?? "", project: project?.name ?? "" }], seen: [], warnings: [], stats: { folders: 0, files: 0, documentsRead: 0, unread: 0, matched: 0, requests: 0 }, startedAt: new Date().toISOString() };
 }
 function hitFor(task: FileTask, matches: SearchMatch[]): SearchHit {
-  return { key: `${task.projectId}:${task.entry.id}`, id: task.entry.id, name: task.entry.name, type: "items", project: task.project, projectId: task.projectId, path: task.path, webUrl: task.entry.webUrl, endpoint: task.endpoint, fetchedAt: task.fetchedAt, matches };
+  return { scope: { kind: "file", hubId: task.hubId, projectId: task.projectId, folderIds: task.folderIds ?? [], itemId: task.entry.id }, key: `${task.projectId}:${task.entry.id}`, id: task.entry.id, name: task.entry.name, type: "items", project: task.project, projectId: task.projectId, path: task.path, webUrl: task.entry.webUrl, endpoint: task.endpoint, fetchedAt: task.fetchedAt, matches };
 }
-function metadataMatches(entry: Entry, path: string, terms: SearchTerms): SearchMatch[] {
-  return matchesTerms(entry.name, terms) ? [{ kind: "name", location: "Nombre del archivo o carpeta" }] : matchesTerms(path, terms) ? [{ kind: "path", location: "Ruta de carpetas" }] : [];
+function metadataMatches(entry: Entry, terms: SearchTerms): SearchMatch[] {
+  return matchesTerms(entry.name, terms) ? [{ kind: "name", location: "Nombre del archivo o carpeta" }] : [];
 }
 export async function advanceSearch(state: SearchState, token: string, signal?: AbortSignal, options: { fetcher?: typeof fetch; parser?: typeof parseDocument; milliseconds?: number; steps?: number } = {}) {
   const fetcher = options.fetcher ?? fetch, parser = options.parser ?? parseDocument, started = Date.now();
@@ -62,30 +62,35 @@ export async function advanceSearch(state: SearchState, token: string, signal?: 
           const path = [task.path, entry.name].filter(Boolean).join(" / ");
           if (entry.type === "hubs") { state.queue.push({ kind: "list", query: querySchema.parse({ operation: "projects", hubId: entry.id }), path, project: "" }); continue; }
           if (entry.type === "projects") { state.queue.push({ kind: "list", query: querySchema.parse({ operation: "roots", hubId: task.query.hubId, projectId: entry.id }), path, project: entry.name }); continue; }
-          const matches = metadataMatches(entry, path, state.terms);
+          const matches = metadataMatches(entry, state.terms);
           if (entry.type === "folders") {
             state.stats.folders++;
-            if (matches.length) { state.stats.matched++; hits.push({ key: `${task.query.projectId}:${entry.id}`, id: entry.id, name: entry.name, type: "folders", project: task.project, projectId: task.query.projectId!, path, webUrl: entry.webUrl, matches, endpoint: page.evidence.endpoint, fetchedAt: page.evidence.fetchedAt }); }
+            if (state.stage === "folders" && matches.length) { state.stats.matched++; hits.push({ scope: { kind: "folder", hubId: task.query.hubId!, projectId: task.query.projectId!, folderIds: [...(task.folderIds ?? []), entry.id] }, key: `${task.query.projectId}:${entry.id}`, id: entry.id, name: entry.name, type: "folders", project: task.project, projectId: task.query.projectId!, path, webUrl: entry.webUrl, matches, endpoint: page.evidence.endpoint, fetchedAt: page.evidence.fetchedAt }); }
             if (path.length > 12000) { warning("search_limit"); continue; }
-            state.queue.push({ kind: "list", query: querySchema.parse({ operation: "contents", hubId: task.query.hubId, projectId: task.query.projectId, folderId: entry.id }), path, project: task.project });
+            state.queue.push({ kind: "list", query: querySchema.parse({ operation: "contents", hubId: task.query.hubId, projectId: task.query.projectId, folderId: entry.id }), path, project: task.project, folderIds: [...(task.folderIds ?? []), entry.id] });
           } else {
             state.stats.files++;
-            const file: FileTask = { kind: "file", hubId: task.query.hubId!, projectId: task.query.projectId!, project: task.project, entry, path, nameHit: Boolean(matches.length), endpoint: page.evidence.endpoint, fetchedAt: page.evidence.fetchedAt };
-            if (matches.length) { state.stats.matched++; hits.push({ ...hitFor(file, matches), contentStatus: supportedDocument.test(entry.name) ? "pending" : "unsupported_document" }); }
-            if (supportedDocument.test(entry.name) || matches.length) state.queue.push(file);
+            const file: FileTask = { kind: "file", folderIds: task.folderIds ?? [], hubId: task.query.hubId!, projectId: task.query.projectId!, project: task.project, entry, path, nameHit: state.stage === "files" && Boolean(matches.length), endpoint: page.evidence.endpoint, fetchedAt: page.evidence.fetchedAt };
+            if (state.stage === "files" && matches.length) { state.stats.matched++; hits.push(hitFor(file, matches)); if (!entry.webUrl) state.queue.push(file); }
+            if (state.stage !== "content") continue;
+            if (supportedDocument.test(entry.name)) state.queue.push(file);
             else { state.stats.unread++; warning("unsupported_document"); if (issues.length < 30) issues.push({ path, code: "unsupported_document" }); }
           }
         }
       } else {
-        const matches = metadataMatches(task.entry, task.path, state.terms);
+        if (state.stage === "folders") continue;
+        const matches = state.stage === "files" ? metadataMatches(task.entry, state.terms) : [];
+        if (state.stage === "files" && !matches.length) continue;
         const hit = hitFor(task, matches);
         try {
           const version = await itemTip(token, task.projectId, task.entry.id, fetcher, signal);
           Object.assign(hit, { version: version.number, versionId: version.id, webUrl: version.webUrl ?? hit.webUrl, endpoint: version.endpoint, fetchedAt: version.fetchedAt });
+          if (state.stage === "files") { if (!task.nameHit) state.stats.matched++; hits.push(hit); continue; }
           const bytes = await downloadDocument(token, version, fetcher, signal);
           const parsed = await parser(bytes, version.name, signal);
           hit.matches.push(...findExcerpts(parsed, state.terms));
-          hit.contentStatus = parsed.status === "parsed" ? parsed.textlessPages ? "partial_text" : "read" : parsed.status;
+          hit.contentStatus = parsed.status === "parsed" ? parsed.textlessPages || parsed.partial ? "partial_text" : "read" : parsed.status;
+          for (const code of parsed.warnings ?? []) { warning(code); issues.push({ path: task.path, code }); }
           if (parsed.status === "parsed") state.stats.documentsRead++;
           if (hit.contentStatus !== "read") { state.stats.unread++; warning(hit.contentStatus); issues.push({ path: task.path, code: hit.contentStatus }); }
         } catch (error) {
@@ -104,5 +109,5 @@ export async function advanceSearch(state: SearchState, token: string, signal?: 
     }
   }
   state.seen = [...seen];
-  return { hits, issues, stats: state.stats, warnings: state.warnings, pending: state.queue.length, done: state.queue.length === 0, terms: state.terms, startedAt: state.startedAt };
+  return { stage: state.stage, hits, issues, stats: state.stats, warnings: state.warnings, pending: state.queue.length, done: state.queue.length === 0, terms: state.terms, startedAt: state.startedAt };
 }
