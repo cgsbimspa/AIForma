@@ -1,6 +1,6 @@
 /* global Autodesk */
 // Real Autodesk SDK viewer. Never fall back to the model's default geometry:
-// the selected published view GUID must be present in this exact version.
+// the server-verified geometry GUID must be present in this exact version.
 (() => {
   const status = document.getElementById("status");
   const input = JSON.parse(document.getElementById("viewer-data").textContent);
