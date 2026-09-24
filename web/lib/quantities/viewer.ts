@@ -23,14 +23,17 @@ function geometryNodes(manifest: unknown): Record<string, unknown>[] {
   }
   walk(manifest); return nodes;
 }
-// Metadata (SVF2) and the SVF viewer may assign different derivative GUIDs.
-// Only an explicit shared Revit viewableID establishes correspondence.
+// Metadata can identify a graphics resource rather than its geometry parent.
+// Follow the explicit manifest relationship; never match display names.
 export function resolveViewerGeometry(viewId: string, viewerManifest: unknown, metadataManifest: unknown): string {
+  const ownsView = (node: Record<string, unknown>) => node.guid === viewId || (Array.isArray(node.children) && node.children.some(child =>
+    child && typeof child === "object" && child.guid === viewId && child.type === "resource" && child.role === "graphics" &&
+    ["application/autodesk-svf", "application/autodesk-svf2", "application/autodesk-f2d"].includes(child.mime)));
   const viewerNodes = geometryNodes(viewerManifest);
-  const direct = viewerNodes.filter(n => n.guid === viewId);
-  if (direct.length === 1) return viewId;
-  const source = geometryNodes(metadataManifest).filter(n => n.guid === viewId);
-  console.info("quantity-view-map", JSON.stringify({viewId, metadata: geometryNodes(metadataManifest), viewer: viewerNodes.map(n => ({guid:n.guid,viewableID:n.viewableID,role:n.role}))}));
+  const direct = viewerNodes.filter(ownsView);
+  if (direct.length === 1 && typeof direct[0].guid === "string") return direct[0].guid;
+  if (direct.length) throw new DataError("view_unavailable", 409);
+  const source = geometryNodes(metadataManifest).filter(ownsView);
   const ids = [...new Set(source.map(n => n.viewableID).filter(id => typeof id === "string" && id.length))];
   if (ids.length !== 1) throw new DataError("view_unavailable", 409);
   const matches = viewerNodes.filter(n => n.viewableID === ids[0] && source.some(s => s.role === n.role));

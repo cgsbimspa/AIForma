@@ -9,6 +9,8 @@ Implementación de la especificación suministrada el 24 de septiembre de 2026. 
 - Plantillas nombradas explícitamente por el usuario, con versiones inmutables. Se crean **sin reglas**, no se inventan parámetros, categorías, unidades ni fórmulas.
 - Exploración paginada de carpetas y archivos RVT reales. Lista de versiones, última publicación y vistas publicadas mediante APS. Los nombres, identificadores, fechas y enlaces se recuperan de Autodesk; se verifica pertenencia al proyecto/archivo en el servidor al guardar.
 - Mesa de trabajo 20/50/30 en escritorio amplio; configuración colapsable, adaptación a notebook/tablet/móvil.
+- Visor Autodesk integrado para el archivo, versión y vista seleccionados. Carga independiente de la plantilla de cubicación; navegación, zoom y controles del SDK oficial. Si el GUID de metadatos difiere del GUID de geometría, la correspondencia exige el mismo `viewableID` publicado por Autodesk en ambos manifiestos. No se elige una vista por su nombre ni la vista predeterminada.
+- Acceso al visor mediante proxy de lectura del servidor. Los tokens OAuth no se entregan al SDK: cada autorización cifrada queda ligada a la sesión y al modelo verificado, caduca y limita las rutas a recursos observados en su manifiesto. El iframe aísla estilos y estado global del SDK. Errores de acceso, publicación o geometría se presentan como errores, con opción de recarga y enlace a la versión en Autodesk.
 - Selección manual de una versión nueva; conserva la vista solamente si existe el mismo identificador. El nombre no acredita equivalencia entre vistas.
 - Paneles de resultados, historial y comparación preparados para ejecuciones verificadas. Estados sin configurar, lista, actualizada, desactualizada y error calculados desde la evidencia disponible. `PROCESSING` reservado al ejecutor futuro.
 - Comparación determinística: nuevas/eliminadas/aumentadas/disminuidas/sin cambios, delta y porcentaje. Exige dos ejecuciones completas, trazables, de la misma organización, proyecto, especialidad, archivo y vista. Rechaza unidades incompatibles; advierte cambios de plantilla.
@@ -20,7 +22,7 @@ Implementación de la especificación suministrada el 24 de septiembre de 2026. 
 La especificación prohíbe definir reglas técnicas aún no suministradas. Por tanto:
 
 1. **Procesar / Actualizar Cubicación permanece deshabilitado.** El servidor también responde `422 quantity_rules_required`. No se crean ejecuciones ni cantidades ficticias.
-2. El área central muestra **Modelo BIM no cargado**. El SDK Viewer aún no se ha integrado. Existe el contrato `ViewerBinding` para fuente/selección de elementos y el enlace real para abrir la versión en Autodesk en otra pestaña; abrirla externamente no se presenta como visor integrado.
+2. El visor permite examinar el modelo publicado; su visualización no acredita que se haya ejecutado una cubicación. La conexión de elementos seleccionados con partidas de resultados requiere completar el ejecutor y su contrato `ViewerBinding`.
 3. El motor se conecta mediante `QuantityEngineAdapter`; falta el adaptador de extracción y la configuración validada de reglas, categorías, parámetros, filtros, agrupaciones y unidades. La interfaz no permite publicar reglas arbitrarias como validadas.
 4. No hay ejecuciones reales hasta completar ese contrato. La comparación y persistencia están implementadas y probadas con fixtures **TEST**, pero no se afirma validación de cantidades de un proyecto real.
 5. Las vistas listadas son las publicadas por Model Derivative, no todas las vistas del RVT original. Sin derivado, permiso o metadatos se informa indisponibilidad; no se solicita una traducción ni se escriben cambios en Autodesk.
@@ -45,7 +47,11 @@ Para habilitar el primer procesamiento se debe definir una plantilla técnica co
 - [Autodesk: relaciones de versión y derivative URN](https://aps.autodesk.com/blog/get-derivative-urn-accbim360-file-viewing-it-viewer).
 - [Autodesk: Items API, versiones de archivo](https://github.com/Autodesk-Forge/forge-api-nodejs-client/blob/master/docs/ItemsApi.md).
 - [Autodesk: Model Derivative metadata](https://github.com/Autodesk-Forge/forge-api-nodejs-client/blob/master/docs/DerivativesApi.md).
+- [Autodesk: proxy de Viewer](https://aps.autodesk.com/blog/proxying-forge-viewer).
+- [Autodesk: Viewer e interfaz](https://get-started.aps.autodesk.com/tutorials/simple-viewer/viewer).
 
 ## Verificación
 
 `web/tests/quantities.test.mjs`: diferencias y porcentajes, cero/ausencia, rechazo de cobertura parcial y procedencia incompleta, unidades/vistas incompatibles, estados de vigencia, vínculo de versiones/vistas APS, SQL real en PGlite, RLS, configuración compartida dentro del proyecto, duplicados, concurrencia por revisión, cifrado e inmutabilidad. Los datos sintéticos permanecen exclusivamente en pruebas.
+
+`web/tests/quantity-viewer.test.mjs`: correspondencia de vista por identificador publicado (rechazo de nombres iguales y relaciones ambiguas), autorización cifrada ligada a sesión/versionado, caducidad, manipulación, rutas y consultas permitidas; rechazo de otros modelos, traversal y destinos arbitrarios.

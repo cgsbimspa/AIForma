@@ -11,6 +11,11 @@ test('metadata and viewer GUIDs are linked only by the published viewableID, nev
  const metadata={derivatives:[{children:[geometry('TEST_SVF2','TEST_REVIT_VIEW')]}]};
  assert.equal(resolveViewerGeometry('TEST_SVF2',viewer,metadata),'TEST_SVF');
  assert.equal(resolveViewerGeometry('TEST_SVF',viewer,{}),'TEST_SVF');
+ const resource={type:'resource',role:'graphics',mime:'application/autodesk-svf',guid:'TEST_METADATA_RESOURCE'};
+ const resourceManifest={children:[{...geometry('TEST_GEOMETRY','TEST_REVIT_VIEW'),children:[resource]}]};
+ assert.equal(resolveViewerGeometry('TEST_METADATA_RESOURCE',resourceManifest,{}),'TEST_GEOMETRY');
+ assert.throws(()=>resolveViewerGeometry('TEST_METADATA_RESOURCE',{children:[{...geometry('TEST_GEOMETRY','TEST_REVIT_VIEW'),children:[{...resource,role:'thumbnail'}]}]},{}),/view_unavailable/);
+ assert.throws(()=>resolveViewerGeometry('TEST_METADATA_RESOURCE',{children:[...resourceManifest.children,...resourceManifest.children]},{}),/view_unavailable/);
  assert.throws(()=>resolveViewerGeometry('TEST_SVF2',viewer,{children:[geometry('TEST_SVF2','TEST_UNKNOWN')]}),/view_unavailable/);
  assert.throws(()=>resolveViewerGeometry('TEST_SVF2',{children:[geometry('TEST_SVF','TEST_REVIT_VIEW'),geometry('TEST_DUP','TEST_REVIT_VIEW')]},metadata),/view_unavailable/);
  assert.throws(()=>resolveViewerGeometry('TEST_SVF2',viewer,{children:[geometry('TEST_SVF2',undefined)]}),/view_unavailable/);
