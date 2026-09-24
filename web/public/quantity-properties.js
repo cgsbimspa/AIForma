@@ -120,7 +120,8 @@ export async function installPropertyInspector(viewer) {
       if (!shown.length) { this.tableArea.append(node('p', 'No hay coincidencias con el filtro.')); return; }
       const groups = new Map();
       shown.forEach(p => { const category = p.displayCategory || 'Sin categoría publicada'; if (!groups.has(category)) groups.set(category, []); groups.get(category).push(p); });
-      for (const [category, values] of groups) {
+      const orderedGroups = [...groups].sort((a, b) => Number(a[1].every(p => p.hidden)) - Number(b[1].every(p => p.hidden)));
+      for (const [category, values] of orderedGroups) {
         const section = node('section');
         section.append(node('h3', `${category} (${values.length})`));
         const table = node('table');
