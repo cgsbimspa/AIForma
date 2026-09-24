@@ -20,7 +20,7 @@ export async function parseDocument(bytes: Buffer, name: string, signal?: AbortS
   try {
     const file = join(directory, "document"); await writeFile(file, bytes, { mode: 0o600 });
     return await new Promise((accept, reject) => {
-      const child = spawn(process.execPath, ["--max-old-space-size=512", resolve("worker/document-worker.mjs"), file, name, String(startPage), options.detail ?? "standard"], { windowsHide: true, stdio: ["ignore", "pipe", "pipe"], env: { NODE_ENV: process.env.NODE_ENV, PATH: process.env.PATH, SystemRoot: process.env.SystemRoot } });
+      const child = spawn(process.execPath, ["--max-old-space-size=1024", resolve("worker/document-worker.mjs"), file, name, String(startPage), options.detail ?? "standard"], { windowsHide: true, stdio: ["ignore", "pipe", "pipe"], env: { NODE_ENV: process.env.NODE_ENV, PATH: process.env.PATH, SystemRoot: process.env.SystemRoot } });
       let output = "", diagnostic = "", settled = false;
       child.stderr.on("data", chunk => { diagnostic = (diagnostic + chunk.toString()).slice(-3000); });
       const cleanup = () => { clearTimeout(timer); signal?.removeEventListener("abort", abort); };
@@ -29,7 +29,8 @@ export async function parseDocument(bytes: Buffer, name: string, signal?: AbortS
       signal?.addEventListener("abort", abort, { once: true }); if (signal?.aborted) abort();
       child.stdout.on("data", chunk => { output += chunk.toString(); if (output.length > 12_000_000) fail("parse_limit"); });
       child.on("error", () => fail("parse_failed"));
-      child.on("exit", code => { if (settled) return; if (code !== 0) { console.warn("[document-parser]", code, diagnostic); return fail("parse_failed"); } try { const result = parseWorkerOutput(output); settled = true; cleanup(); accept(result); } catch (error) { console.warn("[document-parser-invalid-output]", error instanceof z.ZodError ? error.issues.map(i=>({code:i.code,path:i.path})).slice(0,10) : error instanceof Error ? error.name : "unknown", {length:output.length,hasMarker:output.includes("\nAIFORMA_RESULT:")}); fail("parse_failed"); } });
+      // close waits for stdout to drain; exit can arrive before a large result.
+      child.on("close", code => { if (settled) return; if (code !== 0) { const reason = /heap out of memory|Allocation failed/i.test(diagnostic) ? "parse_memory_limit" : "parse_failed"; console.warn("[document-parser]", {code,reason}); return fail(reason); } try { const result = parseWorkerOutput(output); settled = true; cleanup(); accept(result); } catch (error) { console.warn("[document-parser-invalid-output]", error instanceof z.ZodError ? error.issues.map(i=>({code:i.code,path:i.path})).slice(0,10) : error instanceof Error ? error.name : "unknown", {length:output.length,hasMarker:output.includes("\nAIFORMA_RESULT:")}); fail("parse_failed"); } });
     });
   } finally { await rm(directory, { recursive: true, force: true }); }
 }

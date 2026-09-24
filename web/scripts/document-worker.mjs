@@ -54,8 +54,10 @@ if (['.txt', '.md'].includes(extension)) {
     for (let n = startPage; n <= pages; n++) {
       const page = await pdf.getPage(n), content = await page.getTextContent();
       const text = content.items.map(item => 'str' in item ? item.str + (item.hasEOL ? '\n' : ' ') : '').join('');
-      const operators = await page.getOperatorList();
-      const hasImages = operators.fnArray.some(op => [OPS.paintImageXObject, OPS.paintInlineImageXObject, OPS.paintImageMaskXObject].includes(op));
+      // Detailed mode already renders the page. Do not materialize a second
+      // full operator list for large CAD drawings merely to detect images.
+      const operators = detailed ? null : await page.getOperatorList();
+      const hasImages = operators?.fnArray.some(op => [OPS.paintImageXObject, OPS.paintInlineImageXObject, OPS.paintImageMaskXObject].includes(op));
       if ((!text.trim() || hasImages || detailed) && !ocr.available()) { nextPage = n; page.cleanup(); break; }
       append(text, `Página ${n}`, { page: n });
       if (detailed) {
