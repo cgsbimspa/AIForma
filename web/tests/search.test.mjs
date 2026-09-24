@@ -8,6 +8,7 @@ import { itemTip, downloadDocument } from '../lib/documents/download.ts';
 import { findExcerpts, startSearch, advanceSearch } from '../lib/search/engine.ts';
 import { packCursor, unpackCursor } from '../lib/search/cursor.ts';
 import { matchesTerms } from '../lib/search/contracts.ts';
+import { browse, querySchema, scopeSchema, verifyLocation } from '../lib/autodesk/data.ts';
 
 // Synthetic TEST fixtures only. These are never served by application routes.
 function testPdf(text) {
@@ -61,6 +62,39 @@ const fixtureFetch=async(url,init)=>{
   if(p.endsWith('/projects/TEST_PROJECT'))return Response.json({data:row('projects','TEST_PROJECT','TEST proyecto')});
   throw new Error('Unexpected TEST request');
 };
+
+const folderScope={...scope,kind:'folder',folderIds:['TEST_ROOT','TEST_NESTED']};
+const fileScope={...folderScope,kind:'file',itemId:'TEST_FILE'};
+test('selected subfolder verifies the full path and searches only its descendants across continuation',async()=>{
+  const state=await startSearch('TEST_TOKEN',folderScope,[['mecánica','suelos']],Date.now()+60000,fixtureFetch);
+  assert.equal(state.queue.length,1);assert.equal(state.queue[0].query.folderId,'TEST_NESTED');
+  const visited=[];
+  const fetcher=async(url,init)=>{visited.push(decodeURIComponent(new URL(url).pathname));return fixtureFetch(url,init);};
+  await advanceSearch(state,'TEST_TOKEN',undefined,{fetcher,steps:1});
+  const key=randomBytes(32),resumed=unpackCursor(packCursor(state,key),key,'TEST_TOKEN');
+  assert.deepEqual(resumed.scope,folderScope);
+  const result=await advanceSearch(resumed,'TEST_TOKEN',undefined,{fetcher,milliseconds:60000});
+  assert.equal(result.done,true);assert.equal(result.stats.files,1);assert.equal(result.stats.documentsRead,1);
+  assert.equal(result.hits[0].path,'TEST proyecto / TEST raíz / TEST subcarpeta / TEST informe.txt');
+  assert.ok(!visited.some(p=>p.endsWith('/topFolders')||p.includes('/folders/TEST_ROOT/')));
+});
+test('selected file reads exactly one document and never searches siblings or ancestors',async()=>{
+  const state=await startSearch('TEST_TOKEN',fileScope,[['mecánica','suelos']],Date.now()+60000,fixtureFetch);
+  assert.equal(state.queue.length,1);assert.equal(state.queue[0].entry.id,'TEST_FILE');
+  const visited=[];
+  const fetcher=async(url,init)=>{visited.push(decodeURIComponent(new URL(url).pathname));return fixtureFetch(url,init);};
+  const result=await advanceSearch(state,'TEST_TOKEN',undefined,{fetcher,milliseconds:60000});
+  assert.equal(result.done,true);assert.equal(result.stats.files,1);assert.equal(result.stats.documentsRead,1);assert.equal(result.hits.length,1);
+  assert.equal(result.hits[0].id,'TEST_FILE');assert.equal(result.hits[0].matches[0].kind,'text');
+  assert.ok(!visited.some(p=>p.includes('/folders/')||p.endsWith('/topFolders')));
+});
+test('stale or forged selection paths fail closed and narrow scopes reject broader browsing before network',async()=>{
+  assert.equal(scopeSchema.safeParse({...fileScope,folderIds:[]}).success,false);
+  await assert.rejects(()=>verifyLocation('TEST_TOKEN',{...fileScope,folderIds:['TEST_NESTED']},fixtureFetch),/selection_unavailable/);
+  await assert.rejects(()=>verifyLocation('TEST_TOKEN',{...fileScope,itemId:'TEST_OTHER_FILE'},fixtureFetch),/selection_unavailable/);
+  const noNetwork=()=>{assert.fail('Out-of-scope request reached network');};
+  for(const s of [folderScope,fileScope])for(const q of [querySchema.parse({operation:'roots',hubId:scope.hubId,projectId:scope.projectId}),querySchema.parse({operation:'contents',hubId:scope.hubId,projectId:scope.projectId,folderId:'TEST_SIBLING'})])await assert.rejects(()=>browse('TEST_TOKEN',q,s,noNetwork),/out_of_scope/);
+});
 test('recursive paginated search discovers a text-only hit in nested folders with path, link, version and location',async()=>{
   const state=await startSearch('TEST_TOKEN',scope,[['mecánica','suelos']],Date.now()+60000,fixtureFetch);
   const first=await advanceSearch(state,'TEST_TOKEN',undefined,{fetcher:fixtureFetch,steps:2});assert.equal(first.done,false);

@@ -9,6 +9,7 @@ import { SearchResults } from "./search-results";
 
 type Auth = { connected: boolean; configured?: boolean; dataAccess?: boolean; aiConfigured?: boolean; user?: { id: string; name: string }; expiresAt?: number; error?: string };
 const errors: Record<string, string> = {
+  selection_unavailable: "La ubicación seleccionada cambió o ya no está disponible. Actualiza el explorador y vuelve a seleccionarla.",
   search_expired: "La búsqueda guardada venció o pertenece a otra sesión. Inicia una nueva consulta.", search_limit: "La búsqueda superó el límite de recorrido. Selecciona un proyecto o usa términos más precisos.",
   expired: "La sesión de Autodesk venció. Vuelve a conectar tu cuenta.", consent_required: "Autoriza la lectura de proyectos y carpetas para continuar.", forbidden: "Autodesk no permitió acceder a estos datos. Revisa tus permisos y la integración de la cuenta en Forma.", not_found: "Autodesk no encontró este recurso o ya no está disponible.", unavailable: "No fue posible consultar Autodesk. Inténtalo nuevamente.", invalid_response: "Autodesk devolvió información que no pudimos verificar.", rate_limited: "Autodesk está limitando las consultas. Espera un momento y vuelve a intentar.", ai_not_configured: "La conexión con OpenAI todavía no está configurada.", ai_unavailable: "OpenAI no pudo completar la consulta. Puedes volver a intentar.", ai_rate_limited: "OpenAI alcanzó un límite de uso. Intenta más tarde o revisa el saldo de la API.", ai_incomplete: "La consulta no se completó. Prueba con un proyecto o una carpeta más concreta.", ai_invalid_response: "La respuesta de IA no pudo vincularse a datos verificados. No se mostrará como un resultado válido.", out_of_scope: "La consulta intentó salir del alcance seleccionado. Elige el proyecto correspondiente o toda tu base.", invalid_query: "La consulta no es válida. Actualiza la página e inténtalo nuevamente.", too_large: "La conversación es demasiado extensa. Inicia una nueva consulta.", not_configured: "La conexión Autodesk no está configurada.",
 };
@@ -50,7 +51,7 @@ export function AssistantWorkspace() {
   </div>;
 }
 function PanelHeading({ icon, title, subtitle, children }: { icon: React.ReactNode; title: string; subtitle: string; children?: React.ReactNode }) { return <header className="assistant-panel-heading"><span className="panel-heading-icon">{icon}</span><div><h2>{title}</h2><p>{subtitle}</p></div>{children}</header>; }
-type Selection = { scope: DataScope; label: string };
+type Selection = { scope: DataScope; label: string; path?: string };
 function ConnectedWorkspace({ aiConfigured, invalidate }: { aiConfigured: boolean; invalidate: (code: string) => void }) {
   const [selection, setSelection] = useState<Selection>({ scope: { kind: "all" }, label: "Toda mi base de Forma" });
   const [revision, setRevision] = useState(0);
@@ -59,7 +60,7 @@ function ConnectedWorkspace({ aiConfigured, invalidate }: { aiConfigured: boolea
   return <div className="assistant-split">
     <section className="forma-panel" aria-label="Explorador de Forma">
       <PanelHeading icon={<Folder size={20}/>} title="Mi información de Forma" subtitle="Datos de tu cuenta Autodesk"><button type="button" className="icon-button" aria-label="Actualizar explorador" title="Actualizar explorador" onClick={() => { setRevision(n => n + 1); }}><RefreshCw size={16}/></button></PanelHeading>
-      <div className="scope-picker"><span className="small-label">ALCANCE DE LA CONSULTA</span><button type="button" aria-pressed={selection.scope.kind === "all"} className={`scope-all ${selection.scope.kind === "all" ? "selected" : ""}`} onClick={() => setSelection({ scope: { kind: "all" }, label: "Toda mi base de Forma" })}><Globe2 size={18}/><span><strong>Toda mi base de Forma</strong><small>Todos los proyectos accesibles</small></span>{selection.scope.kind === "all" && <CircleCheck size={18}/>}</button><p>O selecciona un proyecto en el explorador.</p></div>
+      <div className="scope-picker"><span className="small-label">ALCANCE DE LA CONSULTA</span><button type="button" aria-pressed={selection.scope.kind === "all"} className={`scope-all ${selection.scope.kind === "all" ? "selected" : ""}`} onClick={() => setSelection({ scope: { kind: "all" }, label: "Toda mi base de Forma" })}><Globe2 size={18}/><span><strong>Toda mi base de Forma</strong><small>Todos los proyectos accesibles</small></span>{selection.scope.kind === "all" && <CircleCheck size={18}/>}</button><p>Selecciona el círculo junto a un proyecto, carpeta o archivo. La flecha abre su contenido.</p>{selection.scope.kind !== "all" && <div className="scope-location" role="status"><strong>{selection.scope.kind === "file" ? "Sólo este archivo" : selection.scope.kind === "folder" ? "Esta carpeta y sus subcarpetas" : "Todo este proyecto"}</strong><span>{selection.path ?? selection.label}</span><small>Al cambiar el alcance se inicia una nueva conversación.</small></div>}</div>
       <label className="explorer-search"><Search size={16}/><input value={filter} onChange={e => setFilter(e.target.value)} placeholder="Filtrar proyectos cargados" aria-label="Filtrar proyectos cargados"/></label>
       <div className="forma-tree" key={revision}><Branch query={{ operation: "hubs", hubId: null, projectId: null, folderId: null, page: 0 }} selection={selection} select={setSelection} invalidate={invalidate} filter={filter}/></div>
       <footer className="explorer-footer"><ShieldCheck size={15}/><span>Sólo lectura · Abre las carpetas para ver su contenido. Los permisos de Autodesk se respetan.</span></footer>
@@ -67,7 +68,7 @@ function ConnectedWorkspace({ aiConfigured, invalidate }: { aiConfigured: boolea
     <ChatPanel key={scopeKey} selection={selection} aiConfigured={aiConfigured} invalidate={invalidate}/>
   </div>;
 }
-type BranchProps = { query: DataQuery; selection: Selection; select: (selection: Selection) => void; invalidate: (code: string) => void; filter: string };
+type BranchProps = { query: DataQuery; selection: Selection; select: (selection: Selection) => void; invalidate: (code: string) => void; filter: string; folderIds?: string[]; path?: string };
 function Branch(props: BranchProps) {
   const { query, invalidate } = props;
   const [page, setPage] = useState<DataPage | null>(null);
@@ -109,13 +110,18 @@ function TreeRow(props: BranchProps & { entry: Entry }) {
   const { entry, query, selection, select } = props;
   const [open, setOpen] = useState(entry.type === "hubs");
   const leaf = entry.type === "items";
-  const selected = entry.type === "projects" && selection.scope.kind === "project" && selection.scope.projectId === entry.id && selection.scope.hubId === query.hubId;
+  const folderIds = props.folderIds ?? [];
+  const path = entry.type === "projects" ? entry.name : [props.path, entry.name].filter(Boolean).join(" / ");
+  const rowScope: DataScope | null = entry.type === "hubs" ? null : entry.type === "projects" ? { kind: "project", hubId: query.hubId!, projectId: entry.id } : entry.type === "folders" ? { kind: "folder", hubId: query.hubId!, projectId: query.projectId!, folderIds: [...folderIds, entry.id] } : { kind: "file", hubId: query.hubId!, projectId: query.projectId!, folderIds, itemId: entry.id };
+  const selected = rowScope !== null && JSON.stringify(rowScope) === JSON.stringify(selection.scope);
+  const selectRow = () => { if (rowScope) select({ scope: rowScope, label: entry.name, path }); };
+  const kindLabel = entry.type === "projects" ? "proyecto" : leaf ? "archivo" : "carpeta";
   const next: DataQuery = entry.type === "hubs" ? { operation: "projects", hubId: entry.id, projectId: null, folderId: null, page: 0 } : entry.type === "projects" ? { operation: "roots", hubId: query.hubId, projectId: entry.id, folderId: null, page: 0 } : { operation: "contents", hubId: query.hubId, projectId: query.projectId, folderId: entry.id, page: 0 };
   const Icon = entry.type === "hubs" ? Building2 : entry.type === "projects" ? Database : leaf ? File : open ? FolderOpen : Folder;
   return <div className={`tree-node tree-${entry.type}`}><div className={`tree-row ${selected ? "is-selected" : ""}`}>
-    {leaf ? <span className="tree-leaf"><Icon size={15}/><span title={entry.name}>{entry.name}</span></span> : <button className="tree-expand" type="button" aria-expanded={open} onClick={() => setOpen(!open)} title={entry.name}>{open ? <ChevronDown size={13}/> : <ChevronRight size={13}/>}<Icon size={16}/><span>{entry.name}</span></button>}
-    {entry.type === "projects" && <button type="button" className="project-select" aria-label={`Consultar proyecto ${entry.name}`} aria-pressed={selected} title={selected ? "Proyecto seleccionado" : "Usar este proyecto en el chat"} onClick={() => { setOpen(true); select({ scope: { kind: "project", hubId: query.hubId!, projectId: entry.id }, label: entry.name }); }}>{selected ? <CircleCheck size={17}/> : <span className="radio-empty"/>}</button>}
-  </div>{!leaf && open && <div className="tree-children"><Branch {...props} query={next}/></div>}</div>;
+    {leaf ? <button type="button" className="tree-leaf" onClick={selectRow} title={`Buscar sólo en ${path}`}><Icon size={15}/><span>{entry.name}</span></button> : <button className="tree-expand" type="button" aria-expanded={open} onClick={() => setOpen(!open)} title={entry.name}>{open ? <ChevronDown size={13}/> : <ChevronRight size={13}/>}<Icon size={16}/><span>{entry.name}</span></button>}
+    {rowScope && <button type="button" className="project-select" aria-label={`Consultar ${kindLabel} ${entry.name}`} aria-pressed={selected} title={selected ? "Alcance seleccionado" : `Buscar en este ${kindLabel}${entry.type === "folders" ? " y sus subcarpetas" : ""}`} onClick={() => { if (!leaf) setOpen(true); selectRow(); }}>{selected ? <CircleCheck size={17}/> : <span className="radio-empty"/>}</button>}
+  </div>{!leaf && open && <div className="tree-children"><Branch {...props} query={next} folderIds={entry.type === "folders" ? [...folderIds, entry.id] : []} path={entry.type === "hubs" ? "" : path}/></div>}</div>;
 }
 type Message = { role: "user" | "assistant"; content: string; sources?: Source[]; search?: SearchBatch };
 function ChatPanel({ selection, aiConfigured, invalidate }: { selection: Selection; aiConfigured: boolean; invalidate: (code: string) => void }) {
@@ -164,10 +170,10 @@ function ChatPanel({ selection, aiConfigured, invalidate }: { selection: Selecti
     } catch (e) { if (!abort.signal.aborted) { setError(errorText(e instanceof Error ? e.message : "ai_unavailable")); setDraft(text); } }
     finally { if (!abort.signal.aborted) setBusy(false); }
   }
-  const suggestion = selection.scope.kind === "all" ? "Muéstrame los proyectos a los que tengo acceso." : "Muéstrame las carpetas raíz de este proyecto.";
+  const suggestion = selection.scope.kind === "all" ? "Muéstrame los proyectos a los que tengo acceso." : selection.scope.kind === "folder" ? "Muéstrame el contenido de esta carpeta." : selection.scope.kind === "file" ? "Muéstrame el archivo seleccionado." : "Muéstrame las carpetas raíz de este proyecto.";
   return <section className="chat-panel" aria-label="Asistente IA con OpenAI">
     <PanelHeading icon={<BrainCircuit size={21}/>} title="Tu asistente de proyectos" subtitle="OpenAI · Consultas con fuentes"><button type="button" className="icon-button" disabled={busy || !messages.length} aria-label="Limpiar conversación" title="Limpiar conversación" onClick={() => { setMessages([]); setError(""); }}><Trash2 size={16}/></button></PanelHeading>
-    <div className="chat-scope"><span className="small-label">CONSULTANDO</span><span><Database size={14}/>{selection.label}</span></div>
+    <div className="chat-scope"><span className="small-label">{selection.scope.kind === "file" ? "SÓLO ESTE ARCHIVO" : selection.scope.kind === "folder" ? "CARPETA Y SUBCARPETAS" : "CONSULTANDO"}</span><span>{selection.scope.kind === "file" ? <File size={14}/> : selection.scope.kind === "folder" ? <Folder size={14}/> : <Database size={14}/>}<span>{selection.path ?? selection.label}</span></span></div>
     <div className="chat-messages" aria-live="polite" aria-relevant="additions text">
       {!messages.length && <div className="panel-empty chat-intro"><span className="chat-orb"><BrainCircuit size={33}/></span><h3>¿Qué quieres encontrar?</h3><p>Busca en carpetas, subcarpetas, nombres de archivos y texto de documentos. Cada coincidencia incluye su ruta y fuente.</p><button className="chat-suggestion" type="button" disabled={!aiConfigured || busy} onClick={() => void send(suggestion)}><MessageSquare size={16}/>{suggestion}<ChevronRight size={16}/></button><div className="evidence-note"><ShieldCheck size={16}/> Cada resultado conserva su fuente Autodesk.</div></div>}
       {messages.map((message, index) => <article className={`chat-message message-${message.role}`} key={index}><span className="message-author">{message.role === "user" ? "Tú" : "Asistente IA"}</span>{message.search ? <SearchResults result={message.search} busy={busy && activeSearch === index} resume={() => void resume(index)}/> : <div className="message-body">{message.content}</div>}{!!message.sources?.length && <details className="message-sources"><summary>{message.sources.length} {message.sources.length === 1 ? "fuente consultada" : "fuentes consultadas"}</summary>{message.sources.map(source => <div key={source.id} className="source-detail"><strong>[{source.id}] {source.label}</strong><time dateTime={source.fetchedAt}>{new Date(source.fetchedAt).toLocaleString("es-CL")}</time><code>{source.endpoint}</code><span>{source.returnedCount} elementos en la página {source.page + 1}{source.nextPage !== null ? " · Hay más páginas" : ""}{source.partial ? " · Resultado parcial" : ""}</span></div>)}</details>}</article>)}

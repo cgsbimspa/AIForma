@@ -141,6 +141,8 @@ button:disabled { cursor: default; opacity: .45; }
 .scope-all > svg:last-child { margin-left: auto; flex-shrink: 0; }
 .scope-all.selected { background: #edf5ff; border-color: #92bbee; color: #1a62bc; }
 .scope-picker > p { margin: 9px 1px 0; font-size: .7rem; color: #7b8ba0; }
+.scope-location { display: grid; gap: 4px; margin-top: 10px; padding: 10px 12px; border-radius: 8px; background: #edf5ff; color: #315f93; font-size: .72rem; overflow-wrap: anywhere; }
+.scope-location small { color: #72859c; font-size: .65rem; }
 .explorer-search { margin: 6px 18px 12px; background: #f7f9fc; border: 1px solid #e5ebf3; border-radius: 7px; padding: 9px 10px; display: flex; align-items: center; gap: 8px; color: #7a91ad; }
 .explorer-search input { width: 100%; min-width: 0; font-size: .75rem; outline: none; background: transparent; }
 .explorer-search:focus-within { outline: 2px solid #619ce9; }
@@ -153,6 +155,7 @@ button:disabled { cursor: default; opacity: .45; }
 .tree-expand > span, .tree-leaf > span { overflow-wrap: anywhere; }
 .tree-hubs > .tree-row { font-weight: 650; color: #325174; }
 .tree-folders > .tree-row svg { color: #a98440; }
+.tree-row.is-selected .tree-leaf, .tree-folders > .tree-row .project-select svg { color: #1f6bce; }
 .tree-leaf { padding-left: 23px; color: #76889b; font-size: .73rem; }
 .tree-children { margin-left: 13px; padding-left: 6px; border-left: 1px solid #e8eef6; }
 .project-select { padding: 7px; color: #1f6bce; display: grid; place-items: center; flex-shrink: 0; }

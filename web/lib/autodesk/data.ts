@@ -1,7 +1,12 @@
 import { z } from "zod";
 
 const id = z.string().min(1).max(512).refine(value => !/[\x00-\x1f/\\?#]/.test(value) && value !== "." && value !== "..", "Identificador inválido");
-export const scopeSchema = z.discriminatedUnion("kind", [z.object({ kind: z.literal("all") }).strict(), z.object({ kind: z.literal("project"), hubId: id, projectId: id }).strict()]);
+export const scopeSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("all") }).strict(),
+  z.object({ kind: z.literal("project"), hubId: id, projectId: id }).strict(),
+  z.object({ kind: z.literal("folder"), hubId: id, projectId: id, folderIds: z.array(id).min(1).max(64) }).strict(),
+  z.object({ kind: z.literal("file"), hubId: id, projectId: id, folderIds: z.array(id).min(1).max(64), itemId: id }).strict(),
+]);
 export type DataScope = z.infer<typeof scopeSchema>;
 export const querySchema = z.object({ operation: z.enum(["hubs", "projects", "roots", "contents"]), hubId: id.nullable().default(null), projectId: id.nullable().default(null), folderId: id.nullable().default(null), page: z.number().int().min(0).max(10000).default(0) }).strict();
 export type DataQuery = z.infer<typeof querySchema>;
@@ -42,10 +47,11 @@ export async function verifyProject(token: string, hubId: string, projectId: str
   if (!parsed.success || parsed.data.data.type !== "projects" || parsed.data.data.id !== projectId || !parsed.data.data.attributes.name) throw new DataError("invalid_response");
   return { id: projectId, type: "projects", name: parsed.data.data.attributes.name };
 }
-export async function browse(token: string, input: DataQuery, scope: DataScope = { kind: "all" }, fetcher: typeof fetch = fetch, signal?: AbortSignal): Promise<DataPage> {
+export async function browse(token: string, input: DataQuery, scope: DataScope = { kind: "all" }, fetcher: typeof fetch = fetch, signal?: AbortSignal, discoveredFolders: readonly string[] = []): Promise<DataPage> {
   const q = querySchema.parse(input);
   // Enforce the selected project on the server, independently of model arguments.
-  if (scope.kind === "project" && (q.operation === "hubs" || q.operation === "projects" || q.hubId !== scope.hubId || q.projectId !== scope.projectId)) throw new DataError("out_of_scope", 403);
+  if (scope.kind !== "all" && (q.operation === "hubs" || q.operation === "projects" || q.hubId !== scope.hubId || q.projectId !== scope.projectId)) throw new DataError("out_of_scope", 403);
+  if (scope.kind === "file" || scope.kind === "folder" && (q.operation !== "contents" || ![scope.folderIds.at(-1)!, ...discoveredFolders].includes(q.folderId!))) throw new DataError("out_of_scope", 403);
   if (q.operation !== "hubs" && !q.hubId || ["roots", "contents"].includes(q.operation) && !q.projectId || q.operation === "contents" && !q.folderId) throw new DataError("invalid_query", 400);
   if (["hubs", "roots"].includes(q.operation) && q.page !== 0) throw new DataError("invalid_query", 400);
   const path = q.operation === "hubs" ? "/project/v1/hubs" : q.operation === "projects" ? `/project/v1/hubs/${enc(q.hubId!)}/projects` : q.operation === "roots" ? `/project/v1/hubs/${enc(q.hubId!)}/projects/${enc(q.projectId!)}/topFolders` : `/data/v1/projects/${enc(q.projectId!)}/folders/${enc(q.folderId!)}/contents`;
@@ -69,4 +75,30 @@ export async function browse(token: string, input: DataQuery, scope: DataScope =
 export function officialWebUrl(value?: string): string | undefined {
   if (!value) return;
   try { const url = new URL(value); if (url.protocol === "https:" && !url.username && !url.password && !url.port && (url.hostname.endsWith(".autodesk.com") || url.hostname.endsWith(".autodesk360.com"))) return url.href; } catch { /* Discard untrusted provider links. */ }
+}
+
+// Reconstruct the selected path from live Autodesk listings, never client labels.
+// Ancestor listings verify membership; only the selected subtree is searched.
+export async function verifyLocation(token: string, scope: Extract<DataScope, { kind: "folder" | "file" }>, fetcher: typeof fetch = fetch, signal?: AbortSignal) {
+  const project = await verifyProject(token, scope.hubId, scope.projectId, fetcher, signal);
+  const projectScope: DataScope = { kind: "project", hubId: scope.hubId, projectId: scope.projectId };
+  let query = querySchema.parse({ operation: "roots", hubId: scope.hubId, projectId: scope.projectId });
+  let path = project.name;
+  const targets = [...scope.folderIds.map(id => ({ id, type: "folders" as const })), ...(scope.kind === "file" ? [{ id: scope.itemId, type: "items" as const }] : [])];
+  let selected: { entry: Entry; evidence: Evidence } | undefined;
+  for (const target of targets) {
+    let found: typeof selected;
+    for (let pages = 0; pages < 100; pages++) {
+      const page = await browse(token, query, projectScope, fetcher, signal);
+      const entry = page.entries.find(entry => entry.id === target.id && entry.type === target.type);
+      if (entry) { found = { entry, evidence: page.evidence }; break; }
+      if (page.evidence.nextPage === null) break;
+      query = { ...query, page: page.evidence.nextPage };
+    }
+    if (!found) throw new DataError("selection_unavailable", 409);
+    selected = found; path += ` / ${found.entry.name}`;
+    if (path.length > 12000) throw new DataError("search_limit", 422);
+    query = querySchema.parse({ operation: "contents", hubId: scope.hubId, projectId: scope.projectId, folderId: target.id });
+  }
+  return { ...selected!, path, project, query };
 }

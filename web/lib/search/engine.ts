@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { browse, DataError, querySchema, verifyProject } from "../autodesk/data.ts";
+import { browse, DataError, querySchema, verifyProject, verifyLocation } from "../autodesk/data.ts";
 import type { DataScope, Entry } from "../autodesk/data.ts";
 import { downloadDocument, itemTip, supportedDocument } from "../documents/download.ts";
 import { parseDocument } from "../documents/parser.ts";
@@ -21,6 +21,13 @@ export function findExcerpts(document: ParsedDocument, terms: SearchTerms): Sear
   return result;
 }
 export async function startSearch(token: string, scope: DataScope, terms: SearchTerms, expiresAt: number, fetcher: typeof fetch = fetch, signal?: AbortSignal): Promise<SearchState> {
+  if (scope.kind === "folder" || scope.kind === "file") {
+    const location = await verifyLocation(token, scope, fetcher, signal);
+    const queue: SearchState["queue"] = scope.kind === "folder"
+      ? [{ kind: "list", query: location.query, path: location.path, project: location.project.name }]
+      : [{ kind: "file", hubId: scope.hubId, projectId: scope.projectId, project: location.project.name, entry: location.entry, path: location.path, endpoint: location.evidence.endpoint, fetchedAt: location.evidence.fetchedAt, nameHit: false }];
+    return { schema: 1, owner: ownerOf(token), expiresAt: Math.min(expiresAt, Date.now() + 3_600_000), scope, terms, queue, seen: [], warnings: [], stats: { folders: 0, files: scope.kind === "file" ? 1 : 0, documentsRead: 0, unread: 0, matched: 0, requests: 0 }, startedAt: new Date().toISOString() };
+  }
   const project = scope.kind === "project" ? await verifyProject(token, scope.hubId, scope.projectId, fetcher, signal) : null;
   const q = querySchema.parse(scope.kind === "project" ? { operation: "roots", hubId: scope.hubId, projectId: scope.projectId } : { operation: "hubs" });
   return { schema: 1, owner: ownerOf(token), expiresAt: Math.min(expiresAt, Date.now() + 3_600_000), scope, terms, queue: [{ kind: "list", query: q, path: project?.name ?? "", project: project?.name ?? "" }], seen: [], warnings: [], stats: { folders: 0, files: 0, documentsRead: 0, unread: 0, matched: 0, requests: 0 }, startedAt: new Date().toISOString() };
@@ -43,7 +50,8 @@ export async function advanceSearch(state: SearchState, token: string, signal?: 
     const [task] = state.queue.splice(best >= 0 ? best : 0, 1);
     try {
       if (task.kind === "list") {
-        const page = await browse(token, task.query, state.scope, fetcher, signal); state.stats.requests++;
+        // Queue descendants originate exclusively from verified listings and the authenticated cursor.
+        const page = await browse(token, task.query, state.scope, fetcher, signal, task.query.folderId ? [task.query.folderId] : []); state.stats.requests++;
         if (page.evidence.partial) warning("autodesk_partial");
         if (page.evidence.nextPage !== null) state.queue.push({ ...task, query: { ...task.query, page: page.evidence.nextPage } });
         for (const entry of page.entries) {
