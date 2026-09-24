@@ -11,6 +11,15 @@ export function parseWorkerOutput(output: string) {
   if (index < 0) throw new DataError("parse_failed", 422);
   return parsedSchema.parse(JSON.parse(output.slice(index + marker.length)));
 }
+export function parseWorkerCheckpoint(output: string, reason: string): ParsedDocument | undefined {
+  const match = output.match(/\nAIFORMA_CHECKPOINT:([^\r\n]*)\r?\n/);
+  if (!match) return;
+  try {
+    const parsed = parsedSchema.parse(JSON.parse(match[1]));
+    if (!parsed.segments.length) return;
+    return {...parsed, partial:true, warnings:[...new Set([...(parsed.warnings ?? []), reason])]};
+  } catch { return; }
+}
 export async function parseDocument(bytes: Buffer, name: string, signal?: AbortSignal, options: { startPage?: number; detail?: "plan" } = {}): Promise<ParsedDocument> {
   signal?.throwIfAborted();
   const startPage = options.startPage ?? 1;
@@ -24,7 +33,7 @@ export async function parseDocument(bytes: Buffer, name: string, signal?: AbortS
       let output = "", diagnostic = "", settled = false;
       child.stderr.on("data", chunk => { diagnostic = (diagnostic + chunk.toString()).slice(-3000); });
       const cleanup = () => { clearTimeout(timer); signal?.removeEventListener("abort", abort); };
-      const fail = (code: string) => { if (settled) return; settled = true; child.kill(); cleanup(); reject(new DataError(code, 422)); };
+      const fail = (code: string) => { if (settled) return; settled = true; child.kill(); cleanup(); const checkpoint = ["parse_timeout", "parse_memory_limit", "parse_failed"].includes(code) ? parseWorkerCheckpoint(output, code) : undefined; if (checkpoint) accept(checkpoint); else reject(new DataError(code, 422)); };
       const abort = () => fail("parse_cancelled"), timer = setTimeout(() => fail("parse_timeout"), 145_000);
       signal?.addEventListener("abort", abort, { once: true }); if (signal?.aborted) abort();
       child.stdout.on("data", chunk => { output += chunk.toString(); if (output.length > 12_000_000) fail("parse_limit"); });

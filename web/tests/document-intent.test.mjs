@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {isDocumentQuestion,needsPlanReading} from '../lib/assistant/intent.ts';
 import {planRegions,readPlanRegions} from '../scripts/plan-ocr.mjs';
 import {parseWorkerOutput} from '../lib/documents/parser.ts';
-import {parseDocument} from '../lib/documents/parser.ts';
+import {parseDocument,parseWorkerCheckpoint} from '../lib/documents/parser.ts';
 import {createCanvas} from '@napi-rs/canvas';
 
 test('PDF diagnostic output cannot corrupt or become evidence in the parser response',()=>{
@@ -11,6 +11,9 @@ test('PDF diagnostic output cannot corrupt or become evidence in the parser resp
  assert.deepEqual(parseWorkerOutput('Warning: TEST font diagnostic\nAIFORMA_RESULT:'+JSON.stringify(result)),result);
  assert.throws(()=>parseWorkerOutput('Warning: TEST AVENIDA FALSA'));
  assert.throws(()=>parseWorkerOutput('\nAIFORMA_RESULT:{broken}'));
+ const checkpoint=parseWorkerCheckpoint('\nAIFORMA_CHECKPOINT:'+JSON.stringify(result)+'\n','parse_timeout');
+ assert.equal(checkpoint.partial,true);assert.ok(checkpoint.warnings.includes('parse_timeout'));assert.deepEqual(checkpoint.segments,result.segments);
+ assert.equal(parseWorkerCheckpoint('\nAIFORMA_CHECKPOINT:{broken}\n','parse_timeout'),undefined);
 });
 
 test('content questions bypass folder-name search without turning navigation into document reading',()=>{

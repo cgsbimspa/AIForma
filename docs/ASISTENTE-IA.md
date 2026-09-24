@@ -95,3 +95,5 @@ Las preguntas sobre calles, rótulos, emplazamientos o planos activan lectura de
 El procesamiento detallado está limitado a 40 operaciones OCR y 120 segundos; el parser aislado tiene 1024 MB de heap y 145 segundos. Los límites o zonas pendientes se informan como lectura parcial. No se garantiza recuperar todos los rótulos: la calidad del original, su tamaño y complejidad siguen siendo determinantes. Identificar un nombre no acredita por sí solo colindancia o acceso al predio.
 
 El protocolo del worker separa diagnósticos de evidencia JSON y espera el cierre de stdout. Los fallos de memoria se distinguen de ausencia de coincidencias. Las pruebas incluyen un rótulo TEST inclinado leído mediante OCR real, cobertura de zonas, intención de consulta y conservación de citas/confianza.
+
+Antes de procesar los gráficos se conserva un punto de recuperación con el texto digital leído. Si después falla el renderizado/OCR por recursos o tiempo, se devuelve ese texto con cobertura parcial y el motivo de interrupción. Una cancelación del usuario no utiliza esa recuperación.

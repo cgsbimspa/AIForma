@@ -60,6 +60,11 @@ if (['.txt', '.md'].includes(extension)) {
       const hasImages = operators?.fnArray.some(op => [OPS.paintImageXObject, OPS.paintInlineImageXObject, OPS.paintImageMaskXObject].includes(op));
       if ((!text.trim() || hasImages || detailed) && !ocr.available()) { nextPage = n; page.cleanup(); break; }
       append(text, `Página ${n}`, { page: n });
+      if (detailed && n === startPage && segments.length) {
+        // Preserve verified digital text if a complex drawing later exhausts
+        // rendering time/memory. Never present this checkpoint as full coverage.
+        await new Promise(resolve => process.stdout.write('\nAIFORMA_CHECKPOINT:' + JSON.stringify({segments,pages,pageStart:startPage,pageEnd:n,textlessPages:0,status:'parsed',partial:true,warnings:['plan_regions_partial']}) + '\n', resolve));
+      }
       if (detailed) {
         try {
           const base = page.getViewport({scale:1}), scale = Math.min(4, 6000/base.width, 6000/base.height), viewport = page.getViewport({scale});
