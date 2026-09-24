@@ -33,5 +33,7 @@ El Client Secret y el intercambio de código permanecen en el servidor. Token de
 - `npm test`: pruebas de estado OAuth, cifrado y alteraciones, caducidad, origen, errores del proveedor y perfil válido.
 - `npm run typecheck`, `npm run build` y ESLint sobre los archivos incorporados.
 - Comprobaciones HTTP de endpoints locales: estado desconectado, cookies HttpOnly, rechazo de origen externo, callback inválido y desconexión.
+- Flujo real de producción completado con Autodesk, identidad recibida y desconexión comprobada. No se guardan datos de perfil en este documento.
+- Se deshabilitó la caché persistente de compilación de Turbopack después de detectar que un despliegue reutilizó CSS anterior; cada publicación compila los estilos actuales.
 
 Fuentes: [OAuth de Autodesk](https://aps.autodesk.com/en/docs/oauth/v2/tutorials/get-3-legged-token/), [autenticación en Hubs Browser](https://get-started.aps.autodesk.com/tutorials/hubs-browser/auth), [UserInfo en el taller oficial DevCon](https://autodesk-platform-services.github.io/mcp-devcon2026/4-three-legged-aps).
