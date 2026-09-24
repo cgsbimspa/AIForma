@@ -3,9 +3,10 @@
 ## Destino solicitado
 
 - Cuenta Vercel: CGS BIM's projects (`cgs-bim-s-projects`), comprobada en el panel.
-- Nuevo proyecto propuesto: `cgs-ai-forma`.
+- Proyecto creado: `cgs-ai-forma`.
 - Subdominio solicitado: `app.cgsbim.cl`.
-- Repositorio independiente previsto: `cgsbimspa/cgs-ai-forma`, privado.
+- Repositorio creado por el usuario: https://github.com/cgsbimspa/AIForma (público).
+- Producción Vercel: https://cgs-ai-forma.vercel.app.
 
 ## Preparación completada
 
@@ -17,13 +18,22 @@
 - Compilación Next.js y validación TypeScript completadas.
 - Servidor de producción local probado: inicio y nueve módulos HTTP 200, ruta inexistente HTTP 404.
 
-## Pendiente
+## Publicación realizada
 
-- Creación y carga del repositorio privado en la cuenta correcta de GitHub.
-- Creación y despliegue del proyecto independiente de Vercel.
-- Registro del CNAME exacto entregado por Vercel, validación DNS y HTTPS.
+- Código cargado en la rama `main` del repositorio independiente.
+- Proyecto Vercel conectado al repositorio GitHub, con Root Directory `web`.
+- Primera compilación y publicación de producción completada en Vercel.
+- Registro CNAME creado en cPanel: `app.cgsbim.cl.` → `5f935769a35d9c60.vercel-dns-017.com.`.
+- Vercel confirmó el DNS como `configured-correctly` y la propiedad del dominio como verificada.
 
-No se afirma que el subdominio esté publicado hasta verificar estos pasos.
+## Verificaciones pendientes
+
+- Activación y comprobación del certificado HTTPS en `app.cgsbim.cl`.
+- Comprobación del despliegue automático posterior al primer cambio en `main`.
+
+## Actualizaciones futuras
+
+Realizar los cambios dentro de este proyecto, ejecutar `npm run build` y `npm run typecheck` desde `web`, y subir los commits a `main`. Vercel está configurado para construir la aplicación desde `web` usando Node.js 24.x y `npm ci`.
 
 ## Límites
 

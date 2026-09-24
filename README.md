@@ -14,6 +14,13 @@ Para iniciarlo desde PowerShell en esta carpeta:
 
 El script utiliza Node.js instalado o el runtime local de Codex si está disponible. Mantener abierta la terminal durante el uso. Detener con Ctrl+C. Si el puerto ya está ocupado por esta web, usar la instancia existente.
 
+## Publicación
+
+- [Aplicación en Vercel](https://cgs-ai-forma.vercel.app).
+- Dominio configurado: `app.cgsbim.cl`.
+- [Repositorio de código](https://github.com/cgsbimspa/AIForma).
+- [Configuración y estado de publicación](docs/DESPLIEGUE.md).
+
 ## Desarrollo
 
 La aplicación y sus instrucciones técnicas están en [web/README.md](web/README.md).
