@@ -8,6 +8,7 @@ async function refresh(force = false): Promise<Response> {
   return pending.then(response => response.clone());
 }
 export async function autodeskStatus(signal?: AbortSignal) {
+  signal = signal ? AbortSignal.any([signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000);
   const renewal = await refresh();
   if (renewal.status >= 500) throw new Error("unavailable");
   let response = await fetch("/api/autodesk/status", { cache: "no-store", signal });

@@ -38,7 +38,7 @@ export function AutodeskConnection() {
         if (response.ok && data.connected === true && data.user?.name && data.expiresAt && data.expiresAt > Date.now()) {
           setStatus(data); setNotice("");
           clearTimeout(expiry);
-          expiry = setTimeout(() => { void check(); }, Math.max(1000, data.expiresAt - Date.now() - 300_000));
+          expiry = setTimeout(() => { void check(); }, Math.max(30_000, data.expiresAt - Date.now() - 300_000));
         } else {
           setStatus({ connected: false, configured: data.configured === true });
           if (data.error) setNotice(messages[data.error] ?? messages.unavailable);
