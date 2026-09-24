@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Box, House, ChevronRight, PanelLeft, X, ShieldCheck } from "lucide-react";
 import { modules } from "@/lib/modules";
 import { Sidebar, SidebarProvider, SidebarContent, SidebarHeader, SidebarFooter, SidebarGroup, SidebarGroupLabel, SidebarMenu, SidebarMenuItem, SidebarMenuButton, useSidebar } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
+import { HeaderStatusContext } from "./workspace-header";
 
 function WorkspaceContent({children}: {children: React.ReactNode}) {
   const pathname = usePathname();
@@ -14,6 +15,8 @@ function WorkspaceContent({children}: {children: React.ReactNode}) {
   const mainRef = useRef<HTMLElement>(null);
   const previousPath = useRef(pathname);
   const current = modules.find((module) => `/${module.slug}` === pathname);
+  const isAssistant = pathname === "/asistente";
+  const [headerStatus, setHeaderStatus] = useState<HTMLDivElement | null>(null);
   useEffect(() => {
     if (previousPath.current !== pathname) {
       setOpenMobile(false);
@@ -33,7 +36,7 @@ function WorkspaceContent({children}: {children: React.ReactNode}) {
       <SidebarGroup><SidebarGroupLabel className="nav-label">GESTIÓN</SidebarGroupLabel>{navigation(modules.slice(6))}</SidebarGroup></nav></SidebarContent>
       <SidebarFooter className="sidebar-footer"><div className="principle"><ShieldCheck size={18}/><div><strong>Información con evidencia</strong><p>Cada resultado, una fuente.</p></div></div><div className="sidebar-version"><span>Etapa 0.1</span><span>En desarrollo</span></div></SidebarFooter>
     </Sidebar>
-    <div className="workspace-main"><header className="topbar"><div className="breadcrumbs"><Button variant="ghost" size="icon" onClick={toggleSidebar} aria-label="Alternar navegación" aria-expanded={isMobile ? openMobile : open}><PanelLeft size={18}/></Button><span className="breadcrumb-divider"/><Link href="/">Plataforma</Link><ChevronRight size={14}/><span>{pathname === "/" ? "Inicio" : current?.name ?? "Página no encontrada"}</span></div><span className="environment-label">ENTORNO DE DESARROLLO</span></header><main id="main-content" ref={mainRef} tabIndex={-1}>{children}</main></div>
+    <div className="workspace-main"><header className={`topbar${isAssistant ? " assistant-topbar" : ""}`}><div className="breadcrumbs"><Button variant="ghost" size="icon" onClick={toggleSidebar} aria-label="Alternar navegación" aria-expanded={isMobile ? openMobile : open}><PanelLeft size={18}/></Button><span className="breadcrumb-divider"/><Link href="/">Plataforma</Link><ChevronRight size={14}/><span>{pathname === "/" ? "Inicio" : current?.name ?? "Página no encontrada"}</span></div>{isAssistant && <><div className="assistant-header-title"><p className="eyebrow">FORMA + INTELIGENCIA ARTIFICIAL</p><h1 id="assistant-title">Asistente IA</h1><p className="page-description">Explora tu información. Elige el alcance. Consulta con evidencia.</p></div><div className="assistant-header-status" ref={setHeaderStatus}/></>}<span className="environment-label">ENTORNO DE DESARROLLO</span></header><main id="main-content" ref={mainRef} tabIndex={-1} aria-labelledby={isAssistant ? "assistant-title" : undefined}><HeaderStatusContext.Provider value={headerStatus}>{children}</HeaderStatusContext.Provider></main></div>
   </>;
 }
 

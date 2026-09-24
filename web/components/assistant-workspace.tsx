@@ -1,6 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { HeaderStatusContext } from "./workspace-header";
 import { ArrowUp, BrainCircuit, Building2, ChevronDown, ChevronRight, CircleCheck, Database, File, Folder, FolderOpen, Globe2, LoaderCircle, MessageSquare, RefreshCw, Search, ShieldCheck, Square, Trash2, Unplug } from "lucide-react";
 import { autodeskFetch, autodeskStatus } from "@/lib/autodesk/client";
 import type { DataPage, DataQuery, DataScope, Entry } from "@/lib/autodesk/data";
@@ -23,6 +25,7 @@ function errorText(code: string) { return errors[code] ?? "No se pudo completar 
 function connectForm(label: string) { return <form action="/api/autodesk/connect?returnTo=/asistente" method="post"><button className="assistant-primary" type="submit"><Unplug size={16}/>{label}</button></form>; }
 
 export function AssistantWorkspace() {
+  const headerStatus = useContext(HeaderStatusContext);
   const [auth, setAuth] = useState<Auth | null>(null);
   const [revision, setRevision] = useState(0);
   const [callbackError, setCallbackError] = useState(false);
@@ -49,7 +52,7 @@ export function AssistantWorkspace() {
   const invalidate = useCallback((code: string) => { if (code === "expired" || code === "consent_required") setAuth({ connected: false, configured: true, error: code }); }, []);
   const ready = auth?.connected && auth.dataAccess && auth.user;
   return <div className="page-content assistant-page">
-    <div className="page-heading"><div><p className="eyebrow">FORMA + INTELIGENCIA ARTIFICIAL</p><h1>Asistente IA</h1><p className="page-description">Explora tu información. Elige el alcance. Consulta con evidencia.</p></div><div className="assistant-identity" role="status">{auth === null ? <><LoaderCircle size={15} className="spin"/>Verificando conexión</> : auth.error === "unavailable" ? <><LoaderCircle size={15} className="spin"/><span>Conexión por verificar<br/>Reintentando automáticamente…</span></> : auth.connected ? <><span className="connected-dot"/><span>Conectado con<br/><strong>{auth.user?.name}</strong></span></> : <><span className="disconnected-dot"/><span>Autodesk sin conectar</span></>}</div></div>
+    {headerStatus && createPortal(<div className="assistant-identity" role="status">{auth === null ? <><LoaderCircle size={15} className="spin"/>Verificando conexión</> : auth.error === "unavailable" ? <><LoaderCircle size={15} className="spin"/><span>Conexión por verificar<br/>Reintentando automáticamente…</span></> : auth.connected ? <><span className="connected-dot"/><span>Conectado con<br/><strong>{auth.user?.name}</strong></span></> : <><span className="disconnected-dot"/><span>Autodesk sin conectar</span></>}</div>, headerStatus)}
     {ready ? <ConnectedWorkspace key={auth.user!.id} aiConfigured={Boolean(auth.aiConfigured)} invalidate={invalidate}/> : <div className="assistant-split assistant-locked">
       <section className="forma-panel"><PanelHeading icon={<Folder size={20}/>} title="Mi información de Forma" subtitle="Cuentas, proyectos y carpetas"/><div className="panel-empty"><Database size={38}/><h3>{auth === null ? "Comprobando tu sesión…" : auth.connected ? "Autoriza el acceso a tus proyectos" : "Conecta tu cuenta de Autodesk"}</h3><p>{auth?.connected ? "La sesión actual permite identificarte. Para ver tus carpetas necesitamos también el permiso de lectura de Forma." : "Aquí aparecerán los proyectos y las carpetas a los que tiene acceso tu usuario."}</p>{auth !== null && connectForm(auth.connected ? "Autorizar proyectos y carpetas" : "Conectar Autodesk")}{auth?.error && <p className="assistant-error" role="alert">{errorText(auth.error)}</p>}{callbackError && <p className="assistant-error">La autorización no se completó. Puedes volver a conectar.</p>}<button type="button" className="assistant-link" onClick={() => setRevision(n => n + 1)}>Volver a comprobar</button></div></section>
       <section className="chat-panel"><PanelHeading icon={<BrainCircuit size={21}/>} title="Tu asistente de proyectos" subtitle="Conexión con OpenAI"/><div className="panel-empty chat-intro"><span className="chat-orb"><BrainCircuit size={33}/></span><h3>Todo empieza con tu información</h3><p>Conecta Autodesk para elegir un proyecto o consultar toda tu base de Forma desde este espacio.</p><div className="evidence-note"><ShieldCheck size={16}/> Respuestas vinculadas a datos verificables.</div></div></section>
