@@ -4,7 +4,7 @@ import { Box, ExternalLink, RefreshCw } from "lucide-react";
 import { quantityCommand } from "@/lib/quantities/client";
 import type { QuantityProject, QuantitySource } from "@/lib/quantities/contracts";
 
-export function QuantityViewer({ project, source }: { project: QuantityProject; source: QuantitySource | null }) {
+export function QuantityViewer({ project, source, highlightedElementIds=[], filteredElementIds=null, onSelectElements }: { project: QuantityProject; source: QuantitySource | null; highlightedElementIds?:string[]; filteredElementIds?:string[]|null; onSelectElements?:(ids:string[])=>void }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const [retry, setRetry] = useState(0);
   const [loaded, setLoaded] = useState<{ key: string; url: string } | null>(null);
@@ -30,13 +30,20 @@ export function QuantityViewer({ project, source }: { project: QuantityProject; 
     function receive(event: MessageEvent) {
       if (event.origin !== window.location.origin || event.source !== frame.current?.contentWindow || event.data?.type !== "aiforma-viewer" || event.data?.viewId !== source?.view?.id || event.data?.urn !== source?.version.modelId) return;
       if (event.data.state === "ready") { setStatus("Vista seleccionada cargada"); setError(""); }
+      else if (event.data.state === "selection" && Array.isArray(event.data.ids) && event.data.ids.every((id:unknown)=>typeof id==="string")) onSelectElements?.(event.data.ids);
       else if (event.data.state === "error") { setError(String(event.data.message)); setStatus(""); }
       else if (event.data.state === "loading") setStatus(String(event.data.message));
     }
     window.addEventListener("message", receive); return () => window.removeEventListener("message", receive);
-  }, [source?.view?.id, source?.version.modelId]);
+  }, [source?.view?.id, source?.version.modelId,onSelectElements]);
+  useEffect(()=>{
+    if(status!=="Vista seleccionada cargada")return;
+    frame.current?.contentWindow?.postMessage({type:"aiforma-viewer-selection",viewId:source?.view?.id,urn:source?.version.modelId,highlightedElementIds,filteredElementIds},window.location.origin);
+  },[highlightedElementIds,filteredElementIds,source?.view?.id,source?.version.modelId,status]);
   const canLoad = Boolean(source?.view && source.version.modelId);
-  return <div className="quantity-live-viewer">
+  const emptyFilter = filteredElementIds !== null && filteredElementIds.length === 0;
+  return <div className={`quantity-live-viewer${emptyFilter?" quantity-filter-empty":""}`}>
+    {emptyFilter&&<div className="quantity-filter-overlay"><Box size={32}/><strong>Sin elementos para la selección actual</strong><p>Cambia los filtros para volver a visualizar las partidas.</p></div>}
     {canLoad && loaded?.key === selection ? <iframe ref={frame} src={loaded.url} title={`Modelo ${source!.fileName} · V${source!.version.number} · ${source!.view!.name}`} allow="fullscreen" allowFullScreen/> : <div className="quantity-viewer-empty"><div><Box size={46} strokeWidth={1}/></div><h3>{canLoad ? "Cargando modelo BIM" : "Modelo BIM no cargado"}</h3><p>{!source ? "Selecciona un archivo RVT y su versión." : !source.view ? "Selecciona la vista publicada que quieres visualizar." : !source.version.modelId ? "Autodesk no tiene un modelo derivado disponible para esta versión." : status}</p></div>}
     <div className="quantity-viewer-controls">{error ? <p className="quantity-error" role="alert">{error}</p> : canLoad && <p className="quantity-help" role="status">{status}</p>}<div className="quantity-inline-actions">{canLoad && <button className="quantity-text-button" onClick={() => setRetry(n => n + 1)}><RefreshCw size={13}/>Volver a cargar modelo</button>}{source?.version.webUrl && <a className="quantity-text-button" href={source.version.webUrl} target="_blank" rel="noopener noreferrer">Abrir versión en Autodesk <ExternalLink size={13}/></a>}</div></div>
   </div>;

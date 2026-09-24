@@ -7,8 +7,8 @@ const date = (value: string | null) => value ? new Date(value).toLocaleString("e
 const amount = (value: number | null) => value === null ? "No aplicable" : new Intl.NumberFormat("es-CL", { maximumFractionDigits: 12 }).format(value);
 const changes = { ADDED: "Nueva", REMOVED: "Eliminada", INCREASED: "Aumentada", DECREASED: "Disminuida", UNCHANGED: "Sin cambios" };
 
-export function QuantityResults({ project, runs, partial }: { project: QuantityProject; runs: QuantityRun[]; partial: boolean }) {
-  const [tab, setTab] = useState("results");
+export function QuantityResults({ project, runs, partial, initialTab="results", onComparison }: { project: QuantityProject; runs: QuantityRun[]; partial: boolean; initialTab?:string; onComparison?:(value:QuantityComparison)=>void }) {
+  const [tab, setTab] = useState(initialTab);
   const [selected, setSelected] = useState(runs[0]?.id ?? "");
   const [previous, setPrevious] = useState(runs[1]?.id ?? "");
   const [current, setCurrent] = useState(runs[0]?.id ?? "");
@@ -17,7 +17,7 @@ export function QuantityResults({ project, runs, partial }: { project: QuantityP
   const run = runs.find(r => r.id === selected);
   async function compare() {
     setBusy(true); setError(""); setComparison(null);
-    try { setComparison(await quantityCommand<QuantityComparison>(project, { action: "compare", previousRunId: previous, currentRunId: current })); }
+    try { const result=await quantityCommand<QuantityComparison>(project, { action: "compare", previousRunId: previous, currentRunId: current }); setComparison(result); onComparison?.(result); }
     catch (e) { setError((e as Error).message); } finally { setBusy(false); }
   }
   return <section className="quantity-results quantity-panel" aria-label="Resultados de cubicación">

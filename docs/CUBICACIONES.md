@@ -57,3 +57,17 @@ Para habilitar el primer procesamiento se debe definir una plantilla técnica co
 `web/tests/quantity-viewer.test.mjs`: correspondencia de vista por identificador publicado (rechazo de nombres iguales y relaciones ambiguas), autorización cifrada ligada a sesión/versionado, caducidad, manipulación, rutas y consultas permitidas; rechazo de otros modelos, traversal y destinos arbitrarios.
 
 Verificación en producción del visor, 24-09-2026: en la configuración existente de Cálculo del proyecto 2025.03.25 Centro Español se cargó visualmente `CES-EST-Edif_A1_RV25.rvt`, V3, vista `{3D}`. El GUID de metadatos correspondía al recurso gráfico hijo; se comprobó la relación en el manifiesto real. Esta verificación acredita la visualización, no cantidades ni cumplimiento técnico.
+
+## Mesa ejecutiva (especificación de pantalla, 24-09-2026)
+
+Cubicaciones dispone de un shell propio sin navegación vertical. En desktop/notebook el layout usa 100dvh, dos columnas (modelo 53% / datos 47%) y desplazamiento interno de tabla/configuración. La configuración de archivo, versión, vista y plantilla se abre en un diálogo. En anchos inferiores a 950px los paneles se apilan. La identidad BIM + IA, tipografía e iconos Lucide se conservan.
+
+Los tres filtros de presentación son Especialidad (Hormigón, Enfierradura, Acero Galvanizado), Subespecialidad (las ocho opciones especificadas) y Piso (Todos más niveles reales de resultados). Son diferentes del catálogo de disciplinas que vincula cada configuración a un archivo y vista; no se reclasifican configuraciones antiguas ni se modifica el modelo.
+
+Los cuatro KPI y siete columnas utilizan exclusivamente una ejecución coincidente con archivo, versión, vista y plantilla. El contrato de presentación exige groupingData.metric, specialty, subspecialty, typeName y floor explícitos, además de unidad coincidente. Sin ese mapeo se informa cobertura no disponible; nunca se deduce un material del nombre, disciplina o unidad. Las sumas y diferencias son determinísticas. Sin métricas verificadas se muestra No calculado, incluso en Totales; no se sustituye por cero. Las pruebas TEST verifican aislamiento por versión/vista/plantilla, filtros y estados desconocidos.
+
+La selección tabla/visor se vincula exclusivamente mediante el mapa de external IDs de la misma versión del modelo. No se convierten nombres ni IDs arbitrarios en dbIds. El Viewer existente y su proxy autenticado se reutilizan; los controles nativos siguen disponibles. API contrastada con el tutorial oficial: https://autodesk-platform-services.github.io/aps-aecdm-tutorial/connection/home/.
+
+Actualizar versión consulta la última publicación y sus vistas; cambiarla deja un borrador que se debe guardar. El historial y la comparación reutilizan QuantityRuns inmutables y el motor existente. Las variaciones KPI sólo se muestran si la ejecución comparada es la activa y ambos totales son verificables (base distinta de cero).
+
+Actualizar cubicación sigue bloqueado mientras falten reglas y un adaptador de cálculo registrado. Exportar presenta únicamente Excel y PDF como formatos pendientes. Las notificaciones permanecen deshabilitadas: no se muestran avisos ficticios. Estas acciones no simulan éxitos ni generan archivos vacíos.

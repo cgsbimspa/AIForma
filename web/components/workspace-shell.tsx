@@ -27,6 +27,7 @@ function WorkspaceContent({children}: {children: React.ReactNode}) {
   function navigation(items: readonly typeof modules[number][]) {
     return <SidebarMenu>{items.map((module) => <SidebarMenuItem key={module.slug}><SidebarMenuButton asChild isActive={pathname === `/${module.slug}`} className="nav-link"><Link href={`/${module.slug}`} aria-current={pathname === `/${module.slug}` ? "page" : undefined} onClick={() => setOpenMobile(false)}><module.icon aria-hidden="true"/><span>{module.name}</span></Link></SidebarMenuButton></SidebarMenuItem>)}</SidebarMenu>;
   }
+  if (pathname === "/cubicaciones") return <div className="quantity-shell"><a className="skip-link" href="#main-content">Saltar al contenido</a><main id="main-content" ref={mainRef} tabIndex={-1}>{children}</main></div>;
   return <>
     <a className="skip-link" href="#main-content">Saltar al contenido</a>
     <Sidebar className="workspace-sidebar">
