@@ -4,17 +4,24 @@ import { resolve } from 'node:path';
 
 // All recognition is local to the isolated parser. No credentials, URLs or
 // remote language downloads. OCR is evidence with uncertainty, not a transcript.
-export function createOcr(warn) {
-  let worker, operations = 0; const deadline = Date.now() + 55000;
-  async function recognize(bytes, location, extra = {}) {
-    if (operations >= 12 || Date.now() >= deadline) { warn('ocr_limit'); return null; }
+export function createOcr(warn, detailed = false) {
+  const limit = detailed ? 40 : 12;
+  let worker, operations = 0; const deadline = Date.now() + (detailed ? 120000 : 55000);
+  async function recognize(bytes, location, extra = {}, options = {}) {
+    if (operations >= limit || Date.now() >= deadline) { warn('ocr_limit'); return null; }
     operations++;
     let timer;
     try {
       const work = async () => {
-        const input = await sharp(bytes, { limitInputPixels: 40000000 }).rotate().resize({ width: 2600, height: 3500, fit: 'inside', withoutEnlargement: true }).flatten({ background: '#fff' }).png().toBuffer();
+        const input = await sharp(bytes, { limitInputPixels: 40000000 }).rotate().resize({ width: 2600, height: 3500, fit: 'inside', withoutEnlargement: !options.lines }).flatten({ background: '#fff' }).png().toBuffer();
         worker ??= await createWorker('spa+eng', 1, { workerPath: resolve('worker/ocr-worker.cjs'), langPath: resolve('worker/tessdata'), cacheMethod: 'none', gzip: true, logger: () => {}, errorHandler: () => {} });
-        const { data } = await worker.recognize(input);
+        await worker.setParameters({ tessedit_pageseg_mode: options.lines ? '11' : '3' });
+        const { data } = await worker.recognize(input, { rotateAuto: Boolean(options.lines) }, { text: true, blocks: Boolean(options.lines) });
+        if (options.lines) {
+          // Confidence belongs to each literal line, not to the entire drawing.
+          // A weak word (especially a digit) cannot borrow confidence from others.
+          return { segments: (data.blocks ?? []).flatMap(b => b.paragraphs ?? []).flatMap(p => p.lines ?? []).filter(l => l.text.trim()).map(l => ({ text: l.text.trim(), location: `${location} · OCR`, ...extra, method: 'ocr', confidence: Math.min(l.confidence, ...l.words.filter(w => w.text.trim()).map(w => w.confidence)) })) };
+        }
         if (!data.text.trim()) { warn('ocr_no_text'); return null; }
         if (data.confidence < 75) warn('ocr_low_confidence');
         return { text: data.text, location: `${location} · OCR`, ...extra, method: 'ocr', confidence: data.confidence };
@@ -23,5 +30,5 @@ export function createOcr(warn) {
     } catch { warn('ocr_unavailable'); await worker?.terminate(); worker = undefined; return null; }
     finally { clearTimeout(timer); }
   }
-  return { recognize, available: () => operations < 12 && Date.now() < deadline, close: async () => { await worker?.terminate(); } };
+  return { recognize, available: () => operations < limit && Date.now() < deadline, close: async () => { await worker?.terminate(); } };
 }

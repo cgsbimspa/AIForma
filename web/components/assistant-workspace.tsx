@@ -11,6 +11,7 @@ import type { SearchBatch, SearchTerms, SearchStage, SearchHit } from "@/lib/sea
 import { mergeSearchHits } from "@/lib/search/merge";
 import { SearchResults } from "./search-results";
 import { confirmedSearchStage } from "@/lib/search/language";
+import { isDocumentQuestion } from "@/lib/assistant/intent";
 import { RecentHistory } from "./recent-history";
 import { DocumentAnswer } from "./document-answer";
 import type { DocumentAnswer as DocumentAnswerData, DocumentMode } from "@/lib/assistant/document-contracts";
@@ -196,6 +197,7 @@ function ChatPanel({ selection, select, aiConfigured, invalidate }: { select: (s
   function selectHit(hit: SearchHit) { if (hit.type === "items" && JSON.stringify(hit.scope) === JSON.stringify(selection.scope)) { setMode("ask"); return; } if (hit.scope) select({ initialMode: hit.type === "items" ? "ask" : "search", scope: hit.scope, label: hit.name, path: hit.path }); }
   async function send(text: string, requestedMode = mode) {
     if (!text.trim() || busy || !aiConfigured) return;
+    if (requestedMode === "search" && documentSelection && isDocumentQuestion(text)) { requestedMode = "ask"; setMode("ask"); }
     if (requestedMode !== "search" && !documentSelection) { setError("Selecciona un archivo o una carpeta para preguntar sobre sus documentos."); return; }
     const lastSearch = messages.at(-1)?.search;
     const confirmedStage = requestedMode === "search" && lastSearch ? confirmedSearchStage(text, lastSearch.stage) : undefined;

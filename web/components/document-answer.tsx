@@ -17,7 +17,7 @@ export function DocumentAnswer({ answer }: { answer: Answer }) {
   const literal = answer.mode === "extract";
   return <div className="document-answer">
     {answer.mode !== "ask" && <strong className="document-answer-title"><FileText size={16}/>{literal ? "Datos extraídos del documento" : "Resumen de los documentos"}</strong>}
-    {answer.status !== "answered" && <p className="message-body"><strong>{messages[answer.status]}</strong></p>}
+    {answer.status !== "answered" && <p className="message-body"><strong>{answer.status === "not_available" && answer.sources.length > 0 && answer.sources.every(s => !["read", "partial_text", "context_limit", "reading_pages"].includes(s.status)) ? "No pude leer el contenido de los archivos seleccionados. Esto no significa que el dato no esté en el documento. Abre el detalle de cobertura para ver el motivo." : messages[answer.status]}</strong></p>}
     {answer.blocks.map((block, index) => <section className="document-answer-block" key={index}>
       {block.label && answer.mode !== "ask" && <h4>{block.label}</h4>}<p className="message-body">{block.text}</p>
       <p className="document-inline-source">De acuerdo con {block.citations.map((citation, i) => <span key={citation.segmentId + i}>{i > 0 && "; "}{citation.source.webUrl ? <a href={citation.source.webUrl} target="_blank" rel="noopener noreferrer">{citation.source.name} <ExternalLink size={12}/></a> : <strong>{citation.source.name}</strong>}, {citation.location}{citation.method === "ocr" && " (lectura por OCR)"}</span>)}.</p>

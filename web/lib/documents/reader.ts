@@ -27,11 +27,11 @@ export function createDocumentReader(options: { fetcher?: typeof fetch; parser?:
   const now = options.now ?? Date.now, ttl = options.ttl ?? 5 * 60_000;
   const bytes = new MemoryCache<Buffer>(options.byteLimit ?? 32 * 1024 * 1024, ttl, now);
   const text = new MemoryCache<ParsedDocument>(options.textLimit ?? 16 * 1024 * 1024, ttl, now);
-  return async (token: string, version: DocumentVersion, startPage = 1, signal?: AbortSignal) => {
+  return async (token: string, version: DocumentVersion, startPage = 1, signal?: AbortSignal, detail?: "plan") => {
     signal?.throwIfAborted();
     // Endpoint binds project/item; version+storage+name bind the actual parse input.
     const key = createHash("sha256").update(JSON.stringify([token, version.endpoint, version.id, version.storage, version.name])).digest("hex");
-    const pageKey = `${key}:${startPage}`;
+    const pageKey = `${key}:${startPage}:${detail ?? "standard"}`;
     const previous = text.get(pageKey);
     if (previous) return structuredClone(previous);
     let buffer = bytes.get(key);
@@ -39,7 +39,7 @@ export function createDocumentReader(options: { fetcher?: typeof fetch; parser?:
       buffer = await downloadDocument(token, version, options.fetcher ?? fetch, signal);
       signal?.throwIfAborted(); bytes.set(key, buffer, buffer.length);
     }
-    const parsed = await (options.parser ?? parseDocument)(buffer, version.name, signal, { startPage });
+    const parsed = await (options.parser ?? parseDocument)(buffer, version.name, signal, { startPage, detail });
     signal?.throwIfAborted();
     if (parsed.status === "parsed" && !parsed.partial && !parsed.warnings?.length) text.set(pageKey, structuredClone(parsed), JSON.stringify(parsed).length * 2);
     return parsed;

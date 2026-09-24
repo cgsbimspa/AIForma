@@ -6,6 +6,7 @@ import { trustedMutation } from "@/lib/autodesk/oauth";
 import { documentQuestionSchema } from "@/lib/assistant/document-contracts";
 import { collectDocumentEvidence } from "@/lib/assistant/document-evidence";
 import { answerDocuments } from "@/lib/assistant/document-answer";
+import { needsPlanReading } from "@/lib/assistant/intent";
 
 import { remember, rememberFailure, type PendingCapture } from "@/lib/memory/server";
 export const runtime = "nodejs";
@@ -25,7 +26,7 @@ export async function POST(request: NextRequest) {
     const key = process.env.OPENAI_API_KEY;
     if (!key) throw new DataError("ai_not_configured", 503);
     const signal = AbortSignal.any([request.signal, AbortSignal.timeout(Math.min(270000, Math.max(1, session.expiresAt - Date.now())))]);
-    const evidence = await collectDocumentEvidence(session.accessToken, body.scope, session.expiresAt, signal);
+    const evidence = await collectDocumentEvidence(session.accessToken, body.scope, session.expiresAt, signal, { detail: needsPlanReading(body.question) ? "plan" : undefined });
     const answer = await answerDocuments(evidence, body.question, body.mode, { key, model: process.env.OPENAI_MODEL || "gpt-5-mini" }, fetch, signal);
     if (session.expiresAt <= Date.now()) throw new DataError("expired", 401);
     const memory = await remember(request, body.scope, { ...body, prompt: body.question, response: answer.blocks.length ? answer.blocks.map(b=>(b.label?b.label+": ":"")+b.text).join("\n") : "No hay evidencia suficiente en los documentos leídos para responder.", tool: "document_answer", parameters: { scope: body.scope, mode: body.mode }, result: answer, status: answer.partial || answer.status!=="answered" ? "partial" : "success", action: body.mode, duration: Date.now()-started });

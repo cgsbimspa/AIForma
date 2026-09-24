@@ -7,7 +7,7 @@ import { parseDocument } from "../documents/parser.ts";
 import type { DocumentEvidence, DocumentSource } from "./document-contracts.ts";
 
 // This collector has no global/project fallback. Every task descends from the verified selection.
-export async function collectDocumentEvidence(token: string, scope: DataScope, expiresAt: number, signal?: AbortSignal, options: { fetcher?: typeof fetch; parser?: typeof parseDocument; maxDocuments?: number; maxCharacters?: number; milliseconds?: number } = {}): Promise<DocumentEvidence> {
+export async function collectDocumentEvidence(token: string, scope: DataScope, expiresAt: number, signal?: AbortSignal, options: { fetcher?: typeof fetch; parser?: typeof parseDocument; maxDocuments?: number; maxCharacters?: number; milliseconds?: number; detail?: "plan" } = {}): Promise<DocumentEvidence> {
   if (scope.kind !== "file" && scope.kind !== "folder") throw new DataError("document_selection_required", 400);
   const fetcher = options.fetcher ?? fetch, parser = options.parser ?? parseDocument;
   const read = options.fetcher || options.parser ? createDocumentReader({ fetcher, parser }) : readDocument;
@@ -45,7 +45,7 @@ export async function collectDocumentEvidence(token: string, scope: DataScope, e
           Object.assign(source, { version: version.number, versionId: version.id, webUrl: version.webUrl ?? source.webUrl, endpoint: version.endpoint, fetchedAt: version.fetchedAt });
           let startPage = 1, hadIssues = false;
           do {
-          const parsed = await read(token, version, startPage, signal);
+          const parsed = await read(token, version, startPage, signal, options.detail);
           if (parsed.nextPage && (parsed.nextPage <= startPage || parsed.nextPage > (parsed.pages ?? 0) || parsed.pageEnd !== parsed.nextPage - 1)) throw new DataError("invalid_response");
           source.nextPage = parsed.nextPage; source.throughPage = parsed.pageEnd; source.totalPages = parsed.pages;
           hadIssues ||= Boolean(parsed.textlessPages || parsed.partial || (parsed.status !== "parsed" && !parsed.nextPage));
