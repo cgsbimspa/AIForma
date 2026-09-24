@@ -1,7 +1,7 @@
 // Classification supplied by the user on 2026-09-24. These rules select
 // elements; they do not define volume, formwork, weight or length quantities.
 export const classificationRule = {
-  id: 'cgs-structure-classification', version: '2',
+  id: 'cgs-structure-classification', version: '3',
   concreteSubspecialties: ['Emplantillado', 'Muro', 'Losa', 'Losa Fundación', 'Fundación', 'Viga Fundacion', 'Pilar', 'Hormigón', 'Enfierradura', 'Metalcon', 'Acero Galvanizado'],
 };
 export const normalizeClassification = value => typeof value === 'string'
@@ -20,6 +20,7 @@ export const subspecialtyCriteria = [
   { group: 'Enfierradura', aliases: ['Enfierradura', 'Enfierraduras'] },
   { group: 'Metalcon', aliases: ['Metalcon'] },
   { group: 'Acero Galvanizado', aliases: ['Acero Galvanizado', 'Acero Galv', 'Ac Galvanizado', 'Ac Galv'] },
+  { group: 'Placas de techumbre', aliases: ['Placas de techumbre', 'Placa de techumbre'] },
 ];
 const normalizeLabel = value => normalizeClassification(value).replace(/[._\-/]+/g, ' ').trim().replace(/\s+/g, ' ');
 const associationIndex = new Map();
@@ -35,10 +36,10 @@ export function associateSubspecialty(value) {
   return { original, group: associationIndex.get(normalizeLabel(original)) ?? null, ruleId: classificationRule.id, ruleVersion: classificationRule.version };
 }
 
-function parameter(properties, name) {
+export function parameter(properties, name) {
   const matching = properties.filter(p => normalizeClassification(p.displayName) === normalizeClassification(name));
   const values = matching
-    .map(p => normalizeClassification(p.displayValue)).filter(Boolean);
+    .map(p => normalizeClassification(typeof p.displayValue === 'number' ? String(p.displayValue) : p.displayValue)).filter(Boolean);
   const unique = [...new Set(values)];
   // Duplicate names with conflicting values require explicit category mapping.
   return { value: unique.length === 1 ? unique[0] : '', originals: matching.map(p => p.displayValue), ambiguous: unique.length > 1 };
@@ -46,12 +47,24 @@ function parameter(properties, name) {
 export function classifyProperties(properties) {
   const specialty = parameter(properties, 'Especialidad');
   const subspecialty = parameter(properties, 'Sub Especialidad');
+  const type = parameter(properties, 'Nombre de tipo');
   const association = associateSubspecialty(subspecialty.originals.find(value => normalizeClassification(value)) ?? '');
-  const evidence = { originalSubspecialties: subspecialty.originals, association };
+  const evidence = { originalSubspecialties: subspecialty.originals, originalSpecialties: specialty.originals, typeName: type.originals.find(value => normalizeClassification(value)) ?? '', association };
+  // Explicit type rules take priority over legacy specialty labels. An OSB
+  // board is not steel merely because another field mentions Metalcon.
+  const label = normalizeLabel(type.value);
+  const steel = /(?:^|\s)(?:40ca085|viga perfil|metalcon)(?:\s|$)/.test(label);
+  const board = /(?:^|\s)(?:pl|placa|placas|tablero|tableros)\s+osb(?:\s|$)/.test(label);
+  if (type.ambiguous || steel && board) return { specialties: [], subspecialty: '', status: 'ambiguous', ...evidence };
+  if (steel || board) {
+    const group = steel ? 'Acero Galvanizado' : 'Placas de techumbre';
+    return { ...evidence, specialties: ['Cubierta'], subspecialty: group, status: 'read', association: { ...associateSubspecialty(group), original: evidence.typeName, parameter: 'Nombre de tipo' } };
+  }
   if (specialty.ambiguous || subspecialty.ambiguous) return { specialties: [], subspecialty: '', status: 'ambiguous', ...evidence };
+  if (specialty.value === 'cubierta') return { specialties: ['Cubierta'], subspecialty: subspecialty.value, status: 'read', ...evidence };
   const specialties = [];
   // Preserve the user's OR; one element can qualify for multiple filters.
-  if (specialty.value === 'hormigon' || association.group !== null) specialties.push('Hormigón');
+  if (specialty.value === 'hormigon' || association.group !== null && association.group !== 'Placas de techumbre') specialties.push('Hormigón');
   if (specialty.value === 'enfierradura') specialties.push('Enfierradura');
   if (specialty.value === 'acero galvanizado') specialties.push('Acero Galvanizado');
   return { specialties, subspecialty: subspecialty.value, status: !specialty.value && !subspecialty.value ? 'missing' : 'read', ...evidence };
@@ -76,7 +89,7 @@ export async function readViewClassification(model, progress = () => {}, timeout
     const batch = ordered.slice(offset, offset + 400);
     const results = await call((ok, fail) => model.getBulkProperties2(batch, { ignoreHidden: false, needsExternalId: true }, ok, fail));
     if (!Array.isArray(results) || results.length !== batch.length || new Set(results.map(r => r.dbId)).size !== batch.length || results.some(r => !batch.includes(r.dbId) || !Array.isArray(r.properties))) throw new Error('incomplete_classification');
-    for (const result of results) elements.push({ dbId: result.dbId, ...classifyProperties(result.properties) });
+    for (const result of results) elements.push({ dbId: result.dbId, externalId: result.externalId ?? null, properties: result.properties, ...classifyProperties(result.properties) });
     progress(elements.length, ordered.length);
   }
   return elements;

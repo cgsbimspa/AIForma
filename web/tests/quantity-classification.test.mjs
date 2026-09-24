@@ -22,7 +22,7 @@ test('controlled label associations group foundation slabs before generic slabs 
   for (const value of ['Losa Fundacion','LOSA FUN','Losa Fun.',' Losa_de_Fundación ', 'Losa-Fund', 'Fundación','Fundaciones']) {
     const associated=associateSubspecialty(value);
     assert.equal(associated.group,'Fundaciones'); assert.equal(associated.original,value);
-    assert.equal(associated.ruleVersion,'2');
+    assert.equal(associated.ruleVersion,'3');
     const classified=classifyProperties([prop('Sub Especialidad',value)]);
     assert.deepEqual(classified.originalSubspecialties,[value]);
     assert.ok(classified.specialties.includes('Hormigón'));

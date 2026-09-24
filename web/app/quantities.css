@@ -79,6 +79,10 @@
 .quantity-file-browser>p,.quantity-file-browser>.quantity-inline-actions { padding:9px; font-size:.69rem; }
 .quantity-save { width:100%; margin-top:20px; }
 .quantity-save-notice { margin:0; padding:8px 12px; border:1px solid #b8e0d0; border-radius:8px; background:#effaf5; color:#176b47; font-size:.7rem; }
+.quantity-live-notice { flex:none; padding:7px 12px; border:1px solid #d6e6fa; border-radius:8px; background:#f1f7ff; color:#375a80; font-size:.65rem; display:flex; flex-wrap:wrap; gap:5px; }
+.quantity-live-evidence { font-size:.75rem; line-height:1.6; }
+.quantity-live-evidence>p,.quantity-live-evidence>section { margin:12px 0; }
+.quantity-live-evidence .quantity-grid-scroll { max-height:45vh; margin:12px 0; }
 .quantity-process { border-top:1px solid #e3eaf4; margin-top:18px; padding-top:18px; }
 .quantity-process>button { width:100%; }
 .quantity-model { display:flex; flex-direction:column; }

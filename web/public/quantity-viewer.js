@@ -1,5 +1,6 @@
 /* global Autodesk */
 import { installPropertyInspector } from "./quantity-properties.js";
+import { buildViewCalculation } from "./quantity-calculation.js";
 import { readViewClassification, selectClassifiedElements, classificationRule } from "./quantity-classification.js";
 // Real Autodesk SDK viewer. Never fall back to the model's default geometry:
 // the server-verified geometry GUID must be present in this exact version.
@@ -8,40 +9,60 @@ import { readViewClassification, selectClassifiedElements, classificationRule } 
   const input = JSON.parse(document.getElementById("viewer-data").textContent);
   let viewer;
   let externalMap, reverseMap, applyingSelection = false, selectionRevision = 0;
-  let classification;
+  let classification, visibilityFilterKey;
+  const classified = () => classification ??= readViewClassification(viewer.model).catch(error => { classification = undefined; throw error; });
   const classificationReport = (state, message) => window.parent.postMessage({ type: 'aiforma-viewer', state: 'classification', result: state, message, viewId: input.viewId, urn: input.urn, ruleId: classificationRule.id, ruleVersion: classificationRule.version }, window.location.origin);
   const mapping = () => externalMap ? Promise.resolve(externalMap) : new Promise((resolve,reject)=>viewer.model.getExternalIdMapping(map=>{externalMap=map;reverseMap=new Map(Object.entries(map).map(([id,dbId])=>[dbId,id]));resolve(map);},reject));
   const selectionMessage = async event => {
     const data=event.data;
-    if(event.origin!==window.location.origin||event.source!==window.parent||data?.type!=="aiforma-viewer-selection"||data.viewId!==input.viewId||data.urn!==input.urn||!viewer?.model)return;
+    if(event.origin!==window.location.origin||event.source!==window.parent||data?.viewId!==input.viewId||data.urn!==input.urn||!viewer?.model)return;
+    if(data.type==='aiforma-viewer-action') {
+      const ids=viewer.getSelection();
+      if(data.action==='showAll')viewer.showAll();
+      else if(ids.length&&data.action==='isolate'){viewer.showAll();viewer.isolate(ids);viewer.fitToView(ids);}
+      else if(ids.length&&data.action==='hide')viewer.hide(ids);
+      return;
+    }
+    if(data.type==='aiforma-viewer-calculate' && Number.isSafeInteger(data.requestId)) {
+      const send=payload=>window.parent.postMessage({type:'aiforma-viewer',state:'calculation',requestId:data.requestId,viewId:input.viewId,urn:input.urn,...payload},window.location.origin);
+      send({phase:'loading',message:'Leyendo propiedades y sumando cantidades de la vista…'});
+      try { const elements=await classified();send({phase:'complete',data:buildViewCalculation(elements,{urn:input.urn,viewId:input.viewId})}); }
+      catch { send({phase:'error',message:'No se pudo completar la lectura de esta vista. No se han generado totales.'}); }
+      return;
+    }
+    if(data.type!=='aiforma-viewer-selection')return;
     if(!Array.isArray(data.highlightedElementIds)||!data.highlightedElementIds.every(id=>typeof id==="string")||data.filteredElementIds!==null&&(!Array.isArray(data.filteredElementIds)||!data.filteredElementIds.every(id=>typeof id==="string")))return;
     const revision=++selectionRevision;
+    const filterKey=JSON.stringify([data.filteredElementIds,data.classificationFilter??null]);
     try {
-      if (data.filteredElementIds === null && data.classificationFilter && (data.classificationFilter.specialty || data.classificationFilter.subspecialty)) {
+      if (filterKey!==visibilityFilterKey && data.filteredElementIds === null && data.classificationFilter && (data.classificationFilter.specialty || data.classificationFilter.subspecialty)) {
         const { specialty, subspecialty } = data.classificationFilter;
         if (typeof specialty !== 'string' || typeof subspecialty !== 'string') return;
         classificationReport('loading', 'Leyendo Especialidad y Sub Especialidad de los elementos de esta vista…');
-        classification ??= readViewClassification(viewer.model).catch(error => { classification = undefined; throw error; });
-        const elements = await classification;
+        const elements = await classified();
         if (revision !== selectionRevision) return;
         const selected = selectClassifiedElements(elements, specialty, subspecialty);
         viewer.showAll();
         if (selected.length) viewer.isolate(selected); else viewer.hide(viewer.model.getRootId());
-        const unavailable = elements.filter(e => e.status === 'missing' || e.status === 'ambiguous').length;
-        classificationReport(selected.length ? 'ready' : 'empty', `${selected.length} de ${elements.length} elementos de la vista coinciden. Criterios de asociación v${classificationRule.version}. ${unavailable} sin clasificación disponible o con parámetros ambiguos. Cantidades no calculadas.`);
-        return;
+        const unavailable = elements.filter(e => !e.specialties.length).length;
+        classificationReport(selected.length ? 'ready' : 'empty', `${selected.length} de ${elements.length} elementos de la vista coinciden. Criterios de asociación v${classificationRule.version}. ${unavailable} sin clasificación disponible o con parámetros ambiguos.`);
+        visibilityFilterKey=filterKey;
       }
-      classificationReport('idle', '');
-      viewer.showAll();
-      if(data.filteredElementIds===null&&!data.highlightedElementIds.length){viewer.isolate([]);return;}
+      if(filterKey!==visibilityFilterKey) {
+        const map=data.filteredElementIds!==null?await mapping():null;if(revision!==selectionRevision)return;
+        if(map&&data.filteredElementIds.some(id=>!Object.hasOwn(map,id)))throw Error('unmapped_filter');
+        viewer.showAll();
+        if(data.filteredElementIds?.length===0)viewer.hide(viewer.model.getRootId());
+        else viewer.isolate(data.filteredElementIds===null?[]:data.filteredElementIds.map(id=>map[id]));
+        classificationReport('idle','');visibilityFilterKey=filterKey;
+      }
+      if(!data.highlightedElementIds.length)return;
       const map=await mapping();if(revision!==selectionRevision)return;
       const all=[...data.highlightedElementIds,...(data.filteredElementIds??[])];
       if(all.some(id=>!Object.hasOwn(map,id))) { status.hidden=false;status.textContent="No se pudo vincular esta selección a elementos de esta vista. No se aplicó el filtro.";return; }
-      viewer.isolate(data.filteredElementIds===null?[]:data.filteredElementIds.map(id=>map[id]));
       const desired=data.highlightedElementIds.map(id=>map[id]), current=viewer.getSelection();
-      if(current.length!==desired.length||current.some(id=>!desired.includes(id))){applyingSelection=true;viewer.select(desired);applyingSelection=false;}
-      if(data.highlightedElementIds.length)viewer.fitToView(data.highlightedElementIds.map(id=>map[id]));
-    } catch { if (revision !== selectionRevision) return; viewer.showAll(); classificationReport('error', 'No se pudo completar la lectura de los parámetros. Se muestra el modelo sin filtrar; no se calcularon cantidades.'); }
+      if(current.length!==desired.length||current.some(id=>!desired.includes(id))){applyingSelection=true;viewer.select(desired);applyingSelection=false;viewer.fitToView(desired);}
+    } catch { if (revision !== selectionRevision) return; viewer.showAll();visibilityFilterKey=undefined; classificationReport('error', 'No se pudo completar la lectura. Se muestra el modelo sin filtrar.'); }
   };
   window.addEventListener("message",selectionMessage);
   let done = false;
@@ -62,7 +83,7 @@ import { readViewClassification, selectClassifiedElements, classificationRule } 
       viewer.setTheme("light-theme");
       viewer.addEventListener(Autodesk.Viewing.SELECTION_CHANGED_EVENT, async event=>{
         if(applyingSelection)return;
-        try { await mapping();window.parent.postMessage({type:"aiforma-viewer",state:"selection",ids:event.dbIdArray.flatMap(id=>reverseMap.has(id)?[reverseMap.get(id)]:[]),viewId:input.viewId,urn:input.urn},window.location.origin); } catch { /* No inferred element IDs. */ }
+        try { await mapping();window.parent.postMessage({type:"aiforma-viewer",state:"selection",count:event.dbIdArray.length,ids:event.dbIdArray.flatMap(id=>reverseMap.has(id)?[reverseMap.get(id)]:[]),viewId:input.viewId,urn:input.urn},window.location.origin); } catch { /* No inferred element IDs. */ }
       });
       report("loading", "Cargando la versión y vista seleccionadas…");
       Autodesk.Viewing.Document.load("urn:" + input.urn, doc => {

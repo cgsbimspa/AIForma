@@ -89,6 +89,18 @@ El visor de Cálculo aplica reglas versionadas en `web/public/quantity-classific
 
 Se inspeccionan objetos con geometría de la vista publicada en lotes de 400, excluyendo registros de tipo/padres sin geometría. La clasificación se conserva sólo durante la vida de ese visor. Una lectura incompleta o nombres de parámetros con valores contradictorios no se presentan como clasificación completa. Los datos de clasificación no se guardan como QuantityRun.
 
-Moldaje permanece visible con Todas/Hormigón y se oculta con Enfierradura/Acero Galvanizado. La clasificación no define los parámetros numéricos ni sus unidades. Siguen pendientes: parámetros de volumen de Hormigón, área de Moldaje, peso de Fe, longitud de Acero Galvanizado, agrupador Piso y motor de cálculo en servidor. El endpoint process conserva el bloqueo; no se habilita con una mera coincidencia de clasificación.
+Moldaje permanece visible con Todas/Hormigón y se oculta con Enfierradura/Acero Galvanizado. La clasificación no define los parámetros numéricos ni sus unidades. Se habilitó el motor de sumas de vista descrito abajo para Volumen de Hormigón y Longitud de Acero Galvanizado. Siguen pendientes Moldaje, Fe y el motor de ejecuciones persistidas en servidor. El endpoint process histórico conserva su bloqueo; las sumas de vista no se presentan como QuantityRun.
 
 Los filtros de visor y tabla comparten el mismo catálogo de asociaciones; el selector muestra sólo grupos canónicos. La tabla conserva los textos originales de resultados históricos y no reescribe cantidades ni versiones. La paleta de propiedades muestra en Procedencia el texto original, grupo asociado y versión del criterio. Las asociaciones también se pueden consultar en Configurar fuente BIM.
+
+## Cubierta, visibilidad y sumas de vista (criterio v3)
+
+Reglas por Nombre de tipo con prioridad: 40CA085, Viga Perfil y Metalcon (tokens completos, admitiendo sufijos) → Cubierta / Acero Galvanizado. PL OSB, Placa(s) OSB y Tablero(s) OSB → Cubierta / Placas de techumbre. Un tipo que satisface ambas reglas se considera ambiguo. Los tipos de Cubierta no heredan la pertenencia previa a Hormigón.
+
+Procesar Cubicación / Actualizar cubicación ejecutan `published-view-quantities-v1` en el visor autenticado de la fuente seleccionada. Se leen todos los propietarios de geometría mediante el SDK y se suman únicamente Volumen publicado en m³ para la clasificación de Hormigón y Longitud publicada en metros para Acero Galvanizado. No se calculan cantidades a partir del nombre del tipo, geometría visual, peso teórico ni dimensiones inferidas. La longitud se muestra como ml. Unidades explícitas del SDK o símbolos métricos requeridos; no se convierten unidades desconocidas. Parámetros duplicados, unidades ausentes, valores no numéricos/negativos e identificadores externos duplicados quedan pendientes.
+
+Cada lectura conserva dbId, externalId si existe, parámetro, categoría, valor original y unidad, fuente URN/vista, fecha, motor y versión de regla. Un total completo exige todos los valores de sus elementos elegibles; de lo contrario se muestra No calculado y sólo un subtotal identificado en Cobertura. Los filtros usan las mismas reglas en visor y datos. Pisos con múltiples valores de Nivel distintos se muestran como Piso no verificado.
+
+La transmisión entre iframe y mesa valida mismo origen, ventana, URN, vista, requestId y esquema. Cambiar archivo/versión/vista descarta la presentación anterior. Las sumas se conservan en esta sesión de la mesa y NO se guardan en el historial; no permiten comparación histórica como si fueran QuantityRuns.
+
+Aislar selección, Ocultar selección y Mostrar todo operan sobre la selección nativa del visor. Son cambios de visibilidad, no cambios del conjunto sumado. La sincronización de selección ya no reaplica el filtro sobre cada clic nativo, evitando deshacer una ocultación manual.
