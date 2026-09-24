@@ -30,6 +30,7 @@ export function resolveViewerGeometry(viewId: string, viewerManifest: unknown, m
   const direct = viewerNodes.filter(n => n.guid === viewId);
   if (direct.length === 1) return viewId;
   const source = geometryNodes(metadataManifest).filter(n => n.guid === viewId);
+  console.info("quantity-view-map", JSON.stringify({viewId, metadata: geometryNodes(metadataManifest), viewer: viewerNodes.map(n => ({guid:n.guid,viewableID:n.viewableID,role:n.role}))}));
   const ids = [...new Set(source.map(n => n.viewableID).filter(id => typeof id === "string" && id.length))];
   if (ids.length !== 1) throw new DataError("view_unavailable", 409);
   const matches = viewerNodes.filter(n => n.viewableID === ids[0] && source.some(s => s.role === n.role));
