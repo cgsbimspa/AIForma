@@ -26,10 +26,13 @@
 - Registro CNAME creado en cPanel: `app.cgsbim.cl.` → `5f935769a35d9c60.vercel-dns-017.com.`.
 - Vercel confirmó el DNS como `configured-correctly` y la propiedad del dominio como verificada.
 
-## Verificaciones pendientes
+## Verificación final — 23 de septiembre de 2026
 
-- Activación y comprobación del certificado HTTPS en `app.cgsbim.cl`.
-- Comprobación del despliegue automático posterior al primer cambio en `main`.
+- Certificado HTTPS emitido y acceso a https://app.cgsbim.cl comprobado sin omitir validaciones TLS.
+- Inicio y nueve módulos respondieron HTTP 200; ruta inexistente respondió HTTP 404.
+- Navegación del inicio a Auditoría BIM comprobada en el navegador público.
+- Despliegue automático del commit `994d667` terminado en estado `Ready`, con `app.cgsbim.cl` y `cgs-ai-forma.vercel.app` como alias.
+- Identificador de esa publicación: `dpl_5GBqwRFiQobSWpSForKvGKoerQYy`.
 
 ## Actualizaciones futuras
 

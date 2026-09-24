@@ -17,7 +17,7 @@ El script utiliza Node.js instalado o el runtime local de Codex si está disponi
 ## Publicación
 
 - [Aplicación en Vercel](https://cgs-ai-forma.vercel.app).
-- Dominio configurado: `app.cgsbim.cl`.
+- [Aplicación en el dominio CGS BIM](https://app.cgsbim.cl).
 - [Repositorio de código](https://github.com/cgsbimspa/AIForma).
 - [Configuración y estado de publicación](docs/DESPLIEGUE.md).
 
