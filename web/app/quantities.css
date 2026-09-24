@@ -78,6 +78,7 @@
 .quantity-file-entry span { flex:1; overflow-wrap:anywhere; }
 .quantity-file-browser>p,.quantity-file-browser>.quantity-inline-actions { padding:9px; font-size:.69rem; }
 .quantity-save { width:100%; margin-top:20px; }
+.quantity-save-notice { margin:0; padding:8px 12px; border:1px solid #b8e0d0; border-radius:8px; background:#effaf5; color:#176b47; font-size:.7rem; }
 .quantity-process { border-top:1px solid #e3eaf4; margin-top:18px; padding-top:18px; }
 .quantity-process>button { width:100%; }
 .quantity-model { display:flex; flex-direction:column; }
@@ -177,6 +178,7 @@
 .quantity-filter-fields select { margin-top:5px; border-radius:10px; min-height:34px; padding:6px; }
 .quantity-summary .quantity-primary { font-size:.65rem; padding:6px 9px; }
 .quantity-kpis { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; padding:0 12px 12px; }
+.quantity-kpis:has(> :last-child:nth-child(3)) { grid-template-columns:repeat(3,minmax(0,1fr)); }
 .quantity-kpi { min-width:0; padding:12px 10px; border-radius:14px; display:flex; flex-wrap:wrap; gap:9px; align-items:center; background:#eff6ff; color:#2069bc; }
 .quantity-kpi>div { min-width:0; }
 .quantity-kpi h3 { font-size:.7rem; color:#244565; overflow-wrap:anywhere; }

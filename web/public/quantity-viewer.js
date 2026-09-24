@@ -1,5 +1,6 @@
 /* global Autodesk */
 import { installPropertyInspector } from "./quantity-properties.js";
+import { readViewClassification, selectClassifiedElements, classificationRule } from "./quantity-classification.js";
 // Real Autodesk SDK viewer. Never fall back to the model's default geometry:
 // the server-verified geometry GUID must be present in this exact version.
 (() => {
@@ -7,6 +8,8 @@ import { installPropertyInspector } from "./quantity-properties.js";
   const input = JSON.parse(document.getElementById("viewer-data").textContent);
   let viewer;
   let externalMap, reverseMap, applyingSelection = false, selectionRevision = 0;
+  let classification;
+  const classificationReport = (state, message) => window.parent.postMessage({ type: 'aiforma-viewer', state: 'classification', result: state, message, viewId: input.viewId, urn: input.urn, ruleId: classificationRule.id, ruleVersion: classificationRule.version }, window.location.origin);
   const mapping = () => externalMap ? Promise.resolve(externalMap) : new Promise((resolve,reject)=>viewer.model.getExternalIdMapping(map=>{externalMap=map;reverseMap=new Map(Object.entries(map).map(([id,dbId])=>[dbId,id]));resolve(map);},reject));
   const selectionMessage = async event => {
     const data=event.data;
@@ -14,6 +17,22 @@ import { installPropertyInspector } from "./quantity-properties.js";
     if(!Array.isArray(data.highlightedElementIds)||!data.highlightedElementIds.every(id=>typeof id==="string")||data.filteredElementIds!==null&&(!Array.isArray(data.filteredElementIds)||!data.filteredElementIds.every(id=>typeof id==="string")))return;
     const revision=++selectionRevision;
     try {
+      if (data.filteredElementIds === null && data.classificationFilter && (data.classificationFilter.specialty || data.classificationFilter.subspecialty)) {
+        const { specialty, subspecialty } = data.classificationFilter;
+        if (typeof specialty !== 'string' || typeof subspecialty !== 'string') return;
+        classificationReport('loading', 'Leyendo Especialidad y Sub Especialidad de los elementos de esta vista…');
+        classification ??= readViewClassification(viewer.model).catch(error => { classification = undefined; throw error; });
+        const elements = await classification;
+        if (revision !== selectionRevision) return;
+        const selected = selectClassifiedElements(elements, specialty, subspecialty);
+        viewer.showAll();
+        if (selected.length) viewer.isolate(selected); else viewer.hide(viewer.model.getRootId());
+        const unavailable = elements.filter(e => e.status === 'missing' || e.status === 'ambiguous').length;
+        classificationReport(selected.length ? 'ready' : 'empty', `${selected.length} de ${elements.length} elementos de la vista coinciden. ${unavailable} sin clasificación disponible o con parámetros ambiguos. Cantidades no calculadas.`);
+        return;
+      }
+      classificationReport('idle', '');
+      viewer.showAll();
       if(data.filteredElementIds===null&&!data.highlightedElementIds.length){viewer.isolate([]);return;}
       const map=await mapping();if(revision!==selectionRevision)return;
       const all=[...data.highlightedElementIds,...(data.filteredElementIds??[])];
@@ -22,7 +41,7 @@ import { installPropertyInspector } from "./quantity-properties.js";
       const desired=data.highlightedElementIds.map(id=>map[id]), current=viewer.getSelection();
       if(current.length!==desired.length||current.some(id=>!desired.includes(id))){applyingSelection=true;viewer.select(desired);applyingSelection=false;}
       if(data.highlightedElementIds.length)viewer.fitToView(data.highlightedElementIds.map(id=>map[id]));
-    } catch { status.hidden=false;status.textContent="No se pudieron verificar los identificadores de los elementos."; }
+    } catch { if (revision !== selectionRevision) return; viewer.showAll(); classificationReport('error', 'No se pudo completar la lectura de los parámetros. Se muestra el modelo sin filtrar; no se calcularon cantidades.'); }
   };
   window.addEventListener("message",selectionMessage);
   let done = false;

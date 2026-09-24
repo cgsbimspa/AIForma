@@ -10,6 +10,7 @@ import { QuantitySourcePicker } from "./quantity-source-picker";
 import { QuantityResults } from "./quantity-results";
 import { QuantityViewer } from "./quantity-viewer";
 import { quantitySpecialties, specialtyName } from "@/lib/quantities/catalog";
+import { classificationRule } from "@/public/quantity-classification.js";
 import { quantityState, processingBlocker } from "@/lib/quantities/engine";
 import { quantityBrowse, quantityCommand, quantityResponse } from "@/lib/quantities/client";
 import type { Entry } from "@/lib/autodesk/data";
@@ -61,6 +62,7 @@ function ProjectQuantities({ project, name }: { project: QuantityProject; name: 
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [selected, setSelected] = useState<string | null>(null), [specialty, setSpecialty] = useState("");
   const [openConfiguration, setOpenConfiguration] = useState(false);
+  const [savedRevision, setSavedRevision] = useState<string | null>(null);
   const [adding, setAdding] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState("");
   const [latest, setLatest] = useState<Record<string, ModelVersion | undefined>>({});
   const [versionErrors, setVersionErrors] = useState<Record<string, string>>({});
@@ -91,7 +93,7 @@ function ProjectQuantities({ project, name }: { project: QuantityProject; name: 
     <div className="quantity-section-title"><div>{configuration ? <button className="quantity-text-button" onClick={() => setSelected(null)}><ArrowLeft size={15}/>Volver a especialidades</button> : <h2>Configuración de Cubicaciones</h2>}<p>{configuration ? `${specialtyName(configuration.specialtyCode)} · Mesa de trabajo` : name}</p></div><div className="quantity-inline-actions"><button className="quantity-secondary" disabled={busy} onClick={() => { setSelected(null); setLatest({}); setRetry(n => n + 1); }}><RefreshCw size={15}/>Recargar configuración</button>{!configuration && <button className="quantity-primary" disabled={!workspace || busy} onClick={() => setAdding(v => !v)}><Plus size={16}/>Agregar especialidad</button>}</div></div>
     {error && <p className="quantity-error" role="alert">{error}</p>}{busy && <p role="status">Cargando configuración…</p>}
     {adding && <form className="quantity-add-specialty" onSubmit={e => { e.preventDefault(); void add(); }}><label htmlFor="quantity-specialty">Especialidad</label><select id="quantity-specialty" value={specialty} onChange={e => setSpecialty(e.target.value)}><option value="">Seleccionar especialidad</option>{quantitySpecialties.filter(s => !workspace?.configurations.some(c => c.specialtyCode === s.code)).map(s => <option key={s.code} value={s.code}>{s.name}</option>)}</select><button className="quantity-primary" disabled={!specialty || busy}>Agregar al proyecto</button><button type="button" className="quantity-secondary" onClick={() => setAdding(false)}>Cancelar</button></form>}
-    {configuration && workspace ? <QuantityDesk key={`${configuration.id}:${configuration.revision}`} project={project} configuration={configuration} openConfiguration={openConfiguration} projectName={name} templates={workspace.templates.filter(t => t.specialtyCode === configuration.specialtyCode)} runs={workspace.runs.filter(r => r.specialtyCode === configuration.specialtyCode)} historyPartial={workspace.historyPartial} latest={latest[configuration.id]} versionError={versionErrors[configuration.id]} checkVersion={checkVersion} onSave={value => setWorkspace(old => old && { ...old, configurations: old.configurations.map(c => c.id === value.id ? value : c) })} onTemplate={value => setWorkspace(old => old && { ...old, templates: [value, ...old.templates] })}/> : workspace && <>
+    {configuration && workspace ? <QuantityDesk key={`${configuration.id}:${configuration.revision}`} project={project} configuration={configuration} savedSuccessfully={savedRevision === `${configuration.id}:${configuration.revision}`} openConfiguration={openConfiguration} projectName={name} templates={workspace.templates.filter(t => t.specialtyCode === configuration.specialtyCode)} runs={workspace.runs.filter(r => r.specialtyCode === configuration.specialtyCode)} historyPartial={workspace.historyPartial} latest={latest[configuration.id]} versionError={versionErrors[configuration.id]} checkVersion={checkVersion} onSave={value => { setSavedRevision(`${value.id}:${value.revision}`); setWorkspace(old => old && { ...old, configurations: old.configurations.map(c => c.id === value.id ? value : c) }); }} onTemplate={value => setWorkspace(old => old && { ...old, templates: [value, ...old.templates] })}/> : workspace && <>
       {!workspace.configurations.length ? <div className="quantity-empty quantity-panel"><Boxes size={34}/><h3>Este proyecto aún no tiene especialidades configuradas</h3><p>Agrega una especialidad para elegir su plantilla, archivo RVT, versión y vista.</p></div> : <div className="quantity-cards">{workspace.configurations.map(c => {
         const template = workspace.templates.find(t => t.id === c.templateVersionId), run = workspace.runs.find(r => r.specialtyCode === c.specialtyCode);
         const status = quantityState(c, template, run, latest[c.id]);
@@ -101,8 +103,8 @@ function ProjectQuantities({ project, name }: { project: QuantityProject; name: 
   </div>;
 }
 
-function QuantityDesk({ project, configuration, templates, runs, historyPartial, latest, versionError, checkVersion, onSave, onTemplate, openConfiguration, projectName }: {
-  openConfiguration: boolean; projectName: string;
+function QuantityDesk({ project, configuration, templates, runs, historyPartial, latest, versionError, checkVersion, onSave, onTemplate, openConfiguration, projectName, savedSuccessfully }: {
+  openConfiguration: boolean; projectName: string; savedSuccessfully: boolean;
   project: QuantityProject; configuration: QuantityConfiguration; templates: QuantityTemplateVersion[];
   runs: Workspace["runs"]; historyPartial: boolean; latest?: ModelVersion; versionError?: string;
   checkVersion: (id: string, signal?: AbortSignal) => Promise<void>; onSave: (config: QuantityConfiguration) => void; onTemplate: (template: QuantityTemplateVersion) => void;
@@ -127,10 +129,11 @@ function QuantityDesk({ project, configuration, templates, runs, historyPartial,
     const controller = new AbortController();
     void checkVersion(configuration.id, controller.signal); return () => controller.abort();
   }, [configuration.id, configuration.source, checkVersion]);
+  const [saving, setSaving] = useState(false);
   async function save() {
-    setBusy(true); setError("");
+    setSaving(true); setBusy(true); setError("");
     try { const saved = await quantityCommand<QuantityConfiguration>(project, { action: "save", id: configuration.id, revision: configuration.revision, templateVersionId: templateId || null, source: source ? { scope: source.scope, versionId: source.version.id, viewId: source.view?.id ?? null } : null }); onSave(saved); }
-    catch (e) { setError((e as Error).message); } finally { setBusy(false); }
+    catch (e) { setError((e as Error).message); } finally { setSaving(false); setBusy(false); }
   }
   async function addTemplate(newVersion: boolean) {
     if (!templateName.trim()) return;
@@ -171,16 +174,17 @@ function QuantityDesk({ project, configuration, templates, runs, historyPartial,
   const availableViews=views.some(v=>v.id===source?.view?.id)?views:source?.view?[source.view,...views]:views;
   return <div className="quantity-desk-stage">
     <QuantityTopbar source={source} views={availableViews} busy={busy} status={changed?"READY":status.state} versionLabel={changed?"Cambios sin guardar":stateLabels[status.state]} onView={id=>{setSource(source?{...source,view:availableViews.find(v=>v.id===id)??null}:null);setSelectedIds([]);}} onLoadViews={()=>void loadViews()} onUpdate={()=>void updateVersion()} onHistory={()=>setHistoryTab("history")} onCompare={()=>setHistoryTab("compare")} onSettings={()=>setSettings(true)}/>
-    {error&&<p className="quantity-error" role="alert">{error}</p>}
+    {savedSuccessfully&&!changed&&<p className="quantity-save-notice" role="status">Configuración guardada en el proyecto. El guardado no ejecuta la cubicación.</p>}
+    {error&&!settings&&<p className="quantity-error" role="alert">{error}</p>}
     <div className="quantity-desk-board">
       <section className="quantity-model quantity-panel" aria-label="Modelo BIM"><div className="quantity-panel-heading"><Box size={20}/><div><h2>Modelo BIM</h2><p>Explora la vista publicada y los elementos de tu modelo.</p></div><button className="quantity-secondary" onClick={()=>setSettings(true)}><Settings2 size={16}/>Configurar archivo y vista</button></div>
         <div className="quantity-model-context" title={source?.path}><strong>{source?.fileName??"Archivo RVT no seleccionado"}</strong><span>{source?.view?.name??"Vista no seleccionada"} · {source?"V"+source.version.number:"Versión no disponible"}</span></div>
-        <QuantityViewer project={project} source={source} highlightedElementIds={selectedIds} filteredElementIds={filterIds} onSelectElements={setSelectedIds}/>
+        <QuantityViewer project={project} source={source} highlightedElementIds={selectedIds} filteredElementIds={filterIds} onSelectElements={setSelectedIds} classificationFilter={configuration.specialtyCode === "structure" ? filters : undefined}/>
         <div className="quantity-model-bottom"><span>{activeRun?"Ejecución: V"+activeRun.source.version.number:"Cubicación no procesada"}</span><span>{latest?"Última publicación: V"+latest.number:"Publicación por verificar"}</span><button className="quantity-text-button" disabled={!configuration.source||busy} onClick={()=>void checkVersion(configuration.id)}><RefreshCw size={12}/>Verificar versión</button></div>
       </section>
-      <div className="quantity-data-column"><QuantityFilters value={filters} floors={floors} onChange={v=>{setFilters(v);setSelectedIds([]);}}/><QuantitySummaryCards totals={totals} previousTotals={previousTotals} blocker={blocker}/><QuantityTable rows={filtered} totals={totals} hasRun={Boolean(activeRun)} unavailable={projected.unavailable} onSelect={setSelectedIds} selectedIds={selectedIds}/></div>
+      <div className="quantity-data-column"><QuantityFilters value={filters} floors={floors} onChange={v=>{setFilters(v);setSelectedIds([]);}}/><QuantitySummaryCards totals={totals} previousTotals={previousTotals} blocker={blocker} specialty={filters.specialty} onRequirements={()=>setSettings(true)}/><QuantityTable specialty={filters.specialty} rows={filtered} totals={totals} hasRun={Boolean(activeRun)} unavailable={projected.unavailable} onSelect={setSelectedIds} selectedIds={selectedIds}/></div>
     </div>
-    <footer className="quantity-workspace-footer"><ShieldCheck size={13}/><span>{projected.rows.length?"Cantidades vinculadas a la versión y vista seleccionadas.":"Modelo completo · Sin clasificación verificada para aplicar los filtros al visor."}</span><span>{changed?"Cambios sin guardar":latest?"Verificado: "+new Date(latest.fetchedAt).toLocaleString("es-CL"):"Fuente pendiente de verificación"}</span></footer>
+    <footer className="quantity-workspace-footer"><ShieldCheck size={13}/><span>{projected.rows.length?"Cantidades vinculadas a la versión y vista seleccionadas.":"Clasificación por parámetros del modelo · Cantidades pendientes de reglas de cálculo."}</span><span>{changed?"Cambios sin guardar":latest?"Verificado: "+new Date(latest.fetchedAt).toLocaleString("es-CL"):"Fuente pendiente de verificación"}</span></footer>
     <Dialog open={settings} onOpenChange={setSettings}><DialogContent className="quantity-page quantity-modal"><DialogTitle>Configurar fuente BIM</DialogTitle><DialogDescription>{specialtyName(configuration.specialtyCode)} · {projectName}. Selecciona el archivo RVT, su versión y su vista publicada.</DialogDescription><section className="quantity-settings quantity-panel" aria-label="Configuración de la fuente BIM"><div className="quantity-panel-heading"><Boxes size={18}/><h2>Configuración</h2></div><div className="quantity-panel-body">
         <span className="quantity-field-label">Especialidad</span><h3>{specialtyName(configuration.specialtyCode)}</h3>
         <label htmlFor="quantity-template">Plantilla y versión</label><select id="quantity-template" value={templateId} disabled={busy} onChange={e => setTemplateId(e.target.value)}><option value="">Sin plantilla</option>{templates.map(t => <option key={t.id} value={t.id}>{t.name} · v{t.version}{t.configuration ? "" : t.baseDefinition ? " · Base definida" : " · Sin reglas"}</option>)}</select>
@@ -189,9 +193,12 @@ function QuantityDesk({ project, configuration, templates, runs, historyPartial,
         <button className="quantity-text-button" disabled={busy} onClick={() => { setCreateTemplate(v => !v); setTemplateName(template?.name ?? ""); }}><Plus size={13}/>Crear plantilla / versión</button>
         {createTemplate && <div className="quantity-template-form"><label htmlFor="quantity-template-name">Nombre de la plantilla</label><input id="quantity-template-name" value={templateName} maxLength={200} onChange={e => setTemplateName(e.target.value)} placeholder="Nombre definido por tu equipo"/><p className="quantity-help">Se crea sin reglas. Los parámetros y fórmulas se definirán antes de habilitar el cálculo.</p><div className="quantity-inline-actions"><button className="quantity-secondary" disabled={busy || !templateName.trim()} onClick={() => void addTemplate(false)}>Nueva plantilla</button>{template && <button className="quantity-secondary" disabled={busy || !templateName.trim()} onClick={() => void addTemplate(true)}>Nueva versión</button>}</div></div>}
         <QuantitySourcePicker key={`${source?.scope.itemId ?? "empty"}:${source?.version.id ?? "empty"}`} project={project} source={source} onChange={value=>{setSource(value);setViews(value?.view?[value.view]:[]);setSelectedIds([]);}} disabled={busy}/>
-        <button className="quantity-primary quantity-save" disabled={busy || !changed} onClick={() => void save()}><Save size={15}/>{busy ? "Guardando…" : "Guardar configuración"}</button>
-        <div className="quantity-process"><button className="quantity-primary" disabled title={blocker}>{status.state === "STALE" ? "Actualizar Cubicación" : "Procesar Cubicación"}</button><p className="quantity-help">{blocker}</p>{runs[0] && <p className="quantity-help">Último procesamiento: {new Date(runs[0].completedAt).toLocaleString("es-CL")}</p>}</div>
-      </div></section>{versionError&&<p className="quantity-error">{versionError}</p>}{source&&latest&&latest.number>source.version.number&&<button className="quantity-secondary" disabled={busy} onClick={()=>void selectLatest()}>Usar última publicación: V{latest.number}</button>}<p className="quantity-help">{blocker}</p></DialogContent></Dialog>
+        <p className="quantity-help">{changed ? "Hay cambios pendientes de guardar." : "Sin cambios pendientes. Puedes guardar para volver a verificar la fuente seleccionada."}</p>
+        {error&&<p className="quantity-error" role="alert">{error}</p>}
+        {savedSuccessfully&&!changed&&<p className="quantity-save-notice" role="status">Configuración guardada en el proyecto.</p>}
+        <button className="quantity-primary quantity-save" disabled={busy} onClick={() => void save()}><Save size={15}/>{saving ? "Guardando…" : "Guardar configuración"}</button>
+        <div className="quantity-process"><button className="quantity-primary" disabled title={blocker}>{status.state === "STALE" ? "Actualizar Cubicación" : "Procesar Cubicación"}</button><p className="quantity-help">{blocker}</p>{configuration.specialtyCode === "structure" && <div className="quantity-template-definition"><strong>Reglas de selección recibidas</strong><p>Hormigón: Especialidad = Hormigón, o Sub Especialidad = {classificationRule.concreteSubspecialties.join(", ")}.</p><p>Enfierradura: Especialidad = Enfierradura.</p><p>Metalcon / Acero Galvanizado: Especialidad = Acero Galvanizado.</p><p>Moldaje se muestra al seleccionar Hormigón.</p><strong>Pendiente para calcular</strong><p>Definir el parámetro numérico y la unidad de Hormigón, Moldaje, Fe y Acero Galvanizado, y el parámetro de Piso. El motor de suma aún no está implementado.</p><small>Estas reglas de selección filtran el visor. No generan cantidades ni sustituyen un cálculo.</small></div>}{runs[0] && <p className="quantity-help">Último procesamiento: {new Date(runs[0].completedAt).toLocaleString("es-CL")}</p>}</div>
+      </div></section>{versionError&&<p className="quantity-error">{versionError}</p>}{source&&latest&&latest.number>source.version.number&&<button className="quantity-secondary" disabled={busy} onClick={()=>void selectLatest()}>Usar última publicación: V{latest.number}</button>}</DialogContent></Dialog>
     <Dialog open={historyTab!==null} onOpenChange={open=>{if(!open)setHistoryTab(null);}}><DialogContent className="quantity-page quantity-modal quantity-history-modal"><DialogTitle>{historyTab==="compare"?"Comparación de ejecuciones":"Versiones procesadas"}</DialogTitle><DialogDescription>Consulta ejecuciones reales sin modificar la configuración ni sobrescribir resultados.</DialogDescription>{historyTab&&<QuantityResults key={historyTab} project={project} runs={runs} partial={historyPartial} initialTab={historyTab} onComparison={setComparison}/>}</DialogContent></Dialog>
   </div>;
 }

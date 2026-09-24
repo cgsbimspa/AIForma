@@ -80,3 +80,13 @@ El botón nativo Propiedades abre un PropertyPanel propio compacto, redimensiona
 La procedencia identifica dbId y externalId y se limita al modelo/version/vista cargados. No afirma que Autodesk haya publicado todos los parámetros del RVT original, ni que se hayan leído o cubicado todos los elementos del modelo. Las propiedades heredadas se resuelven por el SDK; las referencias internas no se interpretan como cantidades. Los callbacks obsoletos se descartan cuando cambia la selección. El canvas conserva la gestión de densidad de píxeles del SDK, separada del tamaño de la interfaz.
 
 API y comportamiento contrastados en el código oficial de Viewer 7.119.0 (viewer3D.js: Model.getBulkProperties2, PropDbLoader.getBulkProperties2, PropertyDatabase.getObjectProperties, PropertiesManagerExtension.setPanel) y https://aps.autodesk.com/blog/adding-custom-properties-property-panel. Pruebas: quantity-properties.test.mjs y quantity-viewer.test.mjs.
+
+## Clasificación solicitada el 24-09-2026 y guardado
+
+Guardar configuración permite volver a verificar y guardar la fuente aunque no existan cambios, sin depender de reglas de cálculo. Los errores aparecen dentro del diálogo y el éxito se confirma tras la respuesta del servidor.
+
+El visor de Cálculo aplica reglas versionadas en `web/public/quantity-classification.js`: Hormigón por Especialidad = Hormigón **o** Sub Especialidad en la lista literal recibida; Enfierradura exige Especialidad = Enfierradura; Acero Galvanizado/Metalcon exige Especialidad = Acero Galvanizado. La condición OR permite pertenecer a más de un filtro, sin generar ni duplicar cantidades. Se normalizan mayúsculas, espacios y acentos; no se inventan equivalencias entre singular/plural.
+
+Se inspeccionan objetos con geometría de la vista publicada en lotes de 400, excluyendo registros de tipo/padres sin geometría. La clasificación se conserva sólo durante la vida de ese visor. Una lectura incompleta o nombres de parámetros con valores contradictorios no se presentan como clasificación completa. Los datos de clasificación no se guardan como QuantityRun.
+
+Moldaje permanece visible con Todas/Hormigón y se oculta con Enfierradura/Acero Galvanizado. La clasificación no define los parámetros numéricos ni sus unidades. Siguen pendientes: parámetros de volumen de Hormigón, área de Moldaje, peso de Fe, longitud de Acero Galvanizado, agrupador Piso y motor de cálculo en servidor. El endpoint process conserva el bloqueo; no se habilita con una mera coincidencia de clasificación.

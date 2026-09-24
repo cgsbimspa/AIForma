@@ -1,3 +1,4 @@
+import { classificationRule } from "../../public/quantity-classification.js";
 import type { QuantityRun, QuantitySource } from "./contracts.ts";
 
 // Explicit presentation metadata only. Never infer a material from a BIM type,
@@ -9,7 +10,8 @@ export const quantityMetrics = [
   {key:"galvanized_steel_length_ml", name:"Acero Galvanizado", unit:"ml"},
 ] as const;
 export const filterSpecialties = ["Hormigón", "Enfierradura", "Acero Galvanizado"];
-export const filterSubspecialties = ["Emplantillado", "Fundación", "Metalcon", "Vigas de Fundación", "Enfierradura", "Losas", "Muros", "Pilares"];
+export const filterSubspecialties = [...new Set([...classificationRule.concreteSubspecialties, "Emplantillado", "Fundación", "Metalcon", "Vigas de Fundación", "Enfierradura", "Losas", "Muros", "Pilares"])];
+export const visibleQuantityMetrics = (specialty:string) => quantityMetrics.filter(m=>m.key !== "formwork_area_m2" || !specialty || specialty === "Hormigón");
 export type Metric = typeof quantityMetrics[number]["key"];
 export type QuantityFiltersValue = {specialty:string; subspecialty:string; floor:string};
 export type QuantityTableRow = {id:string; specialty:string; subspecialty:string; typeName:string; floor:string; values:Partial<Record<Metric,number>>; elementIds:string[]};
