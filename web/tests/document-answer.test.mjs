@@ -29,6 +29,15 @@ test('extracted values must equal a literal source quote, not a generated or cal
   assert.equal(bound[0].text,sentence);
 });
 
+test('conversational answers retain exact amounts and reject an unsupported currency',()=>{
+  const quote='TEST: Valor neto 125,40 UF. Importe pendiente de aprobación.';
+  const input={...evidence,passages:[{...evidence.passages[0],location:'Página 4',text:quote}]};
+  const candidate={status:'answered',blocks:[{label:'',text:'El valor neto indicado es de 125,40 UF y está pendiente de aprobación.',citations:[{segmentId:'S1',quote}]}]};
+  const answer=bindDocumentDraft(candidate,input,'ask');
+  assert.equal(answer[0].citations[0].location,'Página 4');assert.equal(answer[0].citations[0].source.name,source.name);
+  for(const text of ['El valor neto es de 125,40 USD.','El valor neto es de 125.40 UF.','El valor neto es de 999 UF.'])assert.throws(()=>bindDocumentDraft({...candidate,blocks:[{...candidate.blocks[0],text}]},input,'ask'),/document_unverified/);
+});
+
 test('OCR citations preserve recognition provenance and low-confidence text cannot support a generated assertion',()=>{
   const recognized={...evidence,passages:[{...evidence.passages[0],method:'ocr',confidence:95,location:'Página 2 · OCR'}]};
   const bound=bindDocumentDraft(draft,recognized,'ask');assert.equal(bound[0].citations[0].method,'ocr');assert.equal(bound[0].citations[0].location,'Página 2 · OCR');

@@ -8,6 +8,7 @@ import type { Source } from "@/lib/assistant/chat";
 import type { SearchBatch, SearchTerms, SearchStage, SearchHit } from "@/lib/search/contracts";
 import { mergeSearchHits } from "@/lib/search/merge";
 import { SearchResults } from "./search-results";
+import { acceptsNextSearchStage } from "@/lib/search/language";
 import { RecentHistory } from "./recent-history";
 import { DocumentAnswer } from "./document-answer";
 import type { DocumentAnswer as DocumentAnswerData, DocumentMode } from "@/lib/assistant/document-contracts";
@@ -194,7 +195,7 @@ function ChatPanel({ selection, select, aiConfigured, invalidate }: { select: (s
     if (!text.trim() || busy || !aiConfigured) return;
     if (requestedMode !== "search" && !documentSelection) { setError("Selecciona un archivo o una carpeta para preguntar sobre sus documentos."); return; }
     const lastSearch = messages.at(-1)?.search;
-    if (requestedMode === "search" && lastSearch && /^(sí|si|sí,? busca|si,? busca|continuar|sí por favor|si por favor)[.!]?$/i.test(text.trim())) {
+    if (requestedMode === "search" && lastSearch && acceptsNextSearchStage(text)) {
       if (lastSearch.stage !== "content") { setDraft(""); await nextStage(lastSearch, lastSearch.stage === "folders" ? "files" : "content"); return; }
     }
     const outgoing: Message[] = [...messages, { role: "user", content: text.trim() }];

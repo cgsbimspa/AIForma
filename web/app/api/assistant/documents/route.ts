@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
     const evidence = await collectDocumentEvidence(session.accessToken, body.scope, session.expiresAt, signal);
     const answer = await answerDocuments(evidence, body.question, body.mode, { key, model: process.env.OPENAI_MODEL || "gpt-5-mini" }, fetch, signal);
     if (session.expiresAt <= Date.now()) throw new DataError("expired", 401);
-    const memory = await remember(request, body.scope, { ...body, prompt: body.question, response: answer.blocks.length ? answer.blocks.map(b=>b.label+": "+b.text).join("\n") : "No hay evidencia suficiente en los documentos leídos para responder.", tool: "document_answer", parameters: { scope: body.scope, mode: body.mode }, result: answer, status: answer.partial || answer.status!=="answered" ? "partial" : "success", action: body.mode, duration: Date.now()-started });
+    const memory = await remember(request, body.scope, { ...body, prompt: body.question, response: answer.blocks.length ? answer.blocks.map(b=>(b.label?b.label+": ":"")+b.text).join("\n") : "No hay evidencia suficiente en los documentos leídos para responder.", tool: "document_answer", parameters: { scope: body.scope, mode: body.mode }, result: answer, status: answer.partial || answer.status!=="answered" ? "partial" : "success", action: body.mode, duration: Date.now()-started });
     return NextResponse.json({ ...answer, memory }, { headers: privateHeaders });
   } catch (error) { return rememberFailure(request,error,pending,started); }
 }
