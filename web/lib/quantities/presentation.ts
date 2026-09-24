@@ -1,4 +1,4 @@
-import { classificationRule } from "../../public/quantity-classification.js";
+import { associateSubspecialty, subspecialtyCriteria } from "../../public/quantity-classification.js";
 import type { QuantityRun, QuantitySource } from "./contracts.ts";
 
 // Explicit presentation metadata only. Never infer a material from a BIM type,
@@ -10,7 +10,7 @@ export const quantityMetrics = [
   {key:"galvanized_steel_length_ml", name:"Acero Galvanizado", unit:"ml"},
 ] as const;
 export const filterSpecialties = ["Hormigón", "Enfierradura", "Acero Galvanizado"];
-export const filterSubspecialties = [...new Set([...classificationRule.concreteSubspecialties, "Emplantillado", "Fundación", "Metalcon", "Vigas de Fundación", "Enfierradura", "Losas", "Muros", "Pilares"])];
+export const filterSubspecialties = subspecialtyCriteria.map(c => c.group);
 export const visibleQuantityMetrics = (specialty:string) => quantityMetrics.filter(m=>m.key !== "formwork_area_m2" || !specialty || specialty === "Hormigón");
 export type Metric = typeof quantityMetrics[number]["key"];
 export type QuantityFiltersValue = {specialty:string; subspecialty:string; floor:string};
@@ -22,13 +22,14 @@ export function projectQuantityRows(run:QuantityRun|undefined) {
   const rows:QuantityTableRow[]=[]; let unavailable=0;
   for (const result of run?.results??[]) {
     const g=result.groupingData, metric=quantityMetrics.find(m=>m.key===g.metric && m.unit===result.unit);
-    if (!metric || !filterSpecialties.includes(g.specialty) || !filterSubspecialties.includes(g.subspecialty) || !g.typeName || !g.floor || !Number.isFinite(result.quantity)) { unavailable++; continue; }
+    if (!metric || !filterSpecialties.includes(g.specialty) || !associateSubspecialty(g.subspecialty).group || !g.typeName || !g.floor || !Number.isFinite(result.quantity)) { unavailable++; continue; }
     rows.push({id:result.id,specialty:g.specialty,subspecialty:g.subspecialty,typeName:g.typeName,floor:g.floor,values:{[metric.key]:result.quantity},elementIds:result.elementIds});
   }
   return {rows,unavailable};
 }
 export function filterQuantityRows(rows:QuantityTableRow[], filter:QuantityFiltersValue) {
-  return rows.filter(r=>(!filter.specialty||r.specialty===filter.specialty)&&(!filter.subspecialty||r.subspecialty===filter.subspecialty)&&(!filter.floor||r.floor===filter.floor));
+  const group = associateSubspecialty(filter.subspecialty).group;
+  return rows.filter(r=>(!filter.specialty||r.specialty===filter.specialty)&&(!filter.subspecialty||group !== null && associateSubspecialty(r.subspecialty).group===group)&&(!filter.floor||r.floor===filter.floor));
 }
 export function quantityTotals(rows:QuantityTableRow[], unavailable=0) {
   return Object.fromEntries(quantityMetrics.map(m=>{

@@ -28,7 +28,7 @@ import { readViewClassification, selectClassifiedElements, classificationRule } 
         viewer.showAll();
         if (selected.length) viewer.isolate(selected); else viewer.hide(viewer.model.getRootId());
         const unavailable = elements.filter(e => e.status === 'missing' || e.status === 'ambiguous').length;
-        classificationReport(selected.length ? 'ready' : 'empty', `${selected.length} de ${elements.length} elementos de la vista coinciden. ${unavailable} sin clasificación disponible o con parámetros ambiguos. Cantidades no calculadas.`);
+        classificationReport(selected.length ? 'ready' : 'empty', `${selected.length} de ${elements.length} elementos de la vista coinciden. Criterios de asociación v${classificationRule.version}. ${unavailable} sin clasificación disponible o con parámetros ambiguos. Cantidades no calculadas.`);
         return;
       }
       classificationReport('idle', '');

@@ -1,29 +1,60 @@
 // Classification supplied by the user on 2026-09-24. These rules select
 // elements; they do not define volume, formwork, weight or length quantities.
 export const classificationRule = {
-  id: 'cgs-structure-classification', version: '1',
+  id: 'cgs-structure-classification', version: '2',
   concreteSubspecialties: ['Emplantillado', 'Muro', 'Losa', 'Losa Fundación', 'Fundación', 'Viga Fundacion', 'Pilar', 'Hormigón', 'Enfierradura', 'Metalcon', 'Acero Galvanizado'],
 };
 export const normalizeClassification = value => typeof value === 'string'
   ? value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim().replace(/\s+/g, ' ') : '';
 
+// User-authorized associations. Whole labels only: foundation slabs must not
+// fall into Losas, and an unrelated label containing "fund" must not match.
+export const subspecialtyCriteria = [
+  { group: 'Fundaciones', aliases: ['Fundación', 'Fundaciones', 'Losa Fundación', 'Losas Fundación', 'Losa de Fundación', 'Losas de Fundación', 'Losa Fund', 'Losas Fund', 'Losa Fun', 'Losas Fun', 'Losa de Fund', 'Losa de Fun'] },
+  { group: 'Vigas de Fundación', aliases: ['Viga Fundación', 'Vigas Fundación', 'Viga de Fundación', 'Vigas de Fundación', 'Viga Fund', 'Vigas Fund', 'Viga Fun', 'Vigas Fun', 'Viga de Fund', 'Viga de Fun'] },
+  { group: 'Losas', aliases: ['Losa', 'Losas'] },
+  { group: 'Muros', aliases: ['Muro', 'Muros'] },
+  { group: 'Pilares', aliases: ['Pilar', 'Pilares'] },
+  { group: 'Emplantillado', aliases: ['Emplantillado', 'Emplantillados'] },
+  { group: 'Hormigón', aliases: ['Hormigón'] },
+  { group: 'Enfierradura', aliases: ['Enfierradura', 'Enfierraduras'] },
+  { group: 'Metalcon', aliases: ['Metalcon'] },
+  { group: 'Acero Galvanizado', aliases: ['Acero Galvanizado', 'Acero Galv', 'Ac Galvanizado', 'Ac Galv'] },
+];
+const normalizeLabel = value => normalizeClassification(value).replace(/[._\-/]+/g, ' ').trim().replace(/\s+/g, ' ');
+const associationIndex = new Map();
+for (const {group, aliases} of subspecialtyCriteria) {
+  for (const alias of [group, ...aliases]) {
+    const key = normalizeLabel(alias);
+    if (associationIndex.has(key) && associationIndex.get(key) !== group) throw new Error('ambiguous_subspecialty_criteria');
+    associationIndex.set(key, group);
+  }
+}
+export function associateSubspecialty(value) {
+  const original = typeof value === 'string' ? value : '';
+  return { original, group: associationIndex.get(normalizeLabel(original)) ?? null, ruleId: classificationRule.id, ruleVersion: classificationRule.version };
+}
+
 function parameter(properties, name) {
-  const values = properties.filter(p => normalizeClassification(p.displayName) === normalizeClassification(name))
+  const matching = properties.filter(p => normalizeClassification(p.displayName) === normalizeClassification(name));
+  const values = matching
     .map(p => normalizeClassification(p.displayValue)).filter(Boolean);
   const unique = [...new Set(values)];
   // Duplicate names with conflicting values require explicit category mapping.
-  return { value: unique.length === 1 ? unique[0] : '', ambiguous: unique.length > 1 };
+  return { value: unique.length === 1 ? unique[0] : '', originals: matching.map(p => p.displayValue), ambiguous: unique.length > 1 };
 }
 export function classifyProperties(properties) {
   const specialty = parameter(properties, 'Especialidad');
   const subspecialty = parameter(properties, 'Sub Especialidad');
-  if (specialty.ambiguous || subspecialty.ambiguous) return { specialties: [], subspecialty: '', status: 'ambiguous' };
+  const association = associateSubspecialty(subspecialty.originals.find(value => normalizeClassification(value)) ?? '');
+  const evidence = { originalSubspecialties: subspecialty.originals, association };
+  if (specialty.ambiguous || subspecialty.ambiguous) return { specialties: [], subspecialty: '', status: 'ambiguous', ...evidence };
   const specialties = [];
   // Preserve the user's OR; one element can qualify for multiple filters.
-  if (specialty.value === 'hormigon' || classificationRule.concreteSubspecialties.some(v => normalizeClassification(v) === subspecialty.value)) specialties.push('Hormigón');
+  if (specialty.value === 'hormigon' || association.group !== null) specialties.push('Hormigón');
   if (specialty.value === 'enfierradura') specialties.push('Enfierradura');
   if (specialty.value === 'acero galvanizado') specialties.push('Acero Galvanizado');
-  return { specialties, subspecialty: subspecialty.value, status: !specialty.value && !subspecialty.value ? 'missing' : 'read' };
+  return { specialties, subspecialty: subspecialty.value, status: !specialty.value && !subspecialty.value ? 'missing' : 'read', ...evidence };
 }
 
 // Only objects owning geometry in the selected published view are inspected.
@@ -52,6 +83,6 @@ export async function readViewClassification(model, progress = () => {}, timeout
 }
 
 export function selectClassifiedElements(elements, specialty, subspecialty) {
-  const sub = normalizeClassification(subspecialty);
-  return elements.filter(e => (!specialty || e.specialties.includes(specialty)) && (!sub || e.subspecialty === sub)).map(e => e.dbId);
+  const group = associateSubspecialty(subspecialty).group;
+  return elements.filter(e => (!specialty || e.specialties.includes(specialty)) && (!subspecialty || group !== null && associateSubspecialty(e.subspecialty).group === group)).map(e => e.dbId);
 }

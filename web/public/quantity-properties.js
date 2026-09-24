@@ -1,4 +1,5 @@
 /* global Autodesk */
+import { classifyProperties } from './quantity-classification.js';
 // Read every property returned by the selected model's published property DB.
 // No name/category filter and no hidden-property exclusion. No BIM calculations.
 export function readElementProperties(model, dbId, timeoutMs = 30000) {
@@ -99,6 +100,10 @@ export async function installPropertyInspector(viewer) {
         this.result = result;
         this.setTitle(result.name || `Elemento dbId ${dbId}`, { localizeTitle: false });
         this.identity.append(node('summary', `Procedencia · dbId ${dbId}`), node('p', `Identificador externo: ${result.externalId || 'No disponible'}`), node('p', 'Fuente: base de propiedades de la versión y vista publicadas seleccionadas. Esta lectura no certifica parámetros ausentes del RVT original.'));
+        const classified = classifyProperties(result.properties);
+        if (classified.status !== 'ambiguous' && classified.association.group) {
+          this.identity.append(node('p', `Asociación de cubicaciones: ${classified.originalSubspecialties.map(propertyText).join(' / ')} → ${classified.association.group}. Criterio ${classified.association.ruleId} v${classified.association.ruleVersion}. El parámetro original no se modifica.`));
+        }
         this.renderRows();
       } catch {
         if (this.disposed || revision !== this.revision) return;
