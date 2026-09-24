@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AutodeskError, hasDataAccess, profile, readConfig, unseal } from "@/lib/autodesk/oauth";
-import { cookieName, privateHeaders, setCookie } from "@/lib/autodesk/http";
+import { cookieName, privateHeaders } from "@/lib/autodesk/http";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,7 +11,6 @@ export async function GET(request: NextRequest) {
   const session = unseal(cookie, config.key, "session");
   if (!session) {
     const response = NextResponse.json({ connected: false, configured: true }, { headers: privateHeaders });
-    if (cookie) setCookie(response, config, "session", "", 0);
     return response;
   }
   try {
@@ -21,7 +20,6 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     const rejected = error instanceof AutodeskError && error.reason === "rejected";
     const response = NextResponse.json({ connected: false, configured: true, error: rejected ? "expired" : "unavailable" }, { status: rejected ? 200 : 503, headers: privateHeaders });
-    if (rejected) setCookie(response, config, "session", "", 0);
     return response;
   }
 }

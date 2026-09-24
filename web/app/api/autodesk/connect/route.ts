@@ -11,5 +11,6 @@ export async function POST(request: NextRequest) {
   const response = NextResponse.redirect(attempt.url, { status: 303, headers: privateHeaders });
   setCookie(response, config, "attempt", attempt.cookie, ATTEMPT_TTL);
   setCookie(response, config, "session", "", 0);
+  setCookie(response, config, "renewal", "", 0);
   return response;
 }

@@ -23,11 +23,14 @@ Para probar localmente, abrir la dirección 127.0.0.1 indicada; el origen debe c
 - «Desconectar» elimina la sesión de esta plataforma; no cierra la cuenta global de Autodesk ni la sesión de Nexo.
 - Alcances actuales: `user-profile:read data:read`, exclusivamente lectura. Las sesiones anteriores de sólo perfil requieren volver a autorizar. La identidad verificada no garantiza que una cuenta haya habilitado esta integración para sus proyectos.
 - El módulo Asistente solicita permisos y regresa a `/asistente` mediante una ruta permitida guardada en el estado cifrado. No se aceptan redirecciones arbitrarias.
-- La sesión dura como máximo una hora y nunca supera el vencimiento del token emitido por APS. Después se vuelve a conectar. No se almacenan refresh tokens en esta etapa.
+- El token de acceso conserva su vencimiento de APS (como máximo una hora). Cinco minutos antes del vencimiento, y antes de consultar datos, el navegador solicita su renovación al servidor mediante POST del mismo origen. El refresh token se guarda en otra cookie cifrada HttpOnly/Secure, se rota con cada renovación y tiene un plazo local conservador de 14 días. Las sesiones antiguas requieren una última reconexión porque no conservaron ese token.
+- Web Locks serializa las renovaciones entre pestañas del mismo navegador; un caché servidor acotado a un minuto deduplica llamadas simultáneas en la misma instancia. No se guardan tokens en localStorage ni se devuelven al JavaScript del navegador.
+- Los fallos temporales conservan la sesión y la selección, muestran conexión por verificar y se reintentan cada minuto/al recuperar el foco. El proveedor puede exigir nueva autorización si revoca o rechaza la renovación.
+- El asistente mantiene su estado al rotar el acceso. Los cursores de búsqueda se vinculan al identificador cifrado de la sesión, no al access token que cambia; conservan su límite de una hora. Desconectar borra ambas cookies.
 
 ## Protección
 
-El Client Secret y el intercambio de código permanecen en el servidor. Token de sesión cifrado con AES-256-GCM dentro de una cookie HttpOnly, Secure y SameSite=Lax en producción, sin dominio compartido. No hay tokens en localStorage ni respuestas JSON públicas. El estado OAuth aleatorio se vincula al navegador y vence a los diez minutos. Inicio y desconexión requieren POST del mismo origen. Las respuestas de autenticación usan no-store y no-referrer. Los errores de Autodesk se transforman en mensajes controlados sin registrar tokens ni cuerpos sensibles.
+El Client Secret y el intercambio de código permanecen en el servidor. Token de sesión cifrado con AES-256-GCM dentro de una cookie HttpOnly, Secure y SameSite=Lax en producción, sin dominio compartido. No hay tokens en localStorage ni respuestas JSON públicas. El estado OAuth aleatorio se vincula al navegador y vence a los diez minutos. Inicio, renovación y desconexión requieren POST del mismo origen. Las respuestas de autenticación usan no-store y no-referrer. Los errores de Autodesk se transforman en mensajes controlados sin registrar tokens ni cuerpos sensibles.
 
 ## Verificación
 

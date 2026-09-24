@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
-import { readConfig, seal, unseal, begin, validState, trustedMutation, exchange, profile, SCOPE, TOKEN_URL, PROFILE_URL } from '../lib/autodesk/oauth.ts';
+import { readConfig, seal, unseal, begin, validState, trustedMutation, exchange, renew, REFRESH_SECONDS, profile, SCOPE, TOKEN_URL, PROFILE_URL } from '../lib/autodesk/oauth.ts';
 
 // TEST fixtures only. No real account, credentials or BIM data.
 const config = readConfig({ APS_CLIENT_ID: 'TEST_CLIENT', APS_CLIENT_SECRET: 'TEST_SECRET', APS_CALLBACK_URL: 'https://test.example/api/autodesk/callback', AUTODESK_SESSION_SECRET: randomBytes(32).toString('hex') });
@@ -40,9 +40,9 @@ test('connection and logout require same-origin POST', () => {
   assert.equal(trustedMutation(req('POST', 'https://evil.example', 'cross-site'), config), false);
   assert.equal(trustedMutation(req('POST', 'null', 'same-origin'), config), false);
 });
-test('authorization code exchanged only on server; refresh token never stored', async () => {
+test('authorization code returns separate encrypted access and renewal credentials', async () => {
   let calls = 0;
-  const session = await exchange(config, 'TEST_CODE', async (url, init) => {
+  const { session, renewal } = await exchange(config, 'TEST_CODE', async (url, init) => {
     calls++; assert.equal(url, TOKEN_URL); assert.equal(init.redirect, 'error'); assert.equal(init.cache, 'no-store');
     assert.equal(new URLSearchParams(init.body).get('redirect_uri'), config.callbackUrl);
     assert.ok(init.headers.Authorization.startsWith('Basic '));
@@ -50,6 +50,11 @@ test('authorization code exchanged only on server; refresh token never stored', 
   });
   assert.equal(calls,1); assert.equal(session.accessToken,'TEST_TOKEN');
   assert.ok(session.expiresAt <= Date.now() + 3600000); assert.ok(!JSON.stringify(session).includes('TEST_REFRESH'));
+  assert.equal(renewal.refreshToken,'TEST_REFRESH'); assert.equal(renewal.id,session.id);
+  const encrypted=seal(renewal,config.key); assert.ok(!encrypted.includes('TEST_REFRESH'));
+  assert.equal(unseal(encrypted,config.key,'session'),null);
+  assert.equal(unseal(encrypted,config.key,'renewal').refreshToken,'TEST_REFRESH');
+  assert.equal(unseal(encrypted,config.key,'renewal',Date.now()+REFRESH_SECONDS*1000+1000),null);
 });
 test('OAuth rejects malformed tokens, wrong scope and provider errors without leaking secrets or retrying', async () => {
   for (const data of [{access_token:'TEST'}, {access_token:'TEST',token_type:'Bearer',expires_in:0}, {access_token:'TEST',token_type:'Bearer',expires_in:3600,scope:'data:write'}]) await assert.rejects(exchange(config,'TEST',async()=>Response.json(data)),/invalid_response/);
@@ -66,4 +71,21 @@ test('connected identity must come from validated Autodesk userinfo', async () =
   for (const data of [{}, {name:'Invented without id'}, {sub:'TEST_ID',name:''}]) await assert.rejects(profile('TEST',async()=>Response.json(data)),/invalid_response/);
   await assert.rejects(profile('TEST',async()=>new Response(null,{status:401})),/rejected/);
   await assert.rejects(profile('TEST',async()=>{throw new Error('TEST_NETWORK');}),/unavailable/);
+});
+
+
+test('refresh rotates both tokens while retaining the session identity and read-only scopes',async()=>{
+  const previous={kind:'renewal',id:'TEST_STABLE_SESSION',refreshToken:'TEST_OLD_REFRESH',expiresAt:Date.now()+10000};
+  const next=await renew(config,previous,async(url,init)=>{
+    assert.equal(url,TOKEN_URL);const body=new URLSearchParams(init.body);
+    assert.equal(body.get('grant_type'),'refresh_token');assert.equal(body.get('refresh_token'),'TEST_OLD_REFRESH');assert.equal(body.get('scope'),SCOPE);
+    return Response.json({access_token:'TEST_NEW_ACCESS',refresh_token:'TEST_NEW_REFRESH',expires_in:3600,token_type:'Bearer'});
+  });
+  assert.equal(next.session.id,previous.id);assert.equal(next.renewal.id,previous.id);
+  assert.equal(next.renewal.refreshToken,'TEST_NEW_REFRESH');assert.equal(next.session.accessToken,'TEST_NEW_ACCESS');
+  assert.equal(previous.refreshToken,'TEST_OLD_REFRESH');
+  await assert.rejects(renew(config,{...previous,expiresAt:Date.now()-1},()=>{throw Error('must not call');}),/rejected/);
+  await assert.rejects(renew(config,previous,async()=>new Response(null,{status:503})),/unavailable/);
+  await assert.rejects(renew(config,previous,async()=>new Response(null,{status:400})),/rejected/);
+  await assert.rejects(renew(config,previous,async()=>Response.json({access_token:'TEST',token_type:'Bearer',expires_in:3600})),/invalid_response/);
 });

@@ -9,6 +9,7 @@ export async function POST(request: NextRequest) {
   if (!trustedMutation(request, config)) return new NextResponse(null, { status: 403, headers: privateHeaders });
   const response = home(config);
   setCookie(response, config, "session", "", 0);
+  setCookie(response, config, "renewal", "", 0);
   setCookie(response, config, "attempt", "", 0);
   return response;
 }

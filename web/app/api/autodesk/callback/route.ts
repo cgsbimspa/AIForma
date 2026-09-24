@@ -11,16 +11,17 @@ export async function GET(request: NextRequest) {
   const finish = (error?: string) => {
     const response = home(config, error, pending?.returnTo);
     setCookie(response, config, "attempt", "", 0);
-    if (error) setCookie(response, config, "session", "", 0);
+    if (error) { setCookie(response, config, "session", "", 0); setCookie(response, config, "renewal", "", 0); }
     return response;
   };
   if (!validState(request.cookies.get(cookieName(config, "attempt"))?.value, query.get("state"), config)) return finish("invalid_state");
   if (query.has("error")) return finish("cancelled");
   try {
-    const session = await exchange(config, query.get("code") ?? "");
+    const { session, renewal } = await exchange(config, query.get("code") ?? "");
     await profile(session.accessToken);
     const response = finish();
     setCookie(response, config, "session", seal(session, config.key), Math.max(0, Math.floor((session.expiresAt - Date.now()) / 1000)));
+    setCookie(response, config, "renewal", seal(renewal, config.key), Math.max(0, Math.floor((renewal.expiresAt - Date.now()) / 1000)));
     return response;
   } catch { return finish("connection_failed"); }
 }

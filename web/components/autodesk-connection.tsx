@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { autodeskStatus } from "@/lib/autodesk/client";
 import { LogIn, LogOut } from "lucide-react";
 
 type Status = { connected: boolean; configured: boolean; user?: { name: string }; expiresAt?: number; error?: string };
@@ -31,20 +32,20 @@ export function AutodeskConnection() {
       if (inFlight || disposed) return;
       inFlight = true;
       try {
-        const response = await fetch("/api/autodesk/status", { cache: "no-store", signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15_000)]) });
+        const response = await autodeskStatus(AbortSignal.any([controller.signal, AbortSignal.timeout(30_000)]));
         const data: Status = await response.json();
         if (disposed) return;
         if (response.ok && data.connected === true && data.user?.name && data.expiresAt && data.expiresAt > Date.now()) {
           setStatus(data); setNotice("");
           clearTimeout(expiry);
-          expiry = setTimeout(() => { setStatus({ connected: false, configured: true }); setNotice(messages.expired); }, data.expiresAt - Date.now());
+          expiry = setTimeout(() => { void check(); }, Math.max(1000, data.expiresAt - Date.now() - 300_000));
         } else {
           setStatus({ connected: false, configured: data.configured === true });
           if (data.error) setNotice(messages[data.error] ?? messages.unavailable);
           else if (data.configured === false) setNotice("La conexión con Autodesk aún no está configurada.");
         }
       } catch {
-        if (!disposed) { setStatus({ connected: false, configured: true }); setNotice(messages.unavailable); }
+        if (!disposed) { setStatus(previous => ({ ...(previous ?? { connected: false, configured: true }), error: "unavailable" })); setNotice("Conexión por verificar. Reintentando automáticamente; tu sesión se conserva."); }
       } finally { inFlight = false; }
     }
     const onFocus = () => { if (document.visibilityState === "visible") void check(); };
@@ -58,9 +59,9 @@ export function AutodeskConnection() {
   }, []);
 
   return <div className="autodesk-connection">
-    <div className={`connection-state ${status?.connected ? "is-connected" : ""}`} role="status" aria-live="polite">
-      <span className={status?.connected ? "connected-dot" : "disconnected-dot"} aria-hidden="true"/>
-      <span>{status?.connected ? <>Conectado con usuario <strong>{status.user?.name}</strong></> : "Autodesk sin conectar"}</span>
+    <div className={`connection-state ${status?.connected && !status.error ? "is-connected" : ""}`} role="status" aria-live="polite">
+      <span className={status?.connected && !status.error ? "connected-dot" : "disconnected-dot"} aria-hidden="true"/>
+      <span>{status?.error === "unavailable" ? "Conexión por verificar" : status?.connected ? <>Conectado con usuario <strong>{status.user?.name}</strong></> : "Autodesk sin conectar"}</span>
     </div>
     <form method="post" action={status?.connected ? "/api/autodesk/disconnect" : "/api/autodesk/connect"} onSubmit={() => setSubmitting(true)}>
       <button className={`autodesk-button ${status?.connected ? "disconnect" : ""}`} disabled={!status || !status.configured || submitting}>

@@ -9,6 +9,8 @@ export const TOKEN_URL = "https://developer.api.autodesk.com/authentication/v2/t
 export const PROFILE_URL = "https://api.userprofile.autodesk.com/userinfo";
 export const ATTEMPT_TTL = 600;
 export const MAX_SESSION_SECONDS = 3600;
+export const REFRESH_SECONDS = 14 * 24 * 3600;
+export const RENEW_BEFORE_MS = 5 * 60_000;
 
 export type Config = { clientId: string; clientSecret: string; callbackUrl: string; key: Buffer; origin: string; secure: boolean };
 export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -23,9 +25,11 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
 }
 
 const attemptSchema = z.object({ kind: z.literal("attempt"), state: z.string().regex(/^[\w-]{43}$/), expiresAt: z.number().finite(), returnTo: z.enum(["/", "/asistente"]).default("/") });
-const sessionSchema = z.object({ kind: z.literal("session"), accessToken: z.string().min(1).max(6000), expiresAt: z.number().finite(), scopes: z.array(z.string()).optional() });
+const sessionSchema = z.object({ kind: z.literal("session"), accessToken: z.string().min(1).max(6000), expiresAt: z.number().finite(), scopes: z.array(z.string()).optional(), id: z.string().optional() });
+const renewalSchema = z.object({ kind: z.literal("renewal"), refreshToken: z.string().min(1).max(2400), expiresAt: z.number().finite(), id: z.string().min(1) });
 export type Session = z.infer<typeof sessionSchema>;
-type Payload = z.infer<typeof attemptSchema> | Session;
+export type Renewal = z.infer<typeof renewalSchema>;
+type Payload = z.infer<typeof attemptSchema> | Session | Renewal;
 
 // Authenticated encryption: cookies are opaque to the browser and bound to their purpose.
 export function seal(payload: Payload, key: Buffer): string {
@@ -38,6 +42,7 @@ export function seal(payload: Payload, key: Buffer): string {
 }
 export function unseal(value: string | undefined, key: Buffer, kind: "attempt", now?: number): z.infer<typeof attemptSchema> | null;
 export function unseal(value: string | undefined, key: Buffer, kind: "session", now?: number): Session | null;
+export function unseal(value: string | undefined, key: Buffer, kind: "renewal", now?: number): Renewal | null;
 export function unseal(value: string | undefined, key: Buffer, kind: Payload["kind"], now = Date.now()): Payload | null {
   if (!value || value.length > 3800 || !/^[\w-]+$/.test(value)) return null;
   try {
@@ -47,7 +52,7 @@ export function unseal(value: string | undefined, key: Buffer, kind: Payload["ki
     decipher.setAAD(Buffer.from("ai-forma-autodesk-v1"));
     decipher.setAuthTag(bytes.subarray(12, 28));
     const data = JSON.parse(Buffer.concat([decipher.update(bytes.subarray(28)), decipher.final()]).toString("utf8"));
-    const parsed = (kind === "attempt" ? attemptSchema : sessionSchema).safeParse(data);
+    const parsed = (kind === "attempt" ? attemptSchema : kind === "renewal" ? renewalSchema : sessionSchema).safeParse(data);
     return parsed.success && parsed.data.expiresAt > now ? parsed.data : null;
   } catch { return null; }
 }
@@ -78,17 +83,31 @@ async function requestJson(url: string, init: RequestInit, fetcher: typeof fetch
     throw new AutodeskError("unavailable");
   }
 }
-export async function exchange(config: Config, code: string, fetcher: typeof fetch = fetch): Promise<Session> {
+export async function exchange(config: Config, code: string, fetcher: typeof fetch = fetch) {
   if (!code || code.length > 4096) throw new AutodeskError("rejected");
   const startedAt = Date.now();
   const result = await requestJson(TOKEN_URL, {
     method: "POST", headers: { Authorization: `Basic ${Buffer.from(`${config.clientId}:${config.clientSecret}`).toString("base64")}`, "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
     body: new URLSearchParams({ grant_type: "authorization_code", code, redirect_uri: config.callbackUrl }).toString(),
   }, fetcher);
-  const parsed = z.object({ access_token: z.string().min(1).max(6000), token_type: z.string().regex(/^bearer$/i), expires_in: z.number().finite().positive(), scope: z.string().optional() }).safeParse(result);
+  return credentials(result, startedAt, randomBytes(32).toString("base64url"));
+}
+function credentials(result: unknown, startedAt: number, id: string): { session: Session; renewal: Renewal } {
+  const parsed = z.object({ access_token: z.string().min(1).max(6000), refresh_token: z.string().min(1).max(2400), token_type: z.string().regex(/^bearer$/i), expires_in: z.number().finite().positive(), scope: z.string().optional() }).safeParse(result);
   if (!parsed.success || (parsed.data.scope && !SCOPE.split(" ").every(scope => parsed.data.scope!.split(" ").includes(scope)))) throw new AutodeskError("invalid_response");
-  // Do not persist refresh tokens. Reconnect after the short-lived APS token expires.
-  return { kind: "session", accessToken: parsed.data.access_token, scopes: (parsed.data.scope ?? SCOPE).split(" "), expiresAt: startedAt + Math.min(parsed.data.expires_in, MAX_SESSION_SECONDS) * 1000 - 5000 };
+  return {
+    session: { kind: "session", id, accessToken: parsed.data.access_token, scopes: (parsed.data.scope ?? SCOPE).split(" "), expiresAt: startedAt + Math.min(parsed.data.expires_in, MAX_SESSION_SECONDS) * 1000 - 5000 },
+    renewal: { kind: "renewal", id, refreshToken: parsed.data.refresh_token, expiresAt: startedAt + REFRESH_SECONDS * 1000 },
+  };
+}
+export async function renew(config: Config, renewal: Renewal, fetcher: typeof fetch = fetch) {
+  const startedAt = Date.now();
+  if (renewal.expiresAt <= startedAt) throw new AutodeskError("rejected");
+  const result = await requestJson(TOKEN_URL, {
+    method: "POST", headers: { Authorization: `Basic ${Buffer.from(`${config.clientId}:${config.clientSecret}`).toString("base64")}`, "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
+    body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: renewal.refreshToken, scope: SCOPE }).toString(),
+  }, fetcher);
+  return credentials(result, startedAt, renewal.id);
 }
 export function hasDataAccess(session: Session) { return session.scopes?.includes("data:read") === true; }
 export async function profile(accessToken: string, fetcher: typeof fetch = fetch) {
