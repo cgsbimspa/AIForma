@@ -15,9 +15,9 @@ export async function GET(request:NextRequest) {
   if(!memoryConfigured())return NextResponse.json({configured:false,conversations:[]},{headers:privateHeaders});
   let input;try{input=schema.parse({scope:JSON.parse(request.nextUrl.searchParams.get("scope")??"null"),conversationId:request.nextUrl.searchParams.get("conversationId")??undefined});}catch{throw new DataError("invalid_query",400);}
   const actor=await memoryActor(request,input.scope),store=memoryStore();
-  const result=input.conversationId?await store.messages(actor,input.scope,input.conversationId):{conversations:await store.list(actor,input.scope)};
+  const result=input.conversationId?await store.messages(actor,input.scope,input.conversationId):{conversations:await store.listProject(actor)};
   return NextResponse.json({configured:true,...result},{headers:privateHeaders});
- }catch(error){return apiError(error);}
+ }catch(error){if(error instanceof Error&&error.message==="history_expired_or_out_of_scope")return NextResponse.json({error:"history_not_found"},{status:404,headers:privateHeaders});return apiError(error);}
 }
 export async function POST(request:NextRequest) {
  try {

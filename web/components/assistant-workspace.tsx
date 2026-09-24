@@ -70,6 +70,11 @@ function ConnectedWorkspace({ aiConfigured, invalidate }: { aiConfigured: boolea
   const setSelection=useCallback((next:Selection)=>setNavigation(current=>JSON.stringify(current.selection.scope)===JSON.stringify(next.scope)?current:{selection:next,previous:[...current.previous,current.selection],initial:recallConversation(snapshots.current,JSON.stringify(next.scope))}),[]);
   const back=()=>setNavigation(current=>current.previous.length?{selection:current.previous.at(-1)!,previous:current.previous.slice(0,-1),initial:recallConversation(snapshots.current,JSON.stringify(current.previous.at(-1)!.scope))}:current);
   const saveSnapshot=useCallback((key:string,data:ChatSnapshot,expiresAt:number)=>rememberConversation(snapshots.current,key,data,expiresAt),[]);
+  const [chatRevision,setChatRevision]=useState(0);
+  function restoreSelection(scope:DataScope,initial:ConversationSnapshot<ChatSnapshot>){
+    setNavigation(current=>({selection:[current.selection,...current.previous].find(row=>JSON.stringify(row.scope)===JSON.stringify(scope))??{scope,label:scope.kind==='file'?'Archivo de la conversación':scope.kind==='folder'?'Carpeta de la conversación':'Proyecto de la conversación'},previous:[...current.previous,current.selection],initial}));
+    setChatRevision(n=>n+1);
+  }
   const [revision, setRevision] = useState(0);
   const [filter, setFilter] = useState("");
   const scopeKey = JSON.stringify(selection.scope);
@@ -81,7 +86,7 @@ function ConnectedWorkspace({ aiConfigured, invalidate }: { aiConfigured: boolea
       <div className="forma-tree" key={revision}><Branch query={{ operation: "hubs", hubId: null, projectId: null, folderId: null, page: 0 }} selection={selection} select={setSelection} invalidate={invalidate} filter={filter}/></div>
       <footer className="explorer-footer"><ShieldCheck size={15}/><span>Sólo lectura · Abre las carpetas para ver su contenido. Los permisos de Autodesk se respetan.</span></footer>
     </section>
-    <ChatPanel key={scopeKey} initial={navigation.initial} saveSnapshot={saveSnapshot} onBack={navigation.previous.length?back:undefined} previousLabel={navigation.previous.at(-1)?.label} select={setSelection} selection={selection} aiConfigured={aiConfigured} invalidate={invalidate}/>
+    <ChatPanel key={`${scopeKey}:${chatRevision}`} restoreSelection={restoreSelection} initial={navigation.initial} saveSnapshot={saveSnapshot} onBack={navigation.previous.length?back:undefined} previousLabel={navigation.previous.at(-1)?.label} select={setSelection} selection={selection} aiConfigured={aiConfigured} invalidate={invalidate}/>
   </div>;
 }
 type BranchProps = { query: DataQuery; selection: Selection; select: (selection: Selection) => void; invalidate: (code: string) => void; filter: string; folderIds?: string[]; path?: string };
@@ -140,19 +145,24 @@ function TreeRow(props: BranchProps & { entry: Entry }) {
   </div>{!leaf && open && <div className="tree-children"><Branch {...props} query={next} folderIds={entry.type === "folders" ? [...folderIds, entry.id] : []} path={entry.type === "hubs" ? "" : path}/></div>}</div>;
 }
 type Message = { historical?: boolean; expires_at?: string; role: "user" | "assistant"; content: string; sources?: Source[]; search?: SearchBatch; answer?: DocumentAnswerData };
-type ChatSnapshot={messages:Message[];draft:string;mode:DocumentMode|"search";conversationId?:string;historyExpiresAt?:string;memoryNotice:string;error:string;activeSearch:number|null;scrollTop:number};
-function ChatPanel({ selection, select, aiConfigured, invalidate, initial, saveSnapshot, onBack, previousLabel }: { initial?:ConversationSnapshot<ChatSnapshot>;saveSnapshot:(key:string,data:ChatSnapshot,expiresAt:number)=>void;onBack?:()=>void;previousLabel?:string; select: (selection: Selection) => void; selection: Selection; aiConfigured: boolean; invalidate: (code: string) => void }) {
+type ChatState={messages:Message[];draft:string;mode:DocumentMode|"search";conversationId?:string;historyExpiresAt?:string;memoryNotice:string;error:string;activeSearch:number|null;scrollTop:number};
+type LocalChat={id:string;title:string;expiresAt:number;data:ChatState};
+type ChatSnapshot=ChatState&{archives?:LocalChat[]};
+function ChatPanel({ restoreSelection, selection, select, aiConfigured, invalidate, initial, saveSnapshot, onBack, previousLabel }: { restoreSelection:(scope:DataScope,snapshot:ConversationSnapshot<ChatSnapshot>)=>void; initial?:ConversationSnapshot<ChatSnapshot>;saveSnapshot:(key:string,data:ChatSnapshot,expiresAt:number)=>void;onBack?:()=>void;previousLabel?:string; select: (selection: Selection) => void; selection: Selection; aiConfigured: boolean; invalidate: (code: string) => void }) {
   const documentSelection = selection.scope.kind === "file" || selection.scope.kind === "folder";
   const [mode, setMode] = useState<DocumentMode | "search">(initial?.data.mode ?? selection.initialMode ?? (selection.scope.kind === "file" ? "ask" : "search"));
   const [messages, setMessages] = useState<Message[]>(initial?.data.messages??[]), [draft, setDraft] = useState(initial?.data.draft??"");
+  const [archives,setArchives]=useState<LocalChat[]>(initial?.data.archives??[]);
+  const [historyRevision,setHistoryRevision]=useState(0);
   const conversationId = useRef<string | undefined>(initial?.data.conversationId);
+  const [activeId,setActiveId]=useState(initial?.data.conversationId);
   const [memoryNotice,setMemoryNotice] = useState(initial?.data.memoryNotice??"");
   const [historyExpiresAt,setHistoryExpiresAt] = useState<string | undefined>(initial?.data.historyExpiresAt);
   const [createdExpiry]=useState(()=>initial?.expiresAt??Date.now()+navigationRetentionMs);
   const expiresAt=useRef(createdExpiry);
   function rememberResult(result: {memory?:{status:string;conversationId?:string;expiresAt?:string}}) {
     const memory=result.memory;if(!memory)return;
-    if(memory.status==="saved"){conversationId.current=memory.conversationId;setHistoryExpiresAt(memory.expiresAt);setMemoryNotice("Historial guardado · retención de 5 días desde su creación.");}
+    if(memory.status==="saved"){conversationId.current=memory.conversationId;setActiveId(memory.conversationId);setHistoryExpiresAt(memory.expiresAt);setMemoryNotice("Historial guardado · retención de 5 días desde su creación.");}
     else if(memory.status==="not_configured")setMemoryNotice("Historial persistente pendiente de configuración.");
     else if(memory.status==="project_required")setMemoryNotice("Selecciona un proyecto para guardar esta conversación.");
     else setMemoryNotice("Esta respuesta no pudo guardarse en el historial. Tu conversación abierta se conserva.");
@@ -162,7 +172,7 @@ function ChatPanel({ selection, select, aiConfigured, invalidate, initial, saveS
     if(historyExpiresAt)expiries.push(Date.parse(historyExpiresAt));
     expiries.push(expiresAt.current);
     if(!expiries.length)return;
-    const timer=setTimeout(()=>{expiresAt.current=Date.now()+navigationRetentionMs;setMessages([]);setDraft("");conversationId.current=undefined;setHistoryExpiresAt(undefined);setMemoryNotice("El historial venció y fue retirado del contexto reciente.");},Math.max(0,Math.min(...expiries)-Date.now()));
+    const timer=setTimeout(()=>{expiresAt.current=Date.now()+navigationRetentionMs;setMessages([]);setDraft("");conversationId.current=undefined;setActiveId(undefined);setHistoryExpiresAt(undefined);setMemoryNotice("El historial venció y fue retirado del contexto reciente.");},Math.max(0,Math.min(...expiries)-Date.now()));
     return()=>clearTimeout(timer);
   },[messages,historyExpiresAt]);
   const [busy, setBusy] = useState(false), [error, setError] = useState(initial?.data.error??"");
@@ -173,20 +183,41 @@ function ChatPanel({ selection, select, aiConfigured, invalidate, initial, saveS
   useEffect(()=>{
     const deadlines=[expiresAt.current,...messages.flatMap(m=>m.expires_at?[Date.parse(m.expires_at)]:[]),...(historyExpiresAt?[Date.parse(historyExpiresAt)]:[])].filter(Number.isFinite);
     expiresAt.current=Math.min(...deadlines);
-    snapshot.current={messages,draft,mode,conversationId:conversationId.current,historyExpiresAt,memoryNotice,error:busy?"Consulta detenida al cambiar de ubicación. Los resultados recibidos se conservan; puedes continuar la búsqueda.":error,activeSearch,scrollTop:scrollPosition.current};
-  },[messages,draft,mode,historyExpiresAt,memoryNotice,error,busy,activeSearch]);
+    snapshot.current={archives,messages,draft,mode,conversationId:conversationId.current,historyExpiresAt,memoryNotice,error:busy?"Consulta detenida al cambiar de ubicación. Los resultados recibidos se conservan; puedes continuar la búsqueda.":error,activeSearch,scrollTop:scrollPosition.current};
+  },[archives,messages,draft,mode,historyExpiresAt,memoryNotice,error,busy,activeSearch]);
   const selectionKey=JSON.stringify(selection.scope);
   useEffect(()=>()=>{if(snapshot.current)saveSnapshot(selectionKey,{...snapshot.current,scrollTop:scrollPosition.current},expiresAt.current);},[selectionKey,saveSnapshot]);
   const firstScroll=useRef(true);
   const controller = useRef<AbortController | null>(null), bottom = useRef<HTMLDivElement | null>(null);
   useEffect(() => () => controller.current?.abort(), []);
   useEffect(() => { if(firstScroll.current){firstScroll.current=false;if(messageList.current)messageList.current.scrollTop=scrollPosition.current;return;} bottom.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }); }, [messages.length, busy, error]);
+  function archiveCurrent(){
+    if(!messages.length||conversationId.current)return;
+    const data:ChatState={messages,draft,mode,historyExpiresAt,memoryNotice,error,activeSearch,scrollTop:scrollPosition.current};
+    setArchives(rows=>[{id:crypto.randomUUID(),title:messages.find(m=>m.role==='user')?.content.slice(0,160)??'Consulta de esta sesión',expiresAt:expiresAt.current,data},...rows].filter(row=>row.expiresAt>Date.now()).slice(0,50));
+  }
+  function newConversation(){
+    controller.current?.abort();archiveCurrent();
+    conversationId.current=undefined;setActiveId(undefined);expiresAt.current=Date.now()+navigationRetentionMs;
+    setHistoryExpiresAt(undefined);setMessages([]);setDraft('');setError('');setBusy(false);setActiveSearch(null);
+    setMode(selection.scope.kind==='file'?'ask':'search');scrollPosition.current=0;
+    setHistoryRevision(n=>n+1);setMemoryNotice('Nueva conversación lista. Se mantiene la ubicación seleccionada; la consulta anterior está disponible en Historial si fue guardada o conserva una copia de sesión.');
+  }
+  function restoreChat(data:ChatState,deadline:number){
+    if(deadline<=Date.now()){setError('Esta conversación venció. Actualiza el historial.');return;}
+    controller.current?.abort();archiveCurrent();expiresAt.current=deadline;conversationId.current=data.conversationId;setActiveId(data.conversationId);
+    setHistoryExpiresAt(data.historyExpiresAt);setMessages(data.messages);setDraft(data.draft);setMode(data.mode);setError('');setBusy(false);setActiveSearch(null);
+    setMemoryNotice('Conversación recuperada. Las respuestas anteriores no sustituyen la verificación actual de los documentos.');
+    setHistoryRevision(n=>n+1);
+  }
+  useEffect(()=>{const timer=setInterval(()=>setArchives(rows=>rows.some(row=>row.expiresAt<=Date.now())?rows.filter(row=>row.expiresAt>Date.now()):rows),1000);return()=>clearInterval(timer);},[]);
   async function search(index: number, terms: SearchTerms, abort: AbortController, previous?: SearchBatch, stage: SearchStage = previous?.stage ?? (selection.scope.kind === "file" ? "files" : "folders")) {
     setActiveSearch(index);
     let current = previous;
     for (let batch = 0; batch < 15 && !abort.signal.aborted; batch++) {
       const response = await autodeskFetch("/api/assistant/search", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ conversationId: conversationId.current, interactionId: crypto.randomUUID(), scope: selection.scope, stage, terms, cursor: current?.cursor ?? null }), signal: abort.signal });
       const result = await response.json();
+      if (abort.signal.aborted) return;
       rememberResult(result);
       if (!response.ok) { invalidate(result.error); throw new Error(result.error); }
       if (abort.signal.aborted) return;
@@ -229,6 +260,7 @@ function ChatPanel({ selection, select, aiConfigured, invalidate, initial, saveS
     try {
       const response = await autodeskFetch(requestedMode === "search" ? "/api/assistant/chat" : "/api/assistant/documents", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(requestedMode === "search" ? { conversationId: conversationId.current, interactionId: crypto.randomUUID(), scope: selection.scope, messages: outgoing.slice(-11).map(m => ({ role: m.role, content: (m.historical && m.role === "assistant" ? "HISTORIAL NO VERIFICADO COMO EVIDENCIA ACTUAL: " : "") + m.content.slice(0, 3800) })) } : { conversationId: conversationId.current, interactionId: crypto.randomUUID(), scope: selection.scope, mode: requestedMode, question: text.trim() }), signal: abort.signal });
       const result = await response.json();
+      if (abort.signal.aborted) return;
       rememberResult(result);
       if (!response.ok) { invalidate(result.error); throw new Error(result.error); }
       if (!abort.signal.aborted) {
@@ -241,9 +273,13 @@ function ChatPanel({ selection, select, aiConfigured, invalidate, initial, saveS
   }
   const suggestion = selection.scope.kind === "all" ? "Muéstrame los proyectos a los que tengo acceso." : selection.scope.kind === "folder" ? "Muéstrame el contenido de esta carpeta." : selection.scope.kind === "file" ? "Muéstrame el archivo seleccionado." : "Muéstrame las carpetas raíz de este proyecto.";
   return <section className="chat-panel" aria-label="Asistente IA con OpenAI">
-    <PanelHeading icon={<BrainCircuit size={21}/>} title="Tu asistente de proyectos" subtitle="OpenAI · Consultas con fuentes"><button type="button" className="icon-button" disabled={busy || !messages.length} aria-label="Limpiar conversación" title="Limpiar conversación" onClick={() => { setMessages([]); setError(""); conversationId.current=undefined; setHistoryExpiresAt(undefined); setMemoryNotice(""); }}><Trash2 size={16}/></button></PanelHeading>
+    <PanelHeading icon={<BrainCircuit size={21}/>} title="Tu asistente de proyectos" subtitle="OpenAI · Consultas con fuentes"><button type="button" className="icon-button" disabled={!messages.length && !draft && !busy} aria-label="Limpiar conversación" title="Iniciar una nueva conversación" onClick={newConversation}><Trash2 size={16}/></button></PanelHeading>
     {onBack&&<div className="memory-notice"><button type="button" className="assistant-link" onClick={onBack}>← Volver a la consulta anterior</button><span> · {previousLabel}</span></div>}
-    <RecentHistory scope={selection.scope} busy={busy} onNew={()=>{conversationId.current=undefined;setHistoryExpiresAt(undefined);setMessages([]);setMemoryNotice("");setError("");}} onRestore={(id,rows)=>{conversationId.current=id;setHistoryExpiresAt(rows[0]?.expires_at);setMessages(rows);setError("");setMemoryNotice("Historial recuperado. Cada consulta vuelve a verificar las fuentes actuales.");}}/>
+    <RecentHistory key={historyRevision} scope={selection.scope} busy={busy} revision={historyRevision} activeId={activeId} local={archives} onLocal={id=>{const row=archives.find(a=>a.id===id);if(row)restoreChat(row.data,row.expiresAt);}} onNew={newConversation} onRestore={(id,rows,scope,expiry)=>{
+      const data:ChatSnapshot={messages:rows,draft:'',mode:scope.kind==='file'?'ask':'search',conversationId:id,historyExpiresAt:expiry,memoryNotice:'Historial recuperado. Cada consulta vuelve a verificar las fuentes actuales.',error:'',activeSearch:null,scrollTop:0};
+      if(JSON.stringify(scope)===selectionKey)restoreChat(data,Date.parse(expiry));
+      else{controller.current?.abort();restoreSelection(scope,{data,expiresAt:Date.parse(expiry)});}
+    }}/>
     {memoryNotice&&<p className="memory-notice" role="status">{memoryNotice}</p>}
     <div className="chat-scope"><span className="small-label">{selection.scope.kind === "file" ? "SÓLO ESTE ARCHIVO" : selection.scope.kind === "folder" ? "CARPETA Y SUBCARPETAS" : "CONSULTANDO"}</span><span>{selection.scope.kind === "file" ? <File size={14}/> : selection.scope.kind === "folder" ? <Folder size={14}/> : <Database size={14}/>}<span>{selection.path ?? selection.label}</span></span></div>
     <div ref={messageList} onScroll={event=>{scrollPosition.current=event.currentTarget.scrollTop;}} className="chat-messages" aria-live="polite" aria-relevant="additions text">

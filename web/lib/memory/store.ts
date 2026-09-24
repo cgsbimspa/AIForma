@@ -41,6 +41,17 @@ export function createMemoryStore(tx: Transaction, key: Buffer) {
     async list(actor:Actor,scope:unknown) {
       return tx(actor,q=>q("SELECT id,created_at,expires_at FROM memory_conversation WHERE scope_key=$1 AND expires_at>now() ORDER BY created_at DESC LIMIT 50",[scopeKey(scope)]));
     },
+    async listProject(actor:Actor) {
+      // RLS still limits this list to the verified project, organization and user.
+      return tx(actor,async q=>{
+        const rows=await q(`SELECT c.id,c.scope,c.created_at,c.expires_at,m.id AS message_id,m.content
+          FROM memory_conversation c LEFT JOIN LATERAL (
+            SELECT id,content FROM memory_message WHERE conversation_id=c.id AND role='user' AND expires_at>now() ORDER BY position LIMIT 1
+          ) m ON true WHERE c.expires_at>now() ORDER BY c.created_at DESC LIMIT 50`);
+        return rows.map(row=>({id:row.id,scope:row.scope,created_at:row.created_at,expires_at:row.expires_at,
+          title:row.content?String(decryptHistory(String(row.content),key,binding(actor,String(row.message_id)))).slice(0,160):"Consulta sin pregunta registrada"}));
+      });
+    },
     async messages(actor:Actor,scope:unknown,id:string) {
       return tx(actor,async q=>{
         const conversation=await q("SELECT id,expires_at FROM memory_conversation WHERE id=$1 AND scope_key=$2 AND expires_at>now()",[id,scopeKey(scope)]);

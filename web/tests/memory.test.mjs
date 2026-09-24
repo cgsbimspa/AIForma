@@ -65,3 +65,30 @@ test('history encryption is bound to tenant, user and record, and rejects tamper
  assert.throws(()=>decryptHistory(value,key,'OTHER_USER'));assert.throws(()=>decryptHistory(value,randomBytes(32),'TEST_BINDING'));
  const tampered=Buffer.from(value,'base64');tampered[15]^=1;assert.throws(()=>decryptHistory(tampered.toString('base64'),key,'TEST_BINDING'));
 });
+
+test('project history finds other folders while restoring only their original scope',async()=>{
+ const db=new PGlite();await db.waitReady;
+ try{
+  await db.exec(await readFile(new URL('../db/memory.sql',import.meta.url),'utf8'));
+  const tx=(actor,fn)=>db.transaction(async db=>{
+   await db.exec('SET LOCAL ROLE ai_forma_memory');
+   await db.query("SELECT set_config('app.organization_id',$1,true),set_config('app.project_id',$2,true),set_config('app.user_id',$3,true)",[actor.organizationId,actor.projectId,actor.userId]);
+   return fn(async(text,values=[])=>(await db.query(text,values)).rows);
+  });
+  const actor={organizationId:'TEST_ORG',projectId:'TEST_PROJECT',userId:'TEST_USER'};
+  const folder={kind:'folder',hubId:actor.organizationId,projectId:actor.projectId,folderIds:['TEST_FOLDER']};
+  const file={...folder,kind:'file',itemId:'TEST_FILE'};
+  const store=createMemoryStore(tx,randomBytes(32));
+  const capture={scope:folder,prompt:'TEST pregunta carpeta',response:'TEST respuesta',tool:'browse',parameters:{},result:{},action:'browse',status:'success',duration:1};
+  const first=await store.capture(actor,capture);
+  const second=await store.capture(actor,{...capture,scope:file,prompt:'TEST pregunta archivo'});
+  const list=await store.listProject(actor);
+  assert.equal(list.length,2);assert.equal(list.find(row=>row.id===second.conversationId).title,'TEST pregunta archivo');
+  assert.deepEqual(list.find(row=>row.id===second.conversationId).scope,file);
+  assert.equal((await store.messages(actor,file,second.conversationId)).messages.length,2);
+  await assert.rejects(store.messages(actor,folder,second.conversationId));
+  for(const other of [{...actor,userId:'TEST_OTHER'},{...actor,projectId:'TEST_OTHER'},{...actor,organizationId:'TEST_OTHER'}])assert.equal((await store.listProject(other)).length,0);
+  await db.query("UPDATE memory_conversation SET created_at=created_at-interval '6 days',expires_at=expires_at-interval '6 days' WHERE id=$1",[first.conversationId]);
+  assert.equal((await store.listProject(actor)).length,1);
+ }finally{await db.close();}
+});
