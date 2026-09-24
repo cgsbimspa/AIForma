@@ -149,7 +149,7 @@ function ChatPanel({ selection, select, aiConfigured, invalidate }: { select: (s
       current = { ...next, hits: mergeSearchHits(current?.hits ?? [], next.hits), pageProgress: [...new Map([...(current?.pageProgress ?? []), ...(next.pageProgress ?? [])].map(p => [p.key, p])).values()].slice(-30), issues: [...(current?.issues ?? []), ...next.issues].slice(0, 100) };
       const snapshot = current;
       setMessages(existing => existing.map((m, i) => i === index ? { ...m, content: `Búsqueda ${snapshot.done && !snapshot.warnings.length ? "finalizada" : "parcial"}: ${snapshot.stats.matched} coincidencias verificadas. Términos: ${terms.map(t => t.join(" + ")).join(" / ")}.`, search: snapshot } : m));
-      if (!current.cursor) return;
+      if (!current.cursor || next.issues.some(issue => issue.code === "rate_limited")) return;
     }
   }
   async function resume(index: number) {

@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 import { browse, DataError, querySchema, verifyProject, verifyLocation } from "../autodesk/data.ts";
 import type { DataScope, Entry } from "../autodesk/data.ts";
-import { downloadDocument, itemTip, supportedDocument } from "../documents/download.ts";
+import { itemTip, supportedDocument } from "../documents/download.ts";
+import { createDocumentReader, readDocument } from "../documents/reader.ts";
 import { parseDocument } from "../documents/parser.ts";
 import type { ParsedDocument } from "../documents/parser.ts";
 import { matchesTerms } from "./contracts.ts";
@@ -40,19 +41,36 @@ function metadataMatches(entry: Entry, terms: SearchTerms): SearchMatch[] {
 }
 export async function advanceSearch(state: SearchState, token: string, signal?: AbortSignal, options: { fetcher?: typeof fetch; parser?: typeof parseDocument; milliseconds?: number; steps?: number } = {}) {
   const fetcher = options.fetcher ?? fetch, parser = options.parser ?? parseDocument, started = Date.now();
+  const read = options.fetcher || options.parser ? createDocumentReader({ fetcher, parser }) : readDocument;
   const pageProgress: PageProgress[] = [];
   const hits: SearchHit[] = [], issues: SearchIssue[] = [], seen = new Set(state.seen);
   const warning = (code: string) => { if (!state.warnings.includes(code)) state.warnings.push(code); };
-  for (let steps = 0; state.queue.length && steps < (options.steps ?? 12) && Date.now() - started < (options.milliseconds ?? 8_000); steps++) {
+  let steps = 0, stop = false;
+  while (!stop && state.queue.length && steps < (options.steps ?? 32) && Date.now() - started < (options.milliseconds ?? 2500)) {
     signal?.throwIfAborted();
     if (Date.now() >= state.expiresAt) throw new DataError("expired", 401);
     // Prefer paths that match the request, but continue traversing all other paths.
     const best = state.queue.findIndex(t => matchesTerms(t.path, state.terms));
-    const [task] = state.queue.splice(best >= 0 ? best : 0, 1);
+    const [first] = state.queue.splice(best >= 0 ? best : 0, 1);
+    const tasks = [first];
+    // Only independent metadata calls run concurrently. OCR remains sequential
+    // to avoid multiplying 512 MB workers and starving other requests.
+    if (first.kind === "list") while (tasks.length < 4 && steps + tasks.length < (options.steps ?? 32)) {
+      let index = state.queue.findIndex(t => t.kind === "list" && matchesTerms(t.path, state.terms));
+      if (index < 0) index = state.queue.findIndex(t => t.kind === "list");
+      if (index < 0) break;
+      tasks.push(state.queue.splice(index, 1)[0]);
+    }
+    const pages = await Promise.allSettled(tasks.map(task => task.kind === "list" ? browse(token, task.query, state.scope, fetcher, signal, task.query.folderId ? [task.query.folderId] : []) : Promise.resolve(null)));
+    for (let index = 0; index < tasks.length; index++) {
+    const task = tasks[index]; steps++;
     try {
       if (task.kind === "list") {
         // Queue descendants originate exclusively from verified listings and the authenticated cursor.
-        const page = await browse(token, task.query, state.scope, fetcher, signal, task.query.folderId ? [task.query.folderId] : []); state.stats.requests++;
+        state.stats.requests++;
+        const outcome = pages[index];
+        if (outcome.status === "rejected") throw outcome.reason;
+        const page = outcome.value!;
         if (page.evidence.partial) warning("autodesk_partial");
         if (page.evidence.nextPage !== null) state.queue.push({ ...task, query: { ...task.query, page: page.evidence.nextPage } });
         for (const entry of page.entries) {
@@ -88,8 +106,7 @@ export async function advanceSearch(state: SearchState, token: string, signal?: 
           if (task.version && task.version.id !== version.id) throw new DataError("document_changed", 409);
           Object.assign(hit, { version: version.number, versionId: version.id, webUrl: version.webUrl ?? hit.webUrl, endpoint: version.endpoint, fetchedAt: version.fetchedAt });
           if (state.stage === "files") { if (!task.nameHit) state.stats.matched++; hits.push(hit); continue; }
-          const bytes = await downloadDocument(token, version, fetcher, signal);
-          const parsed = await parser(bytes, version.name, signal, { startPage: task.startPage ?? 1 });
+          const parsed = await read(token, version, task.startPage ?? 1, signal);
           if (parsed.nextPage && (parsed.nextPage <= (task.startPage ?? 1) || parsed.nextPage > (parsed.pages ?? 0) || parsed.pageEnd !== parsed.nextPage - 1)) throw new DataError("invalid_response");
           hit.throughPage = parsed.pageEnd; hit.totalPages = parsed.pages; hit.nextPage = parsed.nextPage;
           hit.matches.push(...findExcerpts(parsed, state.terms));
@@ -104,19 +121,22 @@ export async function advanceSearch(state: SearchState, token: string, signal?: 
           signal?.throwIfAborted();
           if (error instanceof DataError && error.status === 401) throw error;
           hit.contentStatus = error instanceof DataError ? error.code : "document_unavailable";
+          if (hit.contentStatus === "rate_limited") { state.queue.push(task); stop = true; warning("rate_limited"); issues.push({ path: task.path, code: "rate_limited" }); continue; }
           if (task.startPage && task.totalPages) pageProgress.push({ key: hit.key, path: hit.path, throughPage: task.startPage - 1, totalPages: task.totalPages, status: hit.contentStatus });
           if (!task.unreadCounted) state.stats.unread++; warning(hit.contentStatus); issues.push({ path: task.path, code: hit.contentStatus });
         }
         if (hit.matches.length || task.nameHit) { if (!task.nameHit && hit.matches.length) state.stats.matched++; hits.push(hit); }
         // Return the completed page batch immediately: the next request resumes safely.
-        if (hit.nextPage) break;
+        if (hit.nextPage) stop = true;
       }
     } catch (error) {
       signal?.throwIfAborted();
       if (error instanceof DataError && error.status === 401) throw error;
       const code = error instanceof DataError ? error.code : "unavailable";
+      if (code === "rate_limited") { state.queue.push(task); stop = true; }
       warning(code); issues.push({ path: task.path || "Cuentas Autodesk", code });
     }
+  }
   }
   state.seen = [...seen];
   return { stage: state.stage, pageProgress, hits, issues, stats: state.stats, warnings: state.warnings, pending: state.queue.length, done: state.queue.length === 0, terms: state.terms, startedAt: state.startedAt };

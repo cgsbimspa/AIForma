@@ -1,7 +1,8 @@
 import { browse, DataError, querySchema } from "../autodesk/data.ts";
 import type { DataScope } from "../autodesk/data.ts";
 import { startSearch } from "../search/engine.ts";
-import { itemTip, downloadDocument, supportedDocument } from "../documents/download.ts";
+import { itemTip, supportedDocument } from "../documents/download.ts";
+import { createDocumentReader, readDocument } from "../documents/reader.ts";
 import { parseDocument } from "../documents/parser.ts";
 import type { DocumentEvidence, DocumentSource } from "./document-contracts.ts";
 
@@ -9,6 +10,7 @@ import type { DocumentEvidence, DocumentSource } from "./document-contracts.ts";
 export async function collectDocumentEvidence(token: string, scope: DataScope, expiresAt: number, signal?: AbortSignal, options: { fetcher?: typeof fetch; parser?: typeof parseDocument; maxDocuments?: number; maxCharacters?: number; milliseconds?: number } = {}): Promise<DocumentEvidence> {
   if (scope.kind !== "file" && scope.kind !== "folder") throw new DataError("document_selection_required", 400);
   const fetcher = options.fetcher ?? fetch, parser = options.parser ?? parseDocument;
+  const read = options.fetcher || options.parser ? createDocumentReader({ fetcher, parser }) : readDocument;
   const started = Date.now(), state = await startSearch(token, scope, [["documentos"]], expiresAt, fetcher, signal);
   const result: DocumentEvidence = { sources: [], passages: [], partial: false, warnings: [], pending: 0, scopePath: state.queue[0].path };
   const warn = (message: string) => { result.partial = true; if (!result.warnings.includes(message)) result.warnings.push(message); };
@@ -41,10 +43,9 @@ export async function collectDocumentEvidence(token: string, scope: DataScope, e
           documents++;
           const version = await itemTip(token, task.projectId, task.entry.id, fetcher, signal);
           Object.assign(source, { version: version.number, versionId: version.id, webUrl: version.webUrl ?? source.webUrl, endpoint: version.endpoint, fetchedAt: version.fetchedAt });
-          const bytes = await downloadDocument(token, version, fetcher, signal);
           let startPage = 1, hadIssues = false;
           do {
-          const parsed = await parser(bytes, version.name, signal, { startPage });
+          const parsed = await read(token, version, startPage, signal);
           if (parsed.nextPage && (parsed.nextPage <= startPage || parsed.nextPage > (parsed.pages ?? 0) || parsed.pageEnd !== parsed.nextPage - 1)) throw new DataError("invalid_response");
           source.nextPage = parsed.nextPage; source.throughPage = parsed.pageEnd; source.totalPages = parsed.pages;
           hadIssues ||= Boolean(parsed.textlessPages || parsed.partial || (parsed.status !== "parsed" && !parsed.nextPage));
