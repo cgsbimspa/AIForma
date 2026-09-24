@@ -44,7 +44,7 @@ export function parameter(properties, name) {
   // Duplicate names with conflicting values require explicit category mapping.
   return { value: unique.length === 1 ? unique[0] : '', originals: matching.map(p => p.displayValue), ambiguous: unique.length > 1 };
 }
-export function classifyProperties(properties) {
+export function classifyProperties(properties, elementName = '') {
   const specialty = parameter(properties, 'Especialidad');
   const subspecialty = parameter(properties, 'Sub Especialidad');
   const type = parameter(properties, 'Nombre de tipo');
@@ -54,12 +54,14 @@ export function classifyProperties(properties) {
   // board is not steel merely because another field mentions Metalcon.
   const label = normalizeLabel(type.value);
   const metalcon = value => /(?:^|\s)met(?:al|l)\s*con(?:\s|\d|$)/.test(normalizeLabel(value));
-  const steel = /(?:^|\s)(?:40ca085|viga perfil)(?:\s|$)/.test(label) || metalcon(label);
+  const steelType = /(?:^|\s)(?:40ca085|viga perfil)(?:\s|$)/.test(label) || metalcon(label);
+  const steelName = metalcon(elementName);
+  const steel = steelType || steelName;
   const board = /(?:^|\s)(?:pl|placa|placas|tablero|tableros)\s+osb(?:\s|$)/.test(label);
   if (type.ambiguous || steel && board) return { specialties: [], subspecialty: '', status: 'ambiguous', ...evidence };
   if (steel || board) {
     const group = steel ? 'Acero Galvanizado' : 'Placas de techumbre';
-    return { ...evidence, specialties: ['Cubierta'], subspecialty: group, status: 'read', association: { ...associateSubspecialty(group), original: evidence.typeName, parameter: 'Nombre de tipo' } };
+    return { ...evidence, specialties: ['Cubierta'], subspecialty: group, status: 'read', association: { ...associateSubspecialty(group), original: steelName && !steelType ? elementName : evidence.typeName, parameter: steelName && !steelType ? 'Nombre de elemento Autodesk' : 'Nombre de tipo' } };
   }
   if (specialty.ambiguous || subspecialty.ambiguous) return { specialties: [], subspecialty: '', status: 'ambiguous', ...evidence };
   if (association.group === 'Acero Galvanizado' || specialty.value === 'acero galvanizado' || metalcon(specialty.value) || metalcon(subspecialty.value)) return { ...evidence, specialties: ['Cubierta'], subspecialty: 'Acero Galvanizado', status: 'read' };
@@ -112,7 +114,7 @@ export async function readViewClassification(model, progress = () => {}, timeout
     const batch = ordered.slice(offset, offset + 400);
     const results = await call((ok, fail) => model.getBulkProperties2(batch, { ignoreHidden: false, needsExternalId: true }, ok, fail));
     if (!Array.isArray(results) || results.length !== batch.length || new Set(results.map(r => r.dbId)).size !== batch.length || results.some(r => !batch.includes(r.dbId) || !Array.isArray(r.properties))) throw new Error('incomplete_classification');
-    for (const result of results) elements.push({ dbId: result.dbId, externalId: result.externalId ?? null, properties: result.properties, ...classifyProperties(result.properties) });
+    for (const result of results) elements.push({ dbId: result.dbId, externalId: result.externalId ?? null, properties: result.properties, ...classifyProperties(result.properties, result.name) });
     progress(elements.length, ordered.length);
   }
   return elements;

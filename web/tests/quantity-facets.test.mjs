@@ -10,6 +10,9 @@ test('roof variants use Cubierta exclusively and V dimensions override obsolete 
     assert.deepEqual(classified.specialties,['Cubierta']);assert.equal(classified.subspecialty,'Acero Galvanizado');
   }
   assert.deepEqual(classifyProperties([p('Especialidad','Acero Galvanizado')]).specialties,['Cubierta']);
+  const named=classifyProperties([p('Nombre de tipo','TEST_60CA085'),p('Sub Especialidad','Cerchas')],'Metalcon C [TEST]');
+  assert.deepEqual(named.specialties,['Cubierta']);assert.equal(named.subspecialty,'Acero Galvanizado');assert.equal(named.association.parameter,'Nombre de elemento Autodesk');
+  assert.equal(named.typeName,'TEST_60CA085');
   for(const type of ['V 15/109','v20/40','V 20 / 40 TEST']) {
     const classified=classifyProperties([p('Nombre de tipo',type),p('Sub Especialidad','Muro')]);
     assert.equal(classified.subspecialty,'Vigas');assert.deepEqual(classified.specialties,['Hormigón']);
