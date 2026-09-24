@@ -1,0 +1,51 @@
+# Cubicaciones — MVP 1.0
+
+Implementación de la especificación suministrada el 24 de septiembre de 2026. La interfaz está en `/cubicaciones` y reutiliza la sesión OAuth y el conector Autodesk existentes. No llama a un LLM.
+
+## Disponible
+
+- Selección de cuenta/proyecto real; catálogo único de las 12 especialidades solicitadas, sin clasificación Interior/Exterior.
+- Configuración compartida dentro del proyecto; especialidad única por organización/proyecto. Conflictos de edición detectados por revisión.
+- Plantillas nombradas explícitamente por el usuario, con versiones inmutables. Se crean **sin reglas**, no se inventan parámetros, categorías, unidades ni fórmulas.
+- Exploración paginada de carpetas y archivos RVT reales. Lista de versiones, última publicación y vistas publicadas mediante APS. Los nombres, identificadores, fechas y enlaces se recuperan de Autodesk; se verifica pertenencia al proyecto/archivo en el servidor al guardar.
+- Mesa de trabajo 20/50/30 en escritorio amplio; configuración colapsable, adaptación a notebook/tablet/móvil.
+- Selección manual de una versión nueva; conserva la vista solamente si existe el mismo identificador. El nombre no acredita equivalencia entre vistas.
+- Paneles de resultados, historial y comparación preparados para ejecuciones verificadas. Estados sin configurar, lista, actualizada, desactualizada y error calculados desde la evidencia disponible. `PROCESSING` reservado al ejecutor futuro.
+- Comparación determinística: nuevas/eliminadas/aumentadas/disminuidas/sin cambios, delta y porcentaje. Exige dos ejecuciones completas, trazables, de la misma organización, proyecto, especialidad, archivo y vista. Rechaza unidades incompatibles; advierte cambios de plantilla.
+- Ausencia de partida se conserva como `null` en el informe. Únicamente al restar dos ejecuciones completas se trata la ausencia como cero. No hay porcentaje ante base cero o inexistente.
+- Trazabilidad de proyecto, archivo, versión, vista, plantilla/versionado, motor, regla, fecha e identificadores de elementos. No se infieren correspondencias entre elementos de distintas versiones.
+
+## Bloqueos explícitos de esta entrega
+
+La especificación prohíbe definir reglas técnicas aún no suministradas. Por tanto:
+
+1. **Procesar / Actualizar Cubicación permanece deshabilitado.** El servidor también responde `422 quantity_rules_required`. No se crean ejecuciones ni cantidades ficticias.
+2. El área central muestra **Modelo BIM no cargado**. El SDK Viewer aún no se ha integrado. Existe el contrato `ViewerBinding` para fuente/selección de elementos y el enlace real para abrir la versión en Autodesk en otra pestaña; abrirla externamente no se presenta como visor integrado.
+3. El motor se conecta mediante `QuantityEngineAdapter`; falta el adaptador de extracción y la configuración validada de reglas, categorías, parámetros, filtros, agrupaciones y unidades. La interfaz no permite publicar reglas arbitrarias como validadas.
+4. No hay ejecuciones reales hasta completar ese contrato. La comparación y persistencia están implementadas y probadas con fixtures **TEST**, pero no se afirma validación de cantidades de un proyecto real.
+5. Las vistas listadas son las publicadas por Model Derivative, no todas las vistas del RVT original. Sin derivado, permiso o metadatos se informa indisponibilidad; no se solicita una traducción ni se escriben cambios en Autodesk.
+6. La última publicación se verifica al abrir la mesa o pulsar el control de verificación. Se muestra la hora de consulta. No hay webhook ni actualización automática de resultados.
+
+Para habilitar el primer procesamiento se debe definir una plantilla técnica concreta con evidencia de los parámetros/unidades del modelo, integrar el ejecutor determinístico y verificar que el visor y el ejecutor usan exactamente el mismo archivo, versión y vista. No se deben activar botones antes de completar esos controles.
+
+## Datos, aislamiento y migración
+
+`web/db/quantities.sql` crea tablas independientes `quantity_configuration`, `quantity_template_version` y `quantity_run`. Los objetos Source/Template/Result son snapshots cifrados. Los informes `QuantityComparison`/`QuantityComparisonItem` se calculan desde dos ejecuciones inmutables y conservan sus IDs; no necesitan duplicar resultados históricos en otra tabla.
+
+- AES-256-GCM con clave de almacenamiento existente y AAD propio de cubicaciones + organización/proyecto/registro.
+- Rol SQL separado `ai_forma_quantities`, RLS forzado por organización/proyecto. Cada solicitud verifica acceso vivo al proyecto Autodesk y obtiene el usuario real.
+- La configuración es colaborativa para los usuarios con acceso al proyecto. Se conserva quién y cuándo guarda; no se implementan roles administrativos no definidos en esta especificación.
+- Las ejecuciones y versiones de plantilla son append-only, protegidas también por triggers. La API no permite cargar resultados desde el navegador. `appendRun` es un punto de integración interno para el futuro ejecutor verificado.
+- Cubicaciones **no hereda el TTL de cinco días** del historial del asistente. No hay eliminación automática ni cascada desde memoria.
+- La pantalla limita el historial cargado a 500 ejecuciones del proyecto y avisa si hay más; los registros anteriores permanecen almacenados.
+- Ejecutar una vez con conexión de migración: `node --env-file=work/memory-production.env scripts/migrate-quantities.mjs`. Nunca publicar archivos de entorno ni rotar la clave existente como parte de esta migración.
+
+## Documentación oficial consultada
+
+- [Autodesk: relaciones de versión y derivative URN](https://aps.autodesk.com/blog/get-derivative-urn-accbim360-file-viewing-it-viewer).
+- [Autodesk: Items API, versiones de archivo](https://github.com/Autodesk-Forge/forge-api-nodejs-client/blob/master/docs/ItemsApi.md).
+- [Autodesk: Model Derivative metadata](https://github.com/Autodesk-Forge/forge-api-nodejs-client/blob/master/docs/DerivativesApi.md).
+
+## Verificación
+
+`web/tests/quantities.test.mjs`: diferencias y porcentajes, cero/ausencia, rechazo de cobertura parcial y procedencia incompleta, unidades/vistas incompatibles, estados de vigencia, vínculo de versiones/vistas APS, SQL real en PGlite, RLS, configuración compartida dentro del proyecto, duplicados, concurrencia por revisión, cifrado e inmutabilidad. Los datos sintéticos permanecen exclusivamente en pruebas.

@@ -22,6 +22,15 @@ export const transaction: Transaction = async (actor,fn) => {
     return fn(query);
   }) as Awaited<ReturnType<typeof fn>>;
 };
+// Separate least-privilege role and tables; quantity records have no chat TTL.
+export const quantityTransaction: Transaction = async (actor, fn) => {
+  return await database().begin(async sql => {
+    await sql.unsafe("SET LOCAL ROLE ai_forma_quantities");
+    await sql.unsafe("SELECT set_config('app.organization_id',$1,true),set_config('app.project_id',$2,true),set_config('app.user_id',$3,true)", [actor.organizationId, actor.projectId, actor.userId]);
+    await sql.unsafe("SET LOCAL statement_timeout='10000ms'");
+    return fn(async (text, values = []) => [...await sql.unsafe(text, values as never[])]);
+  }) as Awaited<ReturnType<typeof fn>>;
+};
 export async function maintenance<T>(fn: (query:Query)=>Promise<T>):Promise<T> {
   return await database().begin(async sql=>{
     await sql.unsafe("SET LOCAL ROLE ai_forma_retention");
