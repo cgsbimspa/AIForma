@@ -57,4 +57,4 @@ Definir primero su alcance y sus fuentes. Cuando exista una implementación auto
 
 Las descripciones del catálogo son objetivos del roadmap, no resultados de análisis. El estado de cada módulo se informa explícitamente. No añadir datos ficticios ni convertir ausencia de evidencia en un cero.
 
-La autenticación Autodesk y la consulta de metadatos usan APIs reales. El almacenamiento de proyectos, la indexación del contenido documental y los motores técnicos siguen pendientes.
+La autenticación Autodesk, la consulta de metadatos y la búsqueda recursiva en texto de documentos usan APIs reales. El almacenamiento persistente de proyectos, la indexación persistente y los motores técnicos siguen pendientes. Ver alcance y formatos en `../docs/ASISTENTE-IA.md`.

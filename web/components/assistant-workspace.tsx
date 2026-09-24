@@ -121,10 +121,12 @@ type Message = { role: "user" | "assistant"; content: string; sources?: Source[]
 function ChatPanel({ selection, aiConfigured, invalidate }: { selection: Selection; aiConfigured: boolean; invalidate: (code: string) => void }) {
   const [messages, setMessages] = useState<Message[]>([]), [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
+  const [activeSearch, setActiveSearch] = useState<number | null>(null);
   const controller = useRef<AbortController | null>(null), bottom = useRef<HTMLDivElement | null>(null);
   useEffect(() => () => controller.current?.abort(), []);
-  useEffect(() => { bottom.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }); }, [messages, busy, error]);
+  useEffect(() => { bottom.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }); }, [messages.length, busy, error]);
   async function search(index: number, terms: SearchTerms, abort: AbortController, previous?: SearchBatch) {
+    setActiveSearch(index);
     let current = previous;
     for (let batch = 0; batch < 15 && !abort.signal.aborted; batch++) {
       const response = await fetch("/api/assistant/search", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scope: selection.scope, terms, cursor: current?.cursor ?? null }), signal: abort.signal });
@@ -134,7 +136,7 @@ function ChatPanel({ selection, aiConfigured, invalidate }: { selection: Selecti
       const next = result as SearchBatch;
       current = { ...next, hits: [...new Map([...(current?.hits ?? []), ...next.hits].map(hit => [hit.key, hit])).values()].slice(0, 500), issues: [...(current?.issues ?? []), ...next.issues].slice(0, 100) };
       const snapshot = current;
-      setMessages(existing => existing.map((m, i) => i === index ? { ...m, content: `Búsqueda ${snapshot.done ? "finalizada" : "parcial"}: ${snapshot.stats.matched} coincidencias verificadas. Términos: ${terms.map(t => t.join(" + ")).join(" / ")}.`, search: snapshot } : m));
+      setMessages(existing => existing.map((m, i) => i === index ? { ...m, content: `Búsqueda ${snapshot.done && !snapshot.warnings.length ? "finalizada" : "parcial"}: ${snapshot.stats.matched} coincidencias verificadas. Términos: ${terms.map(t => t.join(" + ")).join(" / ")}.`, search: snapshot } : m));
       if (!current.cursor) return;
     }
   }
@@ -168,7 +170,7 @@ function ChatPanel({ selection, aiConfigured, invalidate }: { selection: Selecti
     <div className="chat-scope"><span className="small-label">CONSULTANDO</span><span><Database size={14}/>{selection.label}</span></div>
     <div className="chat-messages" aria-live="polite" aria-relevant="additions text">
       {!messages.length && <div className="panel-empty chat-intro"><span className="chat-orb"><BrainCircuit size={33}/></span><h3>¿Qué quieres encontrar?</h3><p>Busca en carpetas, subcarpetas, nombres de archivos y texto de documentos. Cada coincidencia incluye su ruta y fuente.</p><button className="chat-suggestion" type="button" disabled={!aiConfigured || busy} onClick={() => void send(suggestion)}><MessageSquare size={16}/>{suggestion}<ChevronRight size={16}/></button><div className="evidence-note"><ShieldCheck size={16}/> Cada resultado conserva su fuente Autodesk.</div></div>}
-      {messages.map((message, index) => <article className={`chat-message message-${message.role}`} key={index}><span className="message-author">{message.role === "user" ? "Tú" : "Asistente IA"}</span>{message.search ? <SearchResults result={message.search} busy={busy} resume={() => void resume(index)}/> : <div className="message-body">{message.content}</div>}{!!message.sources?.length && <details className="message-sources"><summary>{message.sources.length} {message.sources.length === 1 ? "fuente consultada" : "fuentes consultadas"}</summary>{message.sources.map(source => <div key={source.id} className="source-detail"><strong>[{source.id}] {source.label}</strong><time dateTime={source.fetchedAt}>{new Date(source.fetchedAt).toLocaleString("es-CL")}</time><code>{source.endpoint}</code><span>{source.returnedCount} elementos en la página {source.page + 1}{source.nextPage !== null ? " · Hay más páginas" : ""}{source.partial ? " · Resultado parcial" : ""}</span></div>)}</details>}</article>)}
+      {messages.map((message, index) => <article className={`chat-message message-${message.role}`} key={index}><span className="message-author">{message.role === "user" ? "Tú" : "Asistente IA"}</span>{message.search ? <SearchResults result={message.search} busy={busy && activeSearch === index} resume={() => void resume(index)}/> : <div className="message-body">{message.content}</div>}{!!message.sources?.length && <details className="message-sources"><summary>{message.sources.length} {message.sources.length === 1 ? "fuente consultada" : "fuentes consultadas"}</summary>{message.sources.map(source => <div key={source.id} className="source-detail"><strong>[{source.id}] {source.label}</strong><time dateTime={source.fetchedAt}>{new Date(source.fetchedAt).toLocaleString("es-CL")}</time><code>{source.endpoint}</code><span>{source.returnedCount} elementos en la página {source.page + 1}{source.nextPage !== null ? " · Hay más páginas" : ""}{source.partial ? " · Resultado parcial" : ""}</span></div>)}</details>}</article>)}
       {busy && <div className="chat-working" role="status"><LoaderCircle className="spin" size={17}/><span>Consultando Forma y preparando la respuesta…</span></div>}
       {error && <p className="assistant-error chat-error" role="alert">{error}</p>}
       {!aiConfigured && <p className="assistant-error chat-error" role="alert">{errorText("ai_not_configured")}</p>}

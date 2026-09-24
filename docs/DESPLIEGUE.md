@@ -42,7 +42,14 @@
 - Publicación `dpl_7wZBEztWxZQvtcPFM4SeiXZi2V7y` en estado Ready, aplicada a `app.cgsbim.cl`.
 - OpenAI configurado como secreto del servidor; conexión real y contrato de herramientas comprobados. Prueba de contrato con datos identificados como TEST, sin sustituir datos del explorador.
 - 16 pruebas automáticas, ESLint y compilación Next.js aprobados. Endpoints de datos y chat rechazan consultas anónimas con HTTP 401.
-- El consentimiento adicional `data:read` quedó preparado en Autodesk para verificar las carpetas de la cuenta real. Su estado se actualizará tras la autorización.
+- El usuario completó el consentimiento adicional `data:read`. Se verificó el explorador con cuentas, proyectos y carpetas reales.
+
+### Búsqueda documental — 24 de septiembre de 2026
+
+- Commit `49c0b24` publicado en producción: recorrido recursivo con paginación y consulta de nombres, rutas y contenido de archivos.
+- 24 pruebas aprobadas, incluyendo parsers reales de PDF/DOCX/XLSX/TXT/CSV con datos TEST, rutas anidadas, referencias, versión y aislamiento de sesiones. TypeScript, ESLint y compilación Next.js aprobados.
+- Prueba real en el navegador: coincidencias de texto en un Word y dos PDF de un proyecto accesible, con párrafos/páginas, versión, ruta y enlaces nativos de Autodesk. No se guardan nombres, contenido ni identificadores privados del proyecto en este registro público.
+- Recorrido extenso probado con pausas y continuación. Los resultados observados son parciales: el sistema mantiene pendientes y archivos no legibles explícitos.
 
 Realizar los cambios dentro de este proyecto, ejecutar `npm run build` y `npm run typecheck` desde `web`, y subir los commits a `main`. Vercel está configurado para construir la aplicación desde `web` usando Node.js 24.x y `npm ci`.
 

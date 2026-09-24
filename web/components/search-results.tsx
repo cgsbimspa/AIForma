@@ -7,7 +7,7 @@ export function SearchResults({ result, busy, resume }: { result: SearchBatch; b
   return <div className="document-search-results">
     <div className="search-progress"><Search size={16}/><strong>{busy && !result.done ? "Buscando en carpetas y documentos…" : complete ? "Búsqueda terminada" : result.done ? "Recorrido terminado con cobertura parcial" : "Búsqueda parcial"}</strong></div>
     <p className="search-terms">Términos: {result.terms.map(t => t.join(" + ")).join(" · o · ")}</p>
-    <p className="search-counts">{result.stats.folders} carpetas · {result.stats.files} archivos encontrados · {result.stats.documentsRead} documentos con texto revisado · {result.stats.matched} coincidencias</p>
+    <p className="search-counts">{result.stats.folders} carpetas · {result.stats.files} archivos encontrados · {result.stats.documentsRead} documentos con texto revisado · {result.stats.matched} {result.stats.matched === 1 ? "recurso con coincidencias" : "recursos con coincidencias"}</p>
     {result.stats.unread > 0 && <p className="search-coverage">{result.stats.unread} archivos con lectura incompleta o no disponible. No se puede descartar que contengan otras coincidencias.</p>}
     {!result.hits.length && <p className="search-coverage">{complete ? "Sin coincidencias para estos términos en los nombres, rutas y textos revisados." : "Todavía no hay coincidencias verificadas. La búsqueda no demuestra su ausencia en los archivos pendientes o no legibles."}</p>}
     {result.hits.map(hit => <div className="search-hit" key={hit.key}>

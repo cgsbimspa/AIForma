@@ -11,7 +11,7 @@
     "start": "next start --port 5173",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
-    "test": "node --experimental-strip-types --test tests/*.test.mjs"
+    "test": "node scripts/build-document-worker.mjs && node --experimental-strip-types --test tests/*.test.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
