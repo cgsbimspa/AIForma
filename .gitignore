@@ -1,0 +1,18 @@
+# Local dependencies and build artifacts
+**/node_modules/
+**/.next/
+**/dist/
+**/.vercel/
+**/.wrangler/
+**/.vinext/
+**/.sites-runtime/
+**/*.tsbuildinfo
+**/next-env.d.ts
+**/*.log
+**/.env*
+**/*.pem
+**/*.key
+**/outputs/
+**/work/
+**/.codex/
+**/.agents/
