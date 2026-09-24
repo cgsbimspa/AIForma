@@ -11,6 +11,8 @@ test('purchase searches tolerate case, accents, plurals and aliases while keepin
   for (const name of ['TEST documento BIM', 'TEST local BIM', 'TEST OC1 electricidad', 'TEST factura BIM', 'TEST presupuesto BIM']) assert.equal(matchesTerms(name, terms), false, name);
   assert.ok(matchesTerms('TEST órdenes de compra', expandSearchTerms([['oc']])));
   assert.ok(matchesTerms('TEST informe de suelos', expandSearchTerms([['informes', 'suelos']])));
+  const constrained=['informe contractual definitivo revisado aprobado vigente', 'TEST'];
+  assert.ok(expandSearchTerms([constrained,['presupuesto']]).some(group=>group.includes('informe contractual definitivo revisado aprobado vigente')&&group.includes('test')));
 });
 test('AI search expansion preserves the literal shortcut and uses no extra AI request', async t => {
   let calls = 0;

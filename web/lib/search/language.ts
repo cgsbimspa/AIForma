@@ -10,9 +10,12 @@ const singular: Record<string, string> = {
 };
 const stopWords = new Set(["de", "del", "la", "las", "el", "los", "en"]);
 export function expandSearchTerms(terms: SearchTerms): SearchTerms {
-  const groups = terms.map(group => [...new Set(group.flatMap(term =>
+  const groups = terms.map(group => {
+    const words = [...new Set(group.flatMap(term =>
     (/\d/.test(term) ? [normalizeText(term)] : normalizeText(term).split(/\s+/)).filter(word => !stopWords.has(word)).map(word => singular[word] ?? word)
-  ))]).filter(group => group.length);
+    ))];
+    return words.length <= 6 ? words : group.map(normalizeText);
+  }).filter(group => group.length);
   const expanded: string[][] = [];
   for (const group of groups) {
     expanded.push(group);
