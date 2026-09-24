@@ -15,7 +15,7 @@ const responseSchema = z.object({ status: z.string(), output: z.array(z.object({
 export function renderAnswer(value: unknown, sources: Source[]) {
   const answer = answerSchema.safeParse(value);
   if (!answer.success) throw new DataError("ai_invalid_response");
-  if (answer.data.status === "not_available") return { text: "No se puede determinar con los datos disponibles. Esta conexión consulta la estructura de proyectos, carpetas y archivos de Forma; todavía no analiza el contenido de documentos, propiedades BIM ni cantidades.", sources: [] as Source[] };
+  if (answer.data.status === "not_available") return { text: "No dispongo de evidencia suficiente para responder esa consulta. Puedes pedirme buscar términos en carpetas y documentos. Los cálculos BIM y las validaciones técnicas no están implementados.", sources: [] as Source[] };
   if (answer.data.status === "clarify") return { text: "Necesito una ubicación o un nombre más preciso. Selecciona un proyecto e indica la carpeta o el archivo que quieres consultar.", sources: [] as Source[] };
   if (!answer.data.selections.length) throw new DataError("ai_invalid_response");
   const selected: Source[] = [];

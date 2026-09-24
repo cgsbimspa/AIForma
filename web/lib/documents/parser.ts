@@ -1,0 +1,27 @@
+import { spawn } from "node:child_process";
+import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve, relative } from "node:path";
+import { z } from "zod";
+import { DataError } from "../autodesk/data.ts";
+export const parsedSchema = z.object({ status: z.enum(["parsed", "ocr_required", "no_text"]), pages: z.number().int().positive().optional(), textlessPages: z.number().int().nonnegative(), segments: z.array(z.object({ text: z.string().max(2000000), location: z.string(), page: z.number().optional(), paragraph: z.number().optional(), line: z.number().optional(), sheet: z.string().optional(), row: z.number().optional() })).max(20000) });
+export type ParsedDocument = z.infer<typeof parsedSchema>;
+export async function parseDocument(bytes: Buffer, name: string, signal?: AbortSignal): Promise<ParsedDocument> {
+  signal?.throwIfAborted();
+  const directory = await mkdtemp(join(tmpdir(), "aiforma-doc-"));
+  if (!/^aiforma-doc-[^/\\]+$/.test(relative(resolve(tmpdir()), resolve(directory)))) throw new DataError("parse_failed");
+  try {
+    const file = join(directory, "document"); await writeFile(file, bytes, { mode: 0o600 });
+    return await new Promise((accept, reject) => {
+      const child = spawn(process.execPath, ["--max-old-space-size=256", resolve("worker/document-worker.mjs"), file, name], { windowsHide: true, stdio: ["ignore", "pipe", "ignore"], env: { NODE_ENV: process.env.NODE_ENV, PATH: process.env.PATH, SystemRoot: process.env.SystemRoot } });
+      let output = "", settled = false;
+      const cleanup = () => { clearTimeout(timer); signal?.removeEventListener("abort", abort); };
+      const fail = (code: string) => { if (settled) return; settled = true; child.kill(); cleanup(); reject(new DataError(code, 422)); };
+      const abort = () => fail("parse_cancelled"), timer = setTimeout(() => fail("parse_timeout"), 20_000);
+      signal?.addEventListener("abort", abort, { once: true }); if (signal?.aborted) abort();
+      child.stdout.on("data", chunk => { output += chunk.toString(); if (output.length > 12_000_000) fail("parse_limit"); });
+      child.on("error", () => fail("parse_failed"));
+      child.on("exit", code => { if (settled) return; if (code !== 0) return fail("parse_failed"); try { const result = parsedSchema.parse(JSON.parse(output)); settled = true; cleanup(); accept(result); } catch { fail("parse_failed"); } });
+    });
+  } finally { await rm(directory, { recursive: true, force: true }); }
+}

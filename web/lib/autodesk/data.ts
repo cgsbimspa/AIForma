@@ -5,7 +5,7 @@ export const scopeSchema = z.discriminatedUnion("kind", [z.object({ kind: z.lite
 export type DataScope = z.infer<typeof scopeSchema>;
 export const querySchema = z.object({ operation: z.enum(["hubs", "projects", "roots", "contents"]), hubId: id.nullable().default(null), projectId: id.nullable().default(null), folderId: id.nullable().default(null), page: z.number().int().min(0).max(10000).default(0) }).strict();
 export type DataQuery = z.infer<typeof querySchema>;
-export type Entry = { id: string; name: string; type: "hubs" | "projects" | "folders" | "items" };
+export type Entry = { id: string; name: string; type: "hubs" | "projects" | "folders" | "items"; webUrl?: string };
 export type Evidence = { endpoint: string; fetchedAt: string; projectId: string | null; page: number; returnedCount: number; nextPage: number | null; partial: boolean };
 export type DataPage = { entries: Entry[]; evidence: Evidence };
 export class DataError extends Error {
@@ -13,7 +13,7 @@ export class DataError extends Error {
   readonly code: string;
   constructor(code: string, status = 502) { super(code); this.code = code; this.status = status; }
 }
-const entrySchema = z.object({ id, type: z.enum(["hubs", "projects", "folders", "items"]), attributes: z.object({ name: z.string().min(1).max(2000).optional(), displayName: z.string().min(1).max(2000).optional() }) });
+const entrySchema = z.object({ id, type: z.enum(["hubs", "projects", "folders", "items"]), attributes: z.object({ name: z.string().min(1).max(2000).optional(), displayName: z.string().min(1).max(2000).optional() }), links: z.object({ webView: z.object({ href: z.string() }).optional() }).optional() });
 const pageSchema = z.object({ data: z.array(entrySchema).max(2000), links: z.object({ next: z.union([z.object({ href: z.string().url() }), z.string().url()]).nullish() }).optional(), meta: z.object({ warnings: z.array(z.unknown()).optional() }).optional() });
 const base = "https://developer.api.autodesk.com";
 const enc = encodeURIComponent;
@@ -28,7 +28,7 @@ export function nextPage(href: string | undefined, endpoint: URL, page: number):
   if (numbers.length !== 1 || !/^\d+$/.test(numbers[0]) || Number(numbers[0]) !== page + 1 || Number(numbers[0]) > 10000 || limits.length > 1 || (limits.length === 1 && limits[0] !== "100")) throw new DataError("invalid_response");
   return Number(numbers[0]);
 }
-async function get(token: string, url: URL, fetcher: typeof fetch, signal?: AbortSignal): Promise<unknown> {
+export async function get(token: string, url: URL, fetcher: typeof fetch, signal?: AbortSignal): Promise<unknown> {
   try {
     const response = await fetcher(url, { headers: { Authorization: `Bearer ${token}`, Accept: "application/json" }, cache: "no-store", redirect: "error", signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(20_000)]) : AbortSignal.timeout(20_000) });
     if (!response.ok) throw new DataError(response.status === 401 ? "expired" : response.status === 403 ? "forbidden" : response.status === 404 ? "not_found" : response.status === 429 ? "rate_limited" : "unavailable", [401,403,404,429].includes(response.status) ? response.status : 502);
@@ -61,7 +61,12 @@ export async function browse(token: string, input: DataQuery, scope: DataScope =
   const entries: Entry[] = data.data.map(row => {
     const name = row.type === "items" ? row.attributes.displayName ?? row.attributes.name : row.attributes.name ?? row.attributes.displayName;
     if (!name || !expected.includes(row.type)) throw new DataError("invalid_response");
-    return { id: row.id, type: row.type, name };
+    const webUrl = officialWebUrl(row.links?.webView?.href);
+    return { id: row.id, type: row.type, name, ...(webUrl ? { webUrl } : {}) };
   });
   return { entries, evidence: { endpoint: url.href, fetchedAt: new Date().toISOString(), projectId: q.projectId, page: q.page, returnedCount: entries.length, nextPage: following, partial: Boolean(data.meta?.warnings?.length) } };
+}
+export function officialWebUrl(value?: string): string | undefined {
+  if (!value) return;
+  try { const url = new URL(value); if (url.protocol === "https:" && !url.username && !url.password && !url.port && (url.hostname.endsWith(".autodesk.com") || url.hostname.endsWith(".autodesk360.com"))) return url.href; } catch { /* Discard untrusted provider links. */ }
 }

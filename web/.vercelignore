@@ -20,4 +20,6 @@ build
 db
 drizzle
 examples
-scripts
+scripts/*
+!scripts/document-worker.mjs
+!scripts/build-document-worker.mjs

@@ -14,5 +14,6 @@
 **/*.key
 **/outputs/
 **/work/
+**/worker/
 **/.codex/
 **/.agents/

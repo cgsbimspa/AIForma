@@ -4,9 +4,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowUp, BrainCircuit, Building2, ChevronDown, ChevronRight, CircleCheck, Database, File, Folder, FolderOpen, Globe2, LoaderCircle, MessageSquare, RefreshCw, Search, ShieldCheck, Square, Trash2, Unplug } from "lucide-react";
 import type { DataPage, DataQuery, DataScope, Entry } from "@/lib/autodesk/data";
 import type { Source } from "@/lib/assistant/chat";
+import type { SearchBatch, SearchTerms } from "@/lib/search/contracts";
+import { SearchResults } from "./search-results";
 
 type Auth = { connected: boolean; configured?: boolean; dataAccess?: boolean; aiConfigured?: boolean; user?: { id: string; name: string }; expiresAt?: number; error?: string };
 const errors: Record<string, string> = {
+  search_expired: "La búsqueda guardada venció o pertenece a otra sesión. Inicia una nueva consulta.", search_limit: "La búsqueda superó el límite de recorrido. Selecciona un proyecto o usa términos más precisos.",
   expired: "La sesión de Autodesk venció. Vuelve a conectar tu cuenta.", consent_required: "Autoriza la lectura de proyectos y carpetas para continuar.", forbidden: "Autodesk no permitió acceder a estos datos. Revisa tus permisos y la integración de la cuenta en Forma.", not_found: "Autodesk no encontró este recurso o ya no está disponible.", unavailable: "No fue posible consultar Autodesk. Inténtalo nuevamente.", invalid_response: "Autodesk devolvió información que no pudimos verificar.", rate_limited: "Autodesk está limitando las consultas. Espera un momento y vuelve a intentar.", ai_not_configured: "La conexión con OpenAI todavía no está configurada.", ai_unavailable: "OpenAI no pudo completar la consulta. Puedes volver a intentar.", ai_rate_limited: "OpenAI alcanzó un límite de uso. Intenta más tarde o revisa el saldo de la API.", ai_incomplete: "La consulta no se completó. Prueba con un proyecto o una carpeta más concreta.", ai_invalid_response: "La respuesta de IA no pudo vincularse a datos verificados. No se mostrará como un resultado válido.", out_of_scope: "La consulta intentó salir del alcance seleccionado. Elige el proyecto correspondiente o toda tu base.", invalid_query: "La consulta no es válida. Actualiza la página e inténtalo nuevamente.", too_large: "La conversación es demasiado extensa. Inicia una nueva consulta.", not_configured: "La conexión Autodesk no está configurada.",
 };
 function errorText(code: string) { return errors[code] ?? "No se pudo completar la operación. Inténtalo nuevamente."; }
@@ -114,13 +117,35 @@ function TreeRow(props: BranchProps & { entry: Entry }) {
     {entry.type === "projects" && <button type="button" className="project-select" aria-label={`Consultar proyecto ${entry.name}`} aria-pressed={selected} title={selected ? "Proyecto seleccionado" : "Usar este proyecto en el chat"} onClick={() => { setOpen(true); select({ scope: { kind: "project", hubId: query.hubId!, projectId: entry.id }, label: entry.name }); }}>{selected ? <CircleCheck size={17}/> : <span className="radio-empty"/>}</button>}
   </div>{!leaf && open && <div className="tree-children"><Branch {...props} query={next}/></div>}</div>;
 }
-type Message = { role: "user" | "assistant"; content: string; sources?: Source[] };
+type Message = { role: "user" | "assistant"; content: string; sources?: Source[]; search?: SearchBatch };
 function ChatPanel({ selection, aiConfigured, invalidate }: { selection: Selection; aiConfigured: boolean; invalidate: (code: string) => void }) {
   const [messages, setMessages] = useState<Message[]>([]), [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
   const controller = useRef<AbortController | null>(null), bottom = useRef<HTMLDivElement | null>(null);
   useEffect(() => () => controller.current?.abort(), []);
   useEffect(() => { bottom.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }); }, [messages, busy, error]);
+  async function search(index: number, terms: SearchTerms, abort: AbortController, previous?: SearchBatch) {
+    let current = previous;
+    for (let batch = 0; batch < 15 && !abort.signal.aborted; batch++) {
+      const response = await fetch("/api/assistant/search", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scope: selection.scope, terms, cursor: current?.cursor ?? null }), signal: abort.signal });
+      const result = await response.json();
+      if (!response.ok) { invalidate(result.error); throw new Error(result.error); }
+      if (abort.signal.aborted) return;
+      const next = result as SearchBatch;
+      current = { ...next, hits: [...new Map([...(current?.hits ?? []), ...next.hits].map(hit => [hit.key, hit])).values()].slice(0, 500), issues: [...(current?.issues ?? []), ...next.issues].slice(0, 100) };
+      const snapshot = current;
+      setMessages(existing => existing.map((m, i) => i === index ? { ...m, content: `Búsqueda ${snapshot.done ? "finalizada" : "parcial"}: ${snapshot.stats.matched} coincidencias verificadas. Términos: ${terms.map(t => t.join(" + ")).join(" / ")}.`, search: snapshot } : m));
+      if (!current.cursor) return;
+    }
+  }
+  async function resume(index: number) {
+    const previous = messages[index]?.search;
+    if (busy || !previous?.cursor) return;
+    setBusy(true); setError(""); const abort = new AbortController(); controller.current = abort;
+    try { await search(index, previous.terms, abort, previous); }
+    catch (e) { if (!abort.signal.aborted) setError(errorText(e instanceof Error ? e.message : "unavailable")); }
+    finally { if (!abort.signal.aborted) setBusy(false); }
+  }
   async function send(text: string) {
     if (!text.trim() || busy || !aiConfigured) return;
     const outgoing: Message[] = [...messages, { role: "user", content: text.trim() }];
@@ -130,7 +155,10 @@ function ChatPanel({ selection, aiConfigured, invalidate }: { selection: Selecti
       const response = await fetch("/api/assistant/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scope: selection.scope, messages: outgoing.slice(-11).map(m => ({ role: m.role, content: m.content.slice(0, 4000) })) }), signal: abort.signal });
       const result = await response.json();
       if (!response.ok) { invalidate(result.error); throw new Error(result.error); }
-      if (!abort.signal.aborted) setMessages([...outgoing, { role: "assistant", content: result.text, sources: result.sources }]);
+      if (!abort.signal.aborted) {
+        if (result.kind === "search") { setMessages([...outgoing, { role: "assistant", content: "Buscando coincidencias en subcarpetas, archivos y contenido…" }]); await search(outgoing.length, result.terms, abort); }
+        else setMessages([...outgoing, { role: "assistant", content: result.text, sources: result.sources }]);
+      }
     } catch (e) { if (!abort.signal.aborted) { setError(errorText(e instanceof Error ? e.message : "ai_unavailable")); setDraft(text); } }
     finally { if (!abort.signal.aborted) setBusy(false); }
   }
@@ -139,13 +167,13 @@ function ChatPanel({ selection, aiConfigured, invalidate }: { selection: Selecti
     <PanelHeading icon={<BrainCircuit size={21}/>} title="Tu asistente de proyectos" subtitle="OpenAI · Consultas con fuentes"><button type="button" className="icon-button" disabled={busy || !messages.length} aria-label="Limpiar conversación" title="Limpiar conversación" onClick={() => { setMessages([]); setError(""); }}><Trash2 size={16}/></button></PanelHeading>
     <div className="chat-scope"><span className="small-label">CONSULTANDO</span><span><Database size={14}/>{selection.label}</span></div>
     <div className="chat-messages" aria-live="polite" aria-relevant="additions text">
-      {!messages.length && <div className="panel-empty chat-intro"><span className="chat-orb"><BrainCircuit size={33}/></span><h3>¿Qué quieres encontrar?</h3><p>Consulta tus proyectos, recorre sus carpetas y localiza archivos usando sus nombres.</p><button className="chat-suggestion" type="button" disabled={!aiConfigured || busy} onClick={() => void send(suggestion)}><MessageSquare size={16}/>{suggestion}<ChevronRight size={16}/></button><div className="evidence-note"><ShieldCheck size={16}/> Cada resultado conserva su fuente Autodesk.</div></div>}
-      {messages.map((message, index) => <article className={`chat-message message-${message.role}`} key={index}><span className="message-author">{message.role === "user" ? "Tú" : "Asistente IA"}</span><div className="message-body">{message.content}</div>{!!message.sources?.length && <details className="message-sources"><summary>{message.sources.length} {message.sources.length === 1 ? "fuente consultada" : "fuentes consultadas"}</summary>{message.sources.map(source => <div key={source.id} className="source-detail"><strong>[{source.id}] {source.label}</strong><time dateTime={source.fetchedAt}>{new Date(source.fetchedAt).toLocaleString("es-CL")}</time><code>{source.endpoint}</code><span>{source.returnedCount} elementos en la página {source.page + 1}{source.nextPage !== null ? " · Hay más páginas" : ""}{source.partial ? " · Resultado parcial" : ""}</span></div>)}</details>}</article>)}
+      {!messages.length && <div className="panel-empty chat-intro"><span className="chat-orb"><BrainCircuit size={33}/></span><h3>¿Qué quieres encontrar?</h3><p>Busca en carpetas, subcarpetas, nombres de archivos y texto de documentos. Cada coincidencia incluye su ruta y fuente.</p><button className="chat-suggestion" type="button" disabled={!aiConfigured || busy} onClick={() => void send(suggestion)}><MessageSquare size={16}/>{suggestion}<ChevronRight size={16}/></button><div className="evidence-note"><ShieldCheck size={16}/> Cada resultado conserva su fuente Autodesk.</div></div>}
+      {messages.map((message, index) => <article className={`chat-message message-${message.role}`} key={index}><span className="message-author">{message.role === "user" ? "Tú" : "Asistente IA"}</span>{message.search ? <SearchResults result={message.search} busy={busy} resume={() => void resume(index)}/> : <div className="message-body">{message.content}</div>}{!!message.sources?.length && <details className="message-sources"><summary>{message.sources.length} {message.sources.length === 1 ? "fuente consultada" : "fuentes consultadas"}</summary>{message.sources.map(source => <div key={source.id} className="source-detail"><strong>[{source.id}] {source.label}</strong><time dateTime={source.fetchedAt}>{new Date(source.fetchedAt).toLocaleString("es-CL")}</time><code>{source.endpoint}</code><span>{source.returnedCount} elementos en la página {source.page + 1}{source.nextPage !== null ? " · Hay más páginas" : ""}{source.partial ? " · Resultado parcial" : ""}</span></div>)}</details>}</article>)}
       {busy && <div className="chat-working" role="status"><LoaderCircle className="spin" size={17}/><span>Consultando Forma y preparando la respuesta…</span></div>}
       {error && <p className="assistant-error chat-error" role="alert">{error}</p>}
       {!aiConfigured && <p className="assistant-error chat-error" role="alert">{errorText("ai_not_configured")}</p>}
       <div ref={bottom}/>
     </div>
-    <form className="chat-composer" onSubmit={e => { e.preventDefault(); void send(draft); }}><div className="composer-input"><textarea aria-label="Tu consulta al asistente" placeholder={aiConfigured ? "Pregunta sobre tus proyectos o carpetas…" : "OpenAI pendiente de configuración"} value={draft} onChange={e => setDraft(e.target.value)} disabled={busy || !aiConfigured} maxLength={2000} rows={2} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send(draft); } }}/>{busy ? <button className="send-button" type="button" aria-label="Detener consulta" title="Detener consulta" onClick={() => { controller.current?.abort(); setBusy(false); setError("Consulta detenida. No se generó un resultado."); }}><Square size={17}/></button> : <button className="send-button" type="submit" disabled={!draft.trim() || !aiConfigured} aria-label="Enviar consulta"><ArrowUp size={20}/></button>}</div><p>Consulta de estructura y nombres. El contenido de documentos aún no se analiza. La consulta y los metadatos necesarios se procesan con OpenAI.</p></form>
+    <form className="chat-composer" onSubmit={e => { e.preventDefault(); void send(draft); }}><div className="composer-input"><textarea aria-label="Tu consulta al asistente" placeholder={aiConfigured ? "Busca un documento o texto dentro de tus archivos…" : "OpenAI pendiente de configuración"} value={draft} onChange={e => setDraft(e.target.value)} disabled={busy || !aiConfigured} maxLength={2000} rows={2} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send(draft); } }}/>{busy ? <button className="send-button" type="button" aria-label="Detener consulta" title="Detener consulta" onClick={() => { controller.current?.abort(); setBusy(false); setError("Consulta detenida. Los resultados ya recibidos son parciales; puedes continuar la búsqueda."); }}><Square size={17}/></button> : <button className="send-button" type="submit" disabled={!draft.trim() || !aiConfigured} aria-label="Enviar consulta"><ArrowUp size={20}/></button>}</div><p>Busca en subcarpetas y texto de PDF, DOCX, XLSX, TXT, CSV y MD. Hasta 25 MB por archivo. Los PDF sin texto requieren OCR. OpenAI interpreta tu consulta; las coincidencias se verifican en el servidor.</p></form>
   </section>;
 }

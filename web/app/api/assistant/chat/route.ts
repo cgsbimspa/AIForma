@@ -4,6 +4,7 @@ import { DataError } from "@/lib/autodesk/data";
 import { privateHeaders } from "@/lib/autodesk/http";
 import { trustedMutation } from "@/lib/autodesk/oauth";
 import { chatSchema, runChat } from "@/lib/assistant/chat";
+import { planSearch } from "@/lib/search/plan";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -24,6 +25,8 @@ export async function POST(request: NextRequest) {
     const key = process.env.OPENAI_API_KEY;
     if (!key) throw new DataError("ai_not_configured", 503);
     const signal = AbortSignal.any([request.signal, AbortSignal.timeout(Math.min(270_000, Math.max(1, session.expiresAt - Date.now())))]);
+    const plan = await planSearch(body.data.messages, key, process.env.OPENAI_MODEL || "gpt-5-mini", signal);
+    if (plan.mode === "search") return NextResponse.json({ kind: "search", terms: plan.terms }, { headers: privateHeaders });
     const answer = await runChat(session.accessToken, body.data, { key, model: process.env.OPENAI_MODEL || "gpt-5-mini" }, fetch, signal);
     if (session.expiresAt <= Date.now()) throw new DataError("expired", 401);
     return NextResponse.json(answer, { headers: privateHeaders });

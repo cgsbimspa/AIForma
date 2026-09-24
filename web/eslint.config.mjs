@@ -16,6 +16,7 @@ const eslintConfig = defineConfig([
     ".vercel/**",
     ".sites-runtime/**",
     "work/**",
+    "worker/**",
     "next-env.d.ts",
   ]),
   {
