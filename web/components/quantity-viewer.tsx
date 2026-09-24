@@ -34,6 +34,7 @@ export function QuantityViewer({ project, source, highlightedElementIds=[], filt
     function receive(event: MessageEvent) {
       if (event.origin !== window.location.origin || event.source !== frame.current?.contentWindow || event.data?.type !== "aiforma-viewer" || event.data?.viewId !== source?.view?.id || event.data?.urn !== source?.version.modelId) return;
       if (event.data.state === "ready") { setStatus("Vista seleccionada cargada"); setError(""); }
+      else if (event.data.state === "selection-count" && Number.isSafeInteger(event.data.count) && event.data.count >= 0) setSelectionCount(event.data.count);
       else if (event.data.state === "selection" && Array.isArray(event.data.ids) && event.data.ids.every((id:unknown)=>typeof id==="string")) {setSelectionCount(Number.isSafeInteger(event.data.count)?event.data.count:event.data.ids.length);onSelectElements?.(event.data.ids);}
       else if(event.data.state==='calculation'&&calculationRequest>0&&event.data.requestId===calculationRequest){
         if(event.data.phase==='loading')onCalculation?.({state:'loading',message:'Leyendo propiedades y sumando cantidades de la vista…'});

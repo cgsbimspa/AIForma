@@ -62,6 +62,9 @@ import { readViewClassification, selectClassifiedElements, classificationRule } 
       if(all.some(id=>!Object.hasOwn(map,id))) { status.hidden=false;status.textContent="No se pudo vincular esta selección a elementos de esta vista. No se aplicó el filtro.";return; }
       const desired=data.highlightedElementIds.map(id=>map[id]), current=viewer.getSelection();
       if(current.length!==desired.length||current.some(id=>!desired.includes(id))){applyingSelection=true;viewer.select(desired);applyingSelection=false;viewer.fitToView(desired);}
+      // Programmatic table selection suppresses the native callback to avoid a
+      // selection loop, but visibility controls still need the actual count.
+      window.parent.postMessage({type:'aiforma-viewer',state:'selection-count',count:viewer.getSelection().length,viewId:input.viewId,urn:input.urn},window.location.origin);
     } catch { if (revision !== selectionRevision) return; viewer.showAll();visibilityFilterKey=undefined; classificationReport('error', 'No se pudo completar la lectura. Se muestra el modelo sin filtrar.'); }
   };
   window.addEventListener("message",selectionMessage);
