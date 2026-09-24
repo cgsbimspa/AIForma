@@ -97,3 +97,5 @@ El procesamiento detallado está limitado a 40 operaciones OCR y 120 segundos; e
 El protocolo del worker separa diagnósticos de evidencia JSON y espera el cierre de stdout. Los fallos de memoria se distinguen de ausencia de coincidencias. Las pruebas incluyen un rótulo TEST inclinado leído mediante OCR real, cobertura de zonas, intención de consulta y conservación de citas/confianza.
 
 Antes de procesar los gráficos se conserva un punto de recuperación con el texto digital leído. Si después falla el renderizado/OCR por recursos o tiempo, se devuelve ese texto con cobertura parcial y el motivo de interrupción. Una cancelación del usuario no utiliza esa recuperación.
+
+En consultas de calles de planos identificados, el servidor presenta las citas literales verificadas mediante una redacción determinística; no conserva inferencias del modelo sobre adyacencia, acceso ni extensiones futuras. La respuesta incluye explícitamente el límite espacial de la lectura.

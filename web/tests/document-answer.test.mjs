@@ -11,6 +11,16 @@ const evidence={sources:[source],passages:[{id:'S1',documentId:'D1',location:'L�
 const draft={status:'answered',blocks:[{label:'Profundidad recomendada',text:'El texto recomienda 2,50 m, pendiente de aprobación.',citations:[{segmentId:'S1',quote:sentence}]}]};
 const config={key:'TEST_KEY',model:'TEST_MODEL'};
 const output=value=>Response.json({status:'completed',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify(value)}]}]});
+
+test('plan street answers preserve literal labels without generating spatial or future claims',async()=>{
+ const quote='AVENIDA TEST 47';
+ const input={...evidence,sources:[{...source,name:'TEST emplazamiento.pdf'}],passages:[{...evidence.passages[0],text:quote,location:'Página 1'}]};
+ let calls=0;
+ const result=await answerDocuments(input,'Qué calles indica aledañas','ask',config,async()=>++calls===1?output({status:'answered',blocks:[{label:'Calle adyacente',text:'AVENIDA TEST 47 da acceso al predio y tendrá una extensión futura.',citations:[{segmentId:'S1',quote}]}]}):output({allowedTask:true,supported:[true]}));
+ assert.equal(result.status,'answered');assert.equal(result.blocks[0].text,'En el plano puedo leer: «AVENIDA TEST 47».');
+ assert.equal(result.blocks[0].label,'');assert.equal(result.blocks[0].citations[0].quote,quote);
+ assert.ok(result.warnings.some(w=>w.includes('no permite determinar')));
+});
 test('citations are bound to server-read passages, locations and versions; fabricated references or digits fail closed',()=>{
   const result=bindDocumentDraft(draft,evidence,'ask');
   assert.equal(result[0].citations[0].source.version,3);assert.equal(result[0].citations[0].location,'Línea 7');
