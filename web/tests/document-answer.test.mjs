@@ -74,6 +74,20 @@ const fixture=async(url)=>{
   throw new Error('Unexpected request outside TEST selection: '+path);
 };
 const parser=async()=>({status:'parsed',textlessPages:0,segments:[{text:sentence,location:'Línea 1'}]});
+
+test('document answers collect later page batches from the same downloaded version with exact locations',async()=>{
+  const starts=[];let downloads=0;
+  const fetcher=async(url,init)=>{if(new URL(url).hostname==='test.s3.amazonaws.com')downloads++;return fixture(url,init);};
+  const parser=async(bytes,name,signal,{startPage})=>{starts.push(startPage);return {status:'parsed',textlessPages:0,pages:13,pageStart:startPage,pageEnd:startPage===1?12:13,...(startPage===1?{nextPage:13}:{}),segments:[{text:sentence,location:`Página ${startPage}`,page:startPage}]};};
+  const result=await collectDocumentEvidence('TEST_TOKEN',file,Date.now()+60000,undefined,{fetcher,parser});
+  assert.deepEqual(starts,[1,13]);assert.equal(downloads,1);assert.equal(result.sources.length,1);assert.equal(result.partial,false);assert.equal(result.pending,0);assert.equal(result.sources[0].throughPage,13);assert.equal(result.sources[0].nextPage,undefined);assert.deepEqual(result.passages.map(p=>p.location),['Página 1','Página 13']);
+});
+
+test('answer context limits disclose the next unread page instead of claiming that every page was read',async()=>{
+  const parser=async()=>({status:'parsed',textlessPages:0,pages:40,pageStart:1,pageEnd:12,nextPage:13,segments:[{text:sentence,location:'Página 1'}]});
+  const result=await collectDocumentEvidence('TEST_TOKEN',file,Date.now()+60000,undefined,{fetcher:fixture,parser,maxCharacters:10});
+  assert.equal(result.partial,true);assert.equal(result.pending,1);assert.equal(result.sources[0].nextPage,13);assert.equal(result.sources[0].status,'context_limit');
+});
 test('document analysis reads only selected file and forbids all/project fallback before network',async()=>{
   const visited=[];
   const result=await collectDocumentEvidence('TEST_TOKEN',file,Date.now()+60000,undefined,{fetcher:async(url,init)=>{visited.push(decodeURIComponent(new URL(url).pathname));return fixture(url,init);},parser});

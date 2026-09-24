@@ -260,3 +260,7 @@ button:disabled { cursor: default; opacity: .45; }
 .search-next-stage small { display: block; margin-top: 10px; color: #657d9d; }
 .search-hit-actions { flex-wrap: wrap; gap: 12px; }
 .search-excerpt small { display: block; color: #946100; margin: 5px 0; }
+
+.search-page-progress { margin: 12px 0; padding: 10px 14px; border: 1px solid #d2e1f6; border-radius: 8px; background: #f4f8ff; font-size: 12px; }
+.search-page-progress p { margin: 5px 0; overflow-wrap: anywhere; }
+.search-page-progress small { color: #607998; }

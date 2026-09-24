@@ -12,7 +12,7 @@ export async function collectDocumentEvidence(token: string, scope: DataScope, e
   const started = Date.now(), state = await startSearch(token, scope, [["documentos"]], expiresAt, fetcher, signal);
   const result: DocumentEvidence = { sources: [], passages: [], partial: false, warnings: [], pending: 0, scopePath: state.queue[0].path };
   const warn = (message: string) => { result.partial = true; if (!result.warnings.includes(message)) result.warnings.push(message); };
-  const seen = new Set<string>(); let listings = 0, documents = 0, characters = 0;
+  const seen = new Set<string>(); let listings = 0, documents = 0, characters = 0, pageTasksPending = 0;
   const characterLimit = options.maxCharacters ?? 120000;
   while (state.queue.length) {
     signal?.throwIfAborted();
@@ -41,9 +41,15 @@ export async function collectDocumentEvidence(token: string, scope: DataScope, e
           documents++;
           const version = await itemTip(token, task.projectId, task.entry.id, fetcher, signal);
           Object.assign(source, { version: version.number, versionId: version.id, webUrl: version.webUrl ?? source.webUrl, endpoint: version.endpoint, fetchedAt: version.fetchedAt });
-          const parsed = await parser(await downloadDocument(token, version, fetcher, signal), version.name, signal);
-          source.warnings = parsed.warnings;
-          source.status = parsed.status === "parsed" ? parsed.textlessPages || parsed.partial ? "partial_text" : "read" : parsed.status;
+          const bytes = await downloadDocument(token, version, fetcher, signal);
+          let startPage = 1, hadIssues = false;
+          do {
+          const parsed = await parser(bytes, version.name, signal, { startPage });
+          if (parsed.nextPage && (parsed.nextPage <= startPage || parsed.nextPage > (parsed.pages ?? 0) || parsed.pageEnd !== parsed.nextPage - 1)) throw new DataError("invalid_response");
+          source.nextPage = parsed.nextPage; source.throughPage = parsed.pageEnd; source.totalPages = parsed.pages;
+          hadIssues ||= Boolean(parsed.textlessPages || parsed.partial || (parsed.status !== "parsed" && !parsed.nextPage));
+          source.warnings = [...new Set([...(source.warnings ?? []), ...(parsed.warnings ?? [])])];
+          source.status = hadIssues ? "partial_text" : "read";
           if (parsed.segments.some(s => s.method === "ocr")) { result.warnings.push("Se utilizó OCR: el texto reconocido puede contener errores. Comprueba las citas en el original."); }
           for (const segment of parsed.segments) {
             // Bounded passages preserve the parser's page/paragraph/worksheet location.
@@ -55,6 +61,13 @@ export async function collectDocumentEvidence(token: string, scope: DataScope, e
             }
             if (characters >= characterLimit || result.passages.length >= 1500) { source.status = "context_limit"; break; }
           }
+          if (!parsed.nextPage) break;
+          if (Date.now() - started > (options.milliseconds ?? 85000) || source.status === "context_limit" || characters >= characterLimit || result.passages.length >= 1500) {
+            source.status = source.status === "context_limit" ? "context_limit" : "reading_pages"; pageTasksPending++;
+            warn("Quedan páginas de un documento por leer. La búsqueda de contenido permite continuarlas en lotes; esta respuesta sólo usa los pasajes leídos."); break;
+          }
+          startPage = parsed.nextPage;
+          } while (startPage <= 1000);
           if (source.status !== "read") warn("Hay documentos con texto incompleto o no disponible; la respuesta sólo cubre el texto leído.");
         } catch (error) {
           signal?.throwIfAborted();
@@ -69,6 +82,6 @@ export async function collectDocumentEvidence(token: string, scope: DataScope, e
       warn(`No se pudo consultar la carpeta: ${task.path}.`);
     }
   }
-  result.pending = state.queue.length;
+  result.pending = state.queue.length + pageTasksPending;
   return result;
 }

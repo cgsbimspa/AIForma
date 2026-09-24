@@ -5,7 +5,7 @@ import { downloadDocument, itemTip, supportedDocument } from "../documents/downl
 import { parseDocument } from "../documents/parser.ts";
 import type { ParsedDocument } from "../documents/parser.ts";
 import { matchesTerms } from "./contracts.ts";
-import type { FileTask, SearchHit, SearchIssue, SearchMatch, SearchState, SearchTerms, SearchStage } from "./contracts.ts";
+import type { FileTask, SearchHit, SearchIssue, SearchMatch, SearchState, SearchTerms, SearchStage, PageProgress } from "./contracts.ts";
 import { ownerOf } from "./cursor.ts";
 
 export function findExcerpts(document: ParsedDocument, terms: SearchTerms): SearchMatch[] {
@@ -33,13 +33,14 @@ export async function startSearch(token: string, scope: DataScope, terms: Search
   return { schema: 1, stage, owner: ownerOf(token), expiresAt: Math.min(expiresAt, Date.now() + 3_600_000), scope, terms, queue: [{ kind: "list", query: q, path: project?.name ?? "", project: project?.name ?? "" }], seen: [], warnings: [], stats: { folders: 0, files: 0, documentsRead: 0, unread: 0, matched: 0, requests: 0 }, startedAt: new Date().toISOString() };
 }
 function hitFor(task: FileTask, matches: SearchMatch[]): SearchHit {
-  return { scope: { kind: "file", hubId: task.hubId, projectId: task.projectId, folderIds: task.folderIds ?? [], itemId: task.entry.id }, key: `${task.projectId}:${task.entry.id}`, id: task.entry.id, name: task.entry.name, type: "items", project: task.project, projectId: task.projectId, path: task.path, webUrl: task.entry.webUrl, endpoint: task.endpoint, fetchedAt: task.fetchedAt, matches };
+  return { nextPage: undefined, throughPage: task.startPage ? task.startPage - 1 : undefined, totalPages: task.totalPages, scope: { kind: "file", hubId: task.hubId, projectId: task.projectId, folderIds: task.folderIds ?? [], itemId: task.entry.id }, key: `${task.projectId}:${task.entry.id}`, id: task.entry.id, name: task.entry.name, type: "items", project: task.project, projectId: task.projectId, path: task.path, webUrl: task.entry.webUrl, versionId: task.version?.id, version: task.version?.number, endpoint: task.endpoint, fetchedAt: task.fetchedAt, matches };
 }
 function metadataMatches(entry: Entry, terms: SearchTerms): SearchMatch[] {
   return matchesTerms(entry.name, terms) ? [{ kind: "name", location: "Nombre del archivo o carpeta" }] : [];
 }
 export async function advanceSearch(state: SearchState, token: string, signal?: AbortSignal, options: { fetcher?: typeof fetch; parser?: typeof parseDocument; milliseconds?: number; steps?: number } = {}) {
   const fetcher = options.fetcher ?? fetch, parser = options.parser ?? parseDocument, started = Date.now();
+  const pageProgress: PageProgress[] = [];
   const hits: SearchHit[] = [], issues: SearchIssue[] = [], seen = new Set(state.seen);
   const warning = (code: string) => { if (!state.warnings.includes(code)) state.warnings.push(code); };
   for (let steps = 0; state.queue.length && steps < (options.steps ?? 12) && Date.now() - started < (options.milliseconds ?? 8_000); steps++) {
@@ -84,22 +85,31 @@ export async function advanceSearch(state: SearchState, token: string, signal?: 
         const hit = hitFor(task, matches);
         try {
           const version = await itemTip(token, task.projectId, task.entry.id, fetcher, signal);
+          if (task.version && task.version.id !== version.id) throw new DataError("document_changed", 409);
           Object.assign(hit, { version: version.number, versionId: version.id, webUrl: version.webUrl ?? hit.webUrl, endpoint: version.endpoint, fetchedAt: version.fetchedAt });
           if (state.stage === "files") { if (!task.nameHit) state.stats.matched++; hits.push(hit); continue; }
           const bytes = await downloadDocument(token, version, fetcher, signal);
-          const parsed = await parser(bytes, version.name, signal);
+          const parsed = await parser(bytes, version.name, signal, { startPage: task.startPage ?? 1 });
+          if (parsed.nextPage && (parsed.nextPage <= (task.startPage ?? 1) || parsed.nextPage > (parsed.pages ?? 0) || parsed.pageEnd !== parsed.nextPage - 1)) throw new DataError("invalid_response");
+          hit.throughPage = parsed.pageEnd; hit.totalPages = parsed.pages; hit.nextPage = parsed.nextPage;
           hit.matches.push(...findExcerpts(parsed, state.terms));
-          hit.contentStatus = parsed.status === "parsed" ? parsed.textlessPages || parsed.partial ? "partial_text" : "read" : parsed.status;
+          const hasIssue = Boolean(task.hadIssues || parsed.textlessPages || parsed.partial || (parsed.status !== "parsed" && !parsed.nextPage));
+          hit.contentStatus = parsed.nextPage ? "reading_pages" : hasIssue ? "partial_text" : "read";
           for (const code of parsed.warnings ?? []) { warning(code); issues.push({ path: task.path, code }); }
-          if (parsed.status === "parsed") state.stats.documentsRead++;
-          if (hit.contentStatus !== "read") { state.stats.unread++; warning(hit.contentStatus); issues.push({ path: task.path, code: hit.contentStatus }); }
+          if (parsed.status === "parsed" && !task.readCounted) { state.stats.documentsRead++; task.readCounted = true; }
+          if (hasIssue && !task.unreadCounted) { state.stats.unread++; task.unreadCounted = true; warning("partial_text"); issues.push({ path: task.path, code: "partial_text" }); }
+          if (parsed.pages && parsed.pageEnd !== undefined) pageProgress.push({ key: hit.key, path: hit.path, throughPage: parsed.pageEnd, totalPages: parsed.pages, nextPage: parsed.nextPage, status: hit.contentStatus });
+          if (parsed.nextPage) state.queue.unshift({ ...task, startPage: parsed.nextPage, totalPages: parsed.pages, version: { id: version.id, number: version.number }, entry: { ...task.entry, webUrl: hit.webUrl }, hadIssues: hasIssue, nameHit: task.nameHit || hit.matches.length > 0 });
         } catch (error) {
           signal?.throwIfAborted();
           if (error instanceof DataError && error.status === 401) throw error;
           hit.contentStatus = error instanceof DataError ? error.code : "document_unavailable";
-          state.stats.unread++; warning(hit.contentStatus); issues.push({ path: task.path, code: hit.contentStatus });
+          if (task.startPage && task.totalPages) pageProgress.push({ key: hit.key, path: hit.path, throughPage: task.startPage - 1, totalPages: task.totalPages, status: hit.contentStatus });
+          if (!task.unreadCounted) state.stats.unread++; warning(hit.contentStatus); issues.push({ path: task.path, code: hit.contentStatus });
         }
-        if (hit.matches.length) { if (!task.nameHit) state.stats.matched++; hits.push(hit); }
+        if (hit.matches.length || task.nameHit) { if (!task.nameHit && hit.matches.length) state.stats.matched++; hits.push(hit); }
+        // Return the completed page batch immediately: the next request resumes safely.
+        if (hit.nextPage) break;
       }
     } catch (error) {
       signal?.throwIfAborted();
@@ -109,5 +119,5 @@ export async function advanceSearch(state: SearchState, token: string, signal?: 
     }
   }
   state.seen = [...seen];
-  return { stage: state.stage, hits, issues, stats: state.stats, warnings: state.warnings, pending: state.queue.length, done: state.queue.length === 0, terms: state.terms, startedAt: state.startedAt };
+  return { stage: state.stage, pageProgress, hits, issues, stats: state.stats, warnings: state.warnings, pending: state.queue.length, done: state.queue.length === 0, terms: state.terms, startedAt: state.startedAt };
 }

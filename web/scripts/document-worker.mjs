@@ -5,10 +5,12 @@ import { createOcr } from './document-ocr.mjs';
 import { readPptx, openOfficeZip } from './presentation-xml.mjs';
 import { readLegacyPpt } from './legacy-ppt.mjs';
 import sharp from 'sharp';
-const [file, name] = process.argv.slice(2);
+const [file, name, pageArgument] = process.argv.slice(2);
+const startPage = Number(pageArgument ?? 1);
+if (!Number.isInteger(startPage) || startPage < 1 || startPage > 1000) throw new Error("PAGE_RANGE");
 const bytes = await readFile(file), extension = extname(name).toLowerCase();
 if (bytes.length > 25 * 1024 * 1024) throw new Error('FILE_LIMIT');
-const segments = []; let size = 0, pages, textlessPages = 0;
+const segments = []; let size = 0, pages, nextPage, pageEnd = startPage - 1, textlessPages = 0;
 const warnings = new Set(); const warn = code => warnings.add(code);
 const ocr = createOcr(warn);
 function append(text, location, extra = {}) {
@@ -46,14 +48,15 @@ if (['.txt', '.md'].includes(extension)) {
   const task = getDocument({ data: new Uint8Array(bytes), isEvalSupported: false, useSystemFonts: false, disableFontFace: true, verbosity: 0 });
   try {
     const pdf = await task.promise; pages = pdf.numPages; if (pages > 1000) throw new Error('PAGE_LIMIT');
-    for (let n = 1; n <= pages; n++) {
+    if (startPage > pages) throw new Error("PAGE_RANGE");
+    for (let n = startPage; n <= pages; n++) {
       const page = await pdf.getPage(n), content = await page.getTextContent();
       const text = content.items.map(item => 'str' in item ? item.str + (item.hasEOL ? '\n' : ' ') : '').join('');
-      append(text, `Página ${n}`, { page: n });
       const operators = await page.getOperatorList();
       const hasImages = operators.fnArray.some(op => [OPS.paintImageXObject, OPS.paintInlineImageXObject, OPS.paintImageMaskXObject].includes(op));
+      if ((!text.trim() || hasImages) && !ocr.available()) { nextPage = n; page.cleanup(); break; }
+      append(text, `Página ${n}`, { page: n });
       if (!text.trim() || hasImages) {
-        if (!ocr.available()) { warn('ocr_limit'); textlessPages++; page.cleanup(); continue; }
         try {
           const base = page.getViewport({ scale: 1 }), scale = Math.min(2, 2600 / base.width, 3500 / base.height), viewport = page.getViewport({ scale });
           const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
@@ -62,7 +65,7 @@ if (['.txt', '.md'].includes(extension)) {
           if (result) append(result.text, result.location, result); else textlessPages++;
         } catch { warn('ocr_unavailable'); textlessPages++; }
       }
-      page.cleanup();
+      pageEnd = n; page.cleanup();
     }
   } finally { await task.destroy(); }
 } else if (extension === '.pptx') {
@@ -74,12 +77,14 @@ if (['.txt', '.md'].includes(extension)) {
   warn('legacy_ppt_partial');
 } else if (/^\.(png|jpe?g|webp|tiff?|gif)$/.test(extension)) {
   const metadata = await sharp(bytes, { limitInputPixels: 40000000 }).metadata(); pages = metadata.pages ?? 1;
-  for (let page = 0; page < Math.min(pages, 12); page++) {
+  if (pages > 1000 || startPage > pages) throw new Error("PAGE_RANGE");
+  for (let page = startPage - 1; page < pages; page++) {
+    if (!ocr.available()) { nextPage = page + 1; break; }
     const input = await sharp(bytes, { page, pages: 1, limitInputPixels: 40000000 }).png().toBuffer();
     const result = await ocr.recognize(input, pages > 1 ? `Imagen, página ${page + 1}` : 'Imagen', { page: page + 1 });
     if (result) append(result.text, result.location, result); else textlessPages++;
+    pageEnd = page + 1;
   }
-  if (pages > 12) warn('ocr_limit');
 } else throw new Error('UNSUPPORTED');
 } finally { await ocr.close(); }
-process.stdout.write(JSON.stringify({ segments, pages: pages || undefined, textlessPages, partial: warnings.size > 0, warnings: [...warnings], status: segments.length ? 'parsed' : 'no_text' }));
+process.stdout.write(JSON.stringify({ segments, pages: pages || undefined, nextPage, ...((extension === ".pdf" || /^\.(png|jpe?g|webp|tiff?|gif)$/.test(extension)) ? { pageStart: startPage, pageEnd } : {}), textlessPages, partial: warnings.size > 0, warnings: [...warnings], status: segments.length ? 'parsed' : 'no_text' }));

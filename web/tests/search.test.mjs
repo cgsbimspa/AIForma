@@ -8,6 +8,7 @@ import { itemTip, downloadDocument } from '../lib/documents/download.ts';
 import { findExcerpts, startSearch, advanceSearch } from '../lib/search/engine.ts';
 import { packCursor, unpackCursor } from '../lib/search/cursor.ts';
 import { matchesTerms } from '../lib/search/contracts.ts';
+import { mergeSearchHits } from '../lib/search/merge.ts';
 import { browse, querySchema, scopeSchema, verifyLocation } from '../lib/autodesk/data.ts';
 
 // Synthetic TEST fixtures only. These are never served by application routes.
@@ -153,4 +154,37 @@ test('filename search includes unsupported proprietary formats without implying 
   const state=await startSearch('TEST_TOKEN',scope,[['informe']],Date.now()+60000,fetcher,undefined,'files');
   const result=await advanceSearch(state,'TEST_TOKEN',undefined,{fetcher,milliseconds:60000});
   assert.equal(result.hits[0].name,'TEST informe.rvt');assert.equal(result.hits[0].contentStatus,undefined);assert.equal(result.stats.unread,0);
+});
+
+test('content search resumes page batches, preserves early and late citations and counts a file only once',async()=>{
+  const starts=[];
+  const parser=async(bytes,name,signal,{startPage})=>{
+    starts.push(startPage);
+    return {status:'parsed',textlessPages:0,partial:false,pages:30,pageStart:startPage,pageEnd:startPage===1?12:startPage===13?24:30,...(startPage<25?{nextPage:startPage===1?13:25}:{}),segments:[{text:startPage===13?'TEST sin término buscado':'TEST mecánica de suelos',location:`Página ${startPage}`,page:startPage}]};
+  };
+  let state=await startSearch('TEST_TOKEN',fileScope,[['mecánica','suelos']],Date.now()+60000,fixtureFetch),hits=[];
+  const key=randomBytes(32);
+  for(let n=0;n<3;n++){
+    const batch=await advanceSearch(state,'TEST_TOKEN',undefined,{fetcher:fixtureFetch,parser});hits=mergeSearchHits(hits,batch.hits);
+    assert.equal(batch.stats.documentsRead,1);assert.equal(batch.stats.matched,1);assert.equal(batch.stats.unread,0);assert.deepEqual(batch.warnings,[]);
+    assert.equal(batch.done,n===2);assert.equal(batch.pageProgress[0].throughPage,[12,24,30][n]);
+    if(n<2){const serialized=JSON.stringify(state);assert.ok(!serialized.includes('TEST mecánica de suelos'));state=unpackCursor(packCursor(state,key),key,'TEST_TOKEN');}
+  }
+  assert.deepEqual(starts,[1,13,25]);assert.deepEqual(hits[0].matches.map(m=>m.page),[1,25]);assert.equal(hits[0].contentStatus,'read');assert.equal(hits[0].nextPage,undefined);
+});
+
+test('continuation stops on Autodesk version changes without mixing old excerpts with a new version',async()=>{
+  const state=await startSearch('TEST_TOKEN',fileScope,[['suelo']],Date.now()+60000,fixtureFetch);
+  const first=await advanceSearch(state,'TEST_TOKEN',undefined,{fetcher:fixtureFetch,parser:async()=>({status:'parsed',textlessPages:0,pages:20,pageStart:1,pageEnd:12,nextPage:13,segments:[{text:'TEST suelo',location:'Página 1',page:1}]})});
+  const fetcher=async(url,init)=>{assert.ok(!String(url).includes('signeds3download'));const r=await fixtureFetch(url,init);const j=await r.json();j.data.id='TEST_NEW_VERSION';j.data.attributes.versionNumber=4;return Response.json(j);};
+  const second=await advanceSearch(state,'TEST_TOKEN',undefined,{fetcher,parser:()=>assert.fail('Changed version was parsed')});
+  assert.equal(second.done,true);assert.ok(second.warnings.includes('document_changed'));
+  const result=mergeSearchHits(first.hits,second.hits)[0];assert.equal(result.version,3);assert.equal(result.contentStatus,'document_changed');assert.equal(result.matches[0].page,1);
+  assert.equal(second.pageProgress[0].nextPage,undefined);assert.equal(second.pageProgress[0].throughPage,12);
+});
+
+test('invalid page continuations fail closed instead of looping or claiming completion',async()=>{
+  const state=await startSearch('TEST_TOKEN',fileScope,[['suelo']],Date.now()+60000,fixtureFetch);
+  const result=await advanceSearch(state,'TEST_TOKEN',undefined,{fetcher:fixtureFetch,parser:async()=>({status:'parsed',textlessPages:0,pages:20,pageStart:1,pageEnd:12,nextPage:1,segments:[]})});
+  assert.equal(result.done,true);assert.ok(result.warnings.includes('invalid_response'));assert.equal(result.stats.documentsRead,0);
 });

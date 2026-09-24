@@ -28,6 +28,18 @@ test('scanned PDF pages and TIFF scans yield OCR citations at the actual page',a
   const tiff=await parseDocument(await sharp(testImage()).tiff().toBuffer(),'TEST-scan.tiff');assert.ok(findExcerpts(tiff,[['mecanica','suelos']]).length);
 });
 
+test('a real 13-page scanned TEST PDF resumes after page 12 without losing or renumbering pages',async()=>{
+  const jpg=await sharp(testImage()).jpeg().toBuffer(),command='q 560 0 0 100 10 500 cm /Im1 Do Q';
+  const objects=[Buffer.from('<< /Type /Catalog /Pages 2 0 R >>'),Buffer.from(`<< /Type /Pages /Kids [${Array.from({length:13},(_,n)=>`${n+5} 0 R`).join(' ')}] /Count 13 >>`),Buffer.concat([Buffer.from(`<< /Type /XObject /Subtype /Image /Width 1400 /Height 250 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpg.length} >>\nstream\n`),jpg,Buffer.from('\nendstream')]),Buffer.from(`<< /Length ${command.length} >>\nstream\n${command}\nendstream`),...Array.from({length:13},()=>Buffer.from('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 600 700] /Resources << /XObject << /Im1 3 0 R >> >> /Contents 4 0 R >>'))];
+  const chunks=[Buffer.from('%PDF-1.4\n')],offsets=[];for(let i=0;i<objects.length;i++){offsets.push(chunks.reduce((n,b)=>n+b.length,0));chunks.push(Buffer.from(`${i+1} 0 obj\n`),objects[i],Buffer.from('\nendobj\n'));}
+  const xref=chunks.reduce((n,b)=>n+b.length,0);chunks.push(Buffer.from(`xref\n0 ${objects.length+1}\n0000000000 65535 f \n${offsets.map(n=>String(n).padStart(10,'0')+' 00000 n ').join('\n')}\ntrailer\n<< /Size ${objects.length+1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`));
+  const bytes=Buffer.concat(chunks),first=await parseDocument(bytes,'TEST-13-scans.pdf');
+  assert.equal(first.nextPage,13);assert.equal(first.pageStart,1);assert.equal(first.pageEnd,12);assert.equal(first.pages,13);assert.equal(first.partial,false);assert.equal(first.segments.length,12);
+  const last=await parseDocument(bytes,'TEST-13-scans.pdf',undefined,{startPage:first.nextPage});
+  assert.equal(last.nextPage,undefined);assert.equal(last.pageStart,13);assert.equal(last.pageEnd,13);assert.equal(last.segments.length,1);assert.equal(last.segments[0].page,13);assert.match(last.segments[0].text,/MECANICA DE SUELOS/);assert.match(last.segments[0].location,/Página 13.*OCR/);
+  await assert.rejects(()=>parseDocument(bytes,'TEST.pdf',undefined,{startPage:0}),/invalid_query/);
+});
+
 test('PPTX uses presentation order, preserves text context and slide locations, and reads slide images with OCR',async()=>{
   const zip=new JSZip();
   zip.file('ppt/presentation.xml','<p:presentation xmlns:p="p" xmlns:r="r"><p:sldIdLst><p:sldId r:id="SECOND"/><p:sldId r:id="FIRST"/></p:sldIdLst></p:presentation>');
