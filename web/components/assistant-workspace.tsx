@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
+import { navigationRetentionMs, rememberConversation, recallConversation, type ConversationSnapshot } from "@/lib/assistant/navigation";
 import { createPortal } from "react-dom";
 import { HeaderStatusContext } from "./workspace-header";
 import { ArrowUp, BrainCircuit, Building2, ChevronDown, ChevronRight, CircleCheck, Database, File, Folder, FolderOpen, Globe2, LoaderCircle, MessageSquare, RefreshCw, Search, ShieldCheck, Square, Trash2, Unplug } from "lucide-react";
@@ -63,19 +64,24 @@ export function AssistantWorkspace() {
 function PanelHeading({ icon, title, subtitle, children }: { icon: React.ReactNode; title: string; subtitle: string; children?: React.ReactNode }) { return <header className="assistant-panel-heading"><span className="panel-heading-icon">{icon}</span><div><h2>{title}</h2><p>{subtitle}</p></div>{children}</header>; }
 type Selection = { initialMode?: DocumentMode | "search"; scope: DataScope; label: string; path?: string };
 function ConnectedWorkspace({ aiConfigured, invalidate }: { aiConfigured: boolean; invalidate: (code: string) => void }) {
-  const [selection, setSelection] = useState<Selection>({ scope: { kind: "all" }, label: "Toda mi base de Forma" });
+  const [navigation,setNavigation]=useState<{selection:Selection;previous:Selection[];initial?:ConversationSnapshot<ChatSnapshot>}>({selection:{scope:{kind:"all"},label:"Toda mi base de Forma"},previous:[]});
+  const selection=navigation.selection;
+  const snapshots=useRef(new Map<string,ConversationSnapshot<ChatSnapshot>>());
+  const setSelection=useCallback((next:Selection)=>setNavigation(current=>JSON.stringify(current.selection.scope)===JSON.stringify(next.scope)?current:{selection:next,previous:[...current.previous,current.selection],initial:recallConversation(snapshots.current,JSON.stringify(next.scope))}),[]);
+  const back=()=>setNavigation(current=>current.previous.length?{selection:current.previous.at(-1)!,previous:current.previous.slice(0,-1),initial:recallConversation(snapshots.current,JSON.stringify(current.previous.at(-1)!.scope))}:current);
+  const saveSnapshot=useCallback((key:string,data:ChatSnapshot,expiresAt:number)=>rememberConversation(snapshots.current,key,data,expiresAt),[]);
   const [revision, setRevision] = useState(0);
   const [filter, setFilter] = useState("");
   const scopeKey = JSON.stringify(selection.scope);
   return <div className="assistant-split">
     <section className="forma-panel" aria-label="Explorador de Forma">
       <PanelHeading icon={<Folder size={20}/>} title="Mi información de Forma" subtitle="Datos de tu cuenta Autodesk"><button type="button" className="icon-button" aria-label="Actualizar explorador" title="Actualizar explorador" onClick={() => { setRevision(n => n + 1); }}><RefreshCw size={16}/></button></PanelHeading>
-      <div className="scope-picker"><span className="small-label">ALCANCE DE LA CONSULTA</span><button type="button" aria-pressed={selection.scope.kind === "all"} className={`scope-all ${selection.scope.kind === "all" ? "selected" : ""}`} onClick={() => setSelection({ scope: { kind: "all" }, label: "Toda mi base de Forma" })}><Globe2 size={18}/><span><strong>Toda mi base de Forma</strong><small>Todos los proyectos accesibles</small></span>{selection.scope.kind === "all" && <CircleCheck size={18}/>}</button><p>Selecciona el círculo junto a un proyecto, carpeta o archivo. La flecha abre su contenido.</p>{selection.scope.kind !== "all" && <div className="scope-location" role="status"><strong>{selection.scope.kind === "file" ? "Sólo este archivo" : selection.scope.kind === "folder" ? "Esta carpeta y sus subcarpetas" : "Todo este proyecto"}</strong><span>{selection.path ?? selection.label}</span><small>Al cambiar el alcance se inicia una nueva conversación.</small></div>}</div>
+      <div className="scope-picker"><span className="small-label">ALCANCE DE LA CONSULTA</span><button type="button" aria-pressed={selection.scope.kind === "all"} className={`scope-all ${selection.scope.kind === "all" ? "selected" : ""}`} onClick={() => setSelection({ scope: { kind: "all" }, label: "Toda mi base de Forma" })}><Globe2 size={18}/><span><strong>Toda mi base de Forma</strong><small>Todos los proyectos accesibles</small></span>{selection.scope.kind === "all" && <CircleCheck size={18}/>}</button><p>Selecciona el círculo junto a un proyecto, carpeta o archivo. La flecha abre su contenido.</p>{selection.scope.kind !== "all" && <div className="scope-location" role="status"><strong>{selection.scope.kind === "file" ? "Sólo este archivo" : selection.scope.kind === "folder" ? "Esta carpeta y sus subcarpetas" : "Todo este proyecto"}</strong><span>{selection.path ?? selection.label}</span><small>Cada ubicación conserva su conversación. Puedes volver a la consulta anterior.</small></div>}</div>
       <label className="explorer-search"><Search size={16}/><input value={filter} onChange={e => setFilter(e.target.value)} placeholder="Filtrar proyectos cargados" aria-label="Filtrar proyectos cargados"/></label>
       <div className="forma-tree" key={revision}><Branch query={{ operation: "hubs", hubId: null, projectId: null, folderId: null, page: 0 }} selection={selection} select={setSelection} invalidate={invalidate} filter={filter}/></div>
       <footer className="explorer-footer"><ShieldCheck size={15}/><span>Sólo lectura · Abre las carpetas para ver su contenido. Los permisos de Autodesk se respetan.</span></footer>
     </section>
-    <ChatPanel key={scopeKey} select={setSelection} selection={selection} aiConfigured={aiConfigured} invalidate={invalidate}/>
+    <ChatPanel key={scopeKey} initial={navigation.initial} saveSnapshot={saveSnapshot} onBack={navigation.previous.length?back:undefined} previousLabel={navigation.previous.at(-1)?.label} select={setSelection} selection={selection} aiConfigured={aiConfigured} invalidate={invalidate}/>
   </div>;
 }
 type BranchProps = { query: DataQuery; selection: Selection; select: (selection: Selection) => void; invalidate: (code: string) => void; filter: string; folderIds?: string[]; path?: string };
@@ -134,13 +140,16 @@ function TreeRow(props: BranchProps & { entry: Entry }) {
   </div>{!leaf && open && <div className="tree-children"><Branch {...props} query={next} folderIds={entry.type === "folders" ? [...folderIds, entry.id] : []} path={entry.type === "hubs" ? "" : path}/></div>}</div>;
 }
 type Message = { historical?: boolean; expires_at?: string; role: "user" | "assistant"; content: string; sources?: Source[]; search?: SearchBatch; answer?: DocumentAnswerData };
-function ChatPanel({ selection, select, aiConfigured, invalidate }: { select: (selection: Selection) => void; selection: Selection; aiConfigured: boolean; invalidate: (code: string) => void }) {
+type ChatSnapshot={messages:Message[];draft:string;mode:DocumentMode|"search";conversationId?:string;historyExpiresAt?:string;memoryNotice:string;error:string;activeSearch:number|null;scrollTop:number};
+function ChatPanel({ selection, select, aiConfigured, invalidate, initial, saveSnapshot, onBack, previousLabel }: { initial?:ConversationSnapshot<ChatSnapshot>;saveSnapshot:(key:string,data:ChatSnapshot,expiresAt:number)=>void;onBack?:()=>void;previousLabel?:string; select: (selection: Selection) => void; selection: Selection; aiConfigured: boolean; invalidate: (code: string) => void }) {
   const documentSelection = selection.scope.kind === "file" || selection.scope.kind === "folder";
-  const [mode, setMode] = useState<DocumentMode | "search">(selection.initialMode ?? (selection.scope.kind === "file" ? "ask" : "search"));
-  const [messages, setMessages] = useState<Message[]>([]), [draft, setDraft] = useState("");
-  const conversationId = useRef<string | undefined>(undefined);
-  const [memoryNotice,setMemoryNotice] = useState("");
-  const [historyExpiresAt,setHistoryExpiresAt] = useState<string | undefined>();
+  const [mode, setMode] = useState<DocumentMode | "search">(initial?.data.mode ?? selection.initialMode ?? (selection.scope.kind === "file" ? "ask" : "search"));
+  const [messages, setMessages] = useState<Message[]>(initial?.data.messages??[]), [draft, setDraft] = useState(initial?.data.draft??"");
+  const conversationId = useRef<string | undefined>(initial?.data.conversationId);
+  const [memoryNotice,setMemoryNotice] = useState(initial?.data.memoryNotice??"");
+  const [historyExpiresAt,setHistoryExpiresAt] = useState<string | undefined>(initial?.data.historyExpiresAt);
+  const [createdExpiry]=useState(()=>initial?.expiresAt??Date.now()+navigationRetentionMs);
+  const expiresAt=useRef(createdExpiry);
   function rememberResult(result: {memory?:{status:string;conversationId?:string;expiresAt?:string}}) {
     const memory=result.memory;if(!memory)return;
     if(memory.status==="saved"){conversationId.current=memory.conversationId;setHistoryExpiresAt(memory.expiresAt);setMemoryNotice("Historial guardado · retención de 5 días desde su creación.");}
@@ -151,15 +160,27 @@ function ChatPanel({ selection, select, aiConfigured, invalidate }: { select: (s
   useEffect(()=>{
     const expiries=messages.filter(m=>m.historical&&m.expires_at).map(m=>Date.parse(m.expires_at!));
     if(historyExpiresAt)expiries.push(Date.parse(historyExpiresAt));
+    expiries.push(expiresAt.current);
     if(!expiries.length)return;
-    const timer=setTimeout(()=>{setMessages([]);conversationId.current=undefined;setHistoryExpiresAt(undefined);setMemoryNotice("El historial venció y fue retirado del contexto reciente.");},Math.max(0,Math.min(...expiries)-Date.now()));
+    const timer=setTimeout(()=>{expiresAt.current=Date.now()+navigationRetentionMs;setMessages([]);setDraft("");conversationId.current=undefined;setHistoryExpiresAt(undefined);setMemoryNotice("El historial venció y fue retirado del contexto reciente.");},Math.max(0,Math.min(...expiries)-Date.now()));
     return()=>clearTimeout(timer);
   },[messages,historyExpiresAt]);
-  const [busy, setBusy] = useState(false), [error, setError] = useState("");
-  const [activeSearch, setActiveSearch] = useState<number | null>(null);
+  const [busy, setBusy] = useState(false), [error, setError] = useState(initial?.data.error??"");
+  const [activeSearch, setActiveSearch] = useState<number | null>(initial?.data.activeSearch??null);
+  const messageList=useRef<HTMLDivElement|null>(null);
+  const scrollPosition=useRef(initial?.data.scrollTop??0);
+  const snapshot=useRef<ChatSnapshot|null>(null);
+  useEffect(()=>{
+    const deadlines=[expiresAt.current,...messages.flatMap(m=>m.expires_at?[Date.parse(m.expires_at)]:[]),...(historyExpiresAt?[Date.parse(historyExpiresAt)]:[])].filter(Number.isFinite);
+    expiresAt.current=Math.min(...deadlines);
+    snapshot.current={messages,draft,mode,conversationId:conversationId.current,historyExpiresAt,memoryNotice,error:busy?"Consulta detenida al cambiar de ubicación. Los resultados recibidos se conservan; puedes continuar la búsqueda.":error,activeSearch,scrollTop:scrollPosition.current};
+  },[messages,draft,mode,historyExpiresAt,memoryNotice,error,busy,activeSearch]);
+  const selectionKey=JSON.stringify(selection.scope);
+  useEffect(()=>()=>{if(snapshot.current)saveSnapshot(selectionKey,{...snapshot.current,scrollTop:scrollPosition.current},expiresAt.current);},[selectionKey,saveSnapshot]);
+  const firstScroll=useRef(true);
   const controller = useRef<AbortController | null>(null), bottom = useRef<HTMLDivElement | null>(null);
   useEffect(() => () => controller.current?.abort(), []);
-  useEffect(() => { bottom.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }); }, [messages.length, busy, error]);
+  useEffect(() => { if(firstScroll.current){firstScroll.current=false;if(messageList.current)messageList.current.scrollTop=scrollPosition.current;return;} bottom.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }); }, [messages.length, busy, error]);
   async function search(index: number, terms: SearchTerms, abort: AbortController, previous?: SearchBatch, stage: SearchStage = previous?.stage ?? (selection.scope.kind === "file" ? "files" : "folders")) {
     setActiveSearch(index);
     let current = previous;
@@ -221,10 +242,11 @@ function ChatPanel({ selection, select, aiConfigured, invalidate }: { select: (s
   const suggestion = selection.scope.kind === "all" ? "Muéstrame los proyectos a los que tengo acceso." : selection.scope.kind === "folder" ? "Muéstrame el contenido de esta carpeta." : selection.scope.kind === "file" ? "Muéstrame el archivo seleccionado." : "Muéstrame las carpetas raíz de este proyecto.";
   return <section className="chat-panel" aria-label="Asistente IA con OpenAI">
     <PanelHeading icon={<BrainCircuit size={21}/>} title="Tu asistente de proyectos" subtitle="OpenAI · Consultas con fuentes"><button type="button" className="icon-button" disabled={busy || !messages.length} aria-label="Limpiar conversación" title="Limpiar conversación" onClick={() => { setMessages([]); setError(""); conversationId.current=undefined; setHistoryExpiresAt(undefined); setMemoryNotice(""); }}><Trash2 size={16}/></button></PanelHeading>
+    {onBack&&<div className="memory-notice"><button type="button" className="assistant-link" onClick={onBack}>← Volver a la consulta anterior</button><span> · {previousLabel}</span></div>}
     <RecentHistory scope={selection.scope} busy={busy} onNew={()=>{conversationId.current=undefined;setHistoryExpiresAt(undefined);setMessages([]);setMemoryNotice("");setError("");}} onRestore={(id,rows)=>{conversationId.current=id;setHistoryExpiresAt(rows[0]?.expires_at);setMessages(rows);setError("");setMemoryNotice("Historial recuperado. Cada consulta vuelve a verificar las fuentes actuales.");}}/>
     {memoryNotice&&<p className="memory-notice" role="status">{memoryNotice}</p>}
     <div className="chat-scope"><span className="small-label">{selection.scope.kind === "file" ? "SÓLO ESTE ARCHIVO" : selection.scope.kind === "folder" ? "CARPETA Y SUBCARPETAS" : "CONSULTANDO"}</span><span>{selection.scope.kind === "file" ? <File size={14}/> : selection.scope.kind === "folder" ? <Folder size={14}/> : <Database size={14}/>}<span>{selection.path ?? selection.label}</span></span></div>
-    <div className="chat-messages" aria-live="polite" aria-relevant="additions text">
+    <div ref={messageList} onScroll={event=>{scrollPosition.current=event.currentTarget.scrollTop;}} className="chat-messages" aria-live="polite" aria-relevant="additions text">
       {!messages.length && <div className="panel-empty chat-intro"><span className="chat-orb"><BrainCircuit size={33}/></span><h3>¿Qué quieres saber de tus documentos?</h3><p>Puedes localizar carpetas y archivos o preguntarme qué dicen los documentos seleccionados. Si preguntas por su contenido, lo leeré directamente y citaré la página o zona donde aparezca. Para revisar un plano concreto, selecciona su archivo en el explorador.</p>{documentSelection && <div className="document-suggestions"><button type="button" className="chat-suggestion" disabled={busy || !aiConfigured} onClick={() => { setMode("summary"); void send("Resume los puntos principales de los documentos seleccionados, con citas.", "summary"); }}>Resumir selección</button><button type="button" className="chat-suggestion" disabled={busy || !aiConfigured} onClick={() => { setMode("extract"); setDraft("Extrae los objetivos y responsabilidades que se indican en los documentos seleccionados."); }}>Extraer datos con citas</button></div>}<button className="chat-suggestion" type="button" disabled={!aiConfigured || busy} onClick={() => void send(suggestion, "search")}><MessageSquare size={16}/>{suggestion}<ChevronRight size={16}/></button><div className="evidence-note"><ShieldCheck size={16}/> Cada resultado conserva su fuente Autodesk.</div></div>}
       {messages.map((message, index) => <article className={`chat-message message-${message.role}`} key={index}><span className="message-author">{message.role === "user" ? "Tú" : "Asistente IA"}</span>{message.historical&&<small className="historical-label">Historial · no es evidencia actual</small>}{message.answer ? <DocumentAnswer answer={message.answer}/> : message.search ? <SearchResults result={message.search} busy={busy && activeSearch === index} disabled={busy} resume={() => void resume(index)} nextStage={stage => void nextStage(message.search!, stage)} select={selectHit}/> : <div className="message-body">{message.content}</div>}{!!message.sources?.length && <details className="message-sources"><summary>{message.sources.length} {message.sources.length === 1 ? "fuente consultada" : "fuentes consultadas"}</summary>{message.sources.map(source => <div key={source.id} className="source-detail"><strong>[{source.id}] {source.label}</strong><time dateTime={source.fetchedAt}>{new Date(source.fetchedAt).toLocaleString("es-CL")}</time><code>{source.endpoint}</code><span>{source.returnedCount} elementos en la página {source.page + 1}{source.nextPage !== null ? " · Hay más páginas" : ""}{source.partial ? " · Resultado parcial" : ""}</span></div>)}</details>}</article>)}
       {busy && <div className="chat-working" role="status"><LoaderCircle className="spin" size={17}/><span>{mode === "search" ? "Consultando Forma y preparando la respuesta…" : "Leyendo la selección y revisando la respuesta contra sus citas. Puede tardar unos minutos…"}</span></div>}
