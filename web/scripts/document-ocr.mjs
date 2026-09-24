@@ -20,7 +20,10 @@ export function createOcr(warn, detailed = false) {
         if (options.lines) {
           // Confidence belongs to each literal line, not to the entire drawing.
           // A weak word (especially a digit) cannot borrow confidence from others.
-          return { segments: (data.blocks ?? []).flatMap(b => b.paragraphs ?? []).flatMap(p => p.lines ?? []).filter(l => l.text.trim()).map(l => ({ text: l.text.trim(), location: `${location} · OCR`, ...extra, method: 'ocr', confidence: Math.min(l.confidence, ...l.words.filter(w => w.text.trim()).map(w => w.confidence)) })) };
+          const lines = (data.blocks ?? []).flatMap(b => b.paragraphs ?? []).flatMap(p => p.lines ?? []).filter(l => l.text.trim()).map(l => ({ text: l.text.trim(), location: `${location} · OCR`, ...extra, method: 'ocr', confidence: Math.min(l.confidence, ...l.words.filter(w => w.text.trim()).map(w => w.confidence)) }));
+          if (lines.some(l => !Number.isFinite(l.confidence) || l.confidence < 75)) warn('ocr_low_confidence');
+          // Noisy geometry must not consume the evidence window ahead of legible labels.
+          return { segments: lines.filter(l => Number.isFinite(l.confidence) && l.confidence >= 75 && l.confidence <= 100) };
         }
         if (!data.text.trim()) { warn('ocr_no_text'); return null; }
         if (data.confidence < 75) warn('ocr_low_confidence');

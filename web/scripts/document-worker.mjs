@@ -63,11 +63,14 @@ if (['.txt', '.md'].includes(extension)) {
       if (detailed) {
         try {
           const base = page.getViewport({scale:1}), scale = Math.min(4, 6000/base.width, 6000/base.height), viewport = page.getViewport({scale});
-          const count = await readPlanRegions(Math.ceil(viewport.width), Math.ceil(viewport.height), async region => {
-            const canvas = createCanvas(region.width, region.height);
-            await page.render({canvasContext:canvas.getContext('2d'), viewport, transform:[1,0,0,1,-region.left,-region.top]}).promise;
-            return canvas.toBuffer('image/png');
-          }, `Página ${n}`, {page:n}, ocr, append, warn);
+          // Render the complex CAD display list once, then crop the bounded bitmap.
+          // Replaying every vector for every region/orientation made large plans slow.
+          const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
+          await page.render({canvasContext:canvas.getContext('2d'), viewport}).promise;
+          const image = canvas.toBuffer('image/png'); canvas.width = 1; canvas.height = 1;
+          const count = await readPlanRegions(Math.ceil(viewport.width), Math.ceil(viewport.height), region =>
+            sharp(image).extract({left:region.left,top:region.top,width:region.width,height:region.height}).png().toBuffer(),
+            `Página ${n}`, {page:n}, ocr, append, warn);
           if (!count && !text.trim()) textlessPages++;
         } catch { warn('ocr_unavailable'); textlessPages++; }
       } else if (!text.trim() || hasImages) {
