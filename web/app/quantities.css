@@ -90,6 +90,11 @@
 .quantity-viewer-empty h3 { font-size:1.05rem; color:#496989; }
 .quantity-viewer-empty>p { color:#7c90a6; max-width:330px; margin:10px 0 3px; font-size:.77rem; line-height:1.7; }
 .quantity-viewer-empty>a { margin-top:20px; }
+.quantity-live-viewer { display:flex; flex:1; flex-direction:column; min-height:490px; min-width:0; background:#f6f9fd; }
+.quantity-live-viewer>iframe { width:100%; min-height:440px; flex:1; border:0; display:block; }
+.quantity-live-viewer>.quantity-viewer-empty { min-height:440px; }
+.quantity-viewer-controls { border-top:1px solid #e0e9f3; padding:7px 14px; background:#fff; }
+.quantity-viewer-controls .quantity-help { margin:3px 0; }
 .quantity-version-panel { display:grid; grid-template-columns:repeat(3,1fr); border-top:1px solid #e0e9f3; border-bottom:1px solid #e0e9f3; padding:16px 10px; gap:8px; }
 .quantity-version-panel>div { display:flex; flex-direction:column; gap:8px; padding:0 6px; }
 .quantity-version-panel span { color:#7b8fa6; font-size:.65rem; }

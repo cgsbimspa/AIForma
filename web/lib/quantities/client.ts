@@ -15,6 +15,9 @@ const errors: Record<string, string> = {
   incompatible_runs: "Las ejecuciones no corresponden al mismo proyecto, especialidad, archivo y vista, o están en orden inverso.",
   incompatible_units: "Las unidades difieren entre ejecuciones. No se calculará una variación sin una conversión definida.",
   no_previous_run: "No hay dos ejecuciones verificadas para comparar.",
+  viewer_derivative_unavailable: "La versión seleccionada no tiene geometría publicada disponible para el visor.",
+  viewer_expired: "La sesión del visor venció. Vuelve a cargar el modelo.",
+  viewer_resource_unavailable: "Autodesk no pudo entregar los archivos de visualización de este modelo.",
 };
 export async function quantityResponse<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await autodeskFetch(url, { cache: "no-store", ...init });

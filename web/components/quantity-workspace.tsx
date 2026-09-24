@@ -1,9 +1,10 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Boxes, Plus, ArrowLeft, ArrowRight, Box, ShieldCheck, RefreshCw, PanelLeftClose, PanelLeftOpen, Save, ExternalLink } from "lucide-react";
+import { Boxes, Plus, ArrowLeft, ArrowRight, Box, ShieldCheck, RefreshCw, PanelLeftClose, PanelLeftOpen, Save } from "lucide-react";
 import { AutodeskConnection } from "./autodesk-connection";
 import { QuantitySourcePicker } from "./quantity-source-picker";
 import { QuantityResults } from "./quantity-results";
+import { QuantityViewer } from "./quantity-viewer";
 import { quantitySpecialties, specialtyName } from "@/lib/quantities/catalog";
 import { quantityState, processingBlocker } from "@/lib/quantities/engine";
 import { quantityBrowse, quantityCommand, quantityResponse } from "@/lib/quantities/client";
@@ -150,7 +151,7 @@ function QuantityDesk({ project, configuration, templates, runs, historyPartial,
       </div></section>}
       <section className="quantity-model quantity-panel" aria-label="Modelo BIM"><div className="quantity-panel-heading"><Box size={19}/><h2>Modelo BIM</h2><span className="quantity-model-version">{source ? `V${source.version.number}` : "Sin fuente"}</span></div>
         <div className="quantity-model-context"><strong>{source?.fileName ?? "Archivo RVT no seleccionado"}</strong><span>{source?.view ? `Vista: ${source.view.name}` : "Vista no seleccionada"}</span>{source && <span>{source.path}</span>}</div>
-        <div className="quantity-viewer-empty"><div><Box size={46} strokeWidth={1}/></div><h3>Modelo BIM no cargado</h3><p>El visor integrado está preparado para conectarse a la versión y vista seleccionadas.</p><p className="quantity-help">La visualización dentro de la plataforma aún no está habilitada.</p>{source?.version.webUrl && <a className="quantity-secondary" href={source.version.webUrl} target="_blank" rel="noopener noreferrer">Abrir versión en Autodesk <ExternalLink size={14}/></a>}</div>
+        <QuantityViewer project={project} source={source}/>
         <div className="quantity-version-panel"><div><span>Versión seleccionada</span><strong>{source ? `V${source.version.number}` : "No seleccionada"}</strong></div><div><span>Versión cubicada</span><strong>{runs[0] ? `V${runs[0].source.version.number}` : "No procesada"}</strong></div><div><span>Última publicación</span><strong>{latest ? `V${latest.number}` : "Por verificar"}</strong></div></div>
         <div className="quantity-model-footer">{versionError && <p className="quantity-error" role="alert">{versionError}</p>}{latest && <p className="quantity-help">Verificado: {new Date(latest.fetchedAt).toLocaleString("es-CL")}. Las publicaciones se revisan al abrir la mesa o al pulsar verificar.</p>}<div className="quantity-inline-actions">{configuration.source && <button className="quantity-text-button" disabled={busy} onClick={() => void checkVersion(configuration.id)}><RefreshCw size={13}/>Verificar nueva versión</button>}{source && latest && latest.number > source.version.number && source.scope.itemId === configuration.source?.scope.itemId && <button className="quantity-secondary" disabled={busy} onClick={() => void selectLatest()}>Usar V{latest.number}</button>}</div><details className="quantity-provenance"><summary>Identificadores de la fuente seleccionada</summary>{source ? <><p>Proyecto: {source.scope.projectId}</p><p>Archivo: {source.scope.itemId}</p><p>Modelo derivado: {source.version.modelId ?? "No disponible"}</p><p>Versión: {source.version.id}</p><p>Publicada: {source.version.createdAt ? new Date(source.version.createdAt).toLocaleString("es-CL") : "Fecha no disponible"}</p><p>Vista: {source.view?.id ?? "No seleccionada"}</p><p>Plantilla: {template?.id ?? "No seleccionada"}</p><p>Fuente: {source.version.endpoint}</p></> : <p>Fuente BIM no configurada.</p>}</details></div>
       </section>
