@@ -36,6 +36,7 @@
     "next": "16.3.4",
     "next-themes": "^0.4.6",
     "pdfjs-dist": "6.3.289",
+    "postgres": "3.4.9",
     "radix-ui": "^1.6.7",
     "react": "19.2.6",
     "react-day-picker": "^10.0.1",
@@ -51,6 +52,7 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.8",
     "@tailwindcss/postcss": "4.2.1",
     "@types/node": "22.19.19",
     "@types/react": "19.2.14",

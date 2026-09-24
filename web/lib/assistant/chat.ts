@@ -2,7 +2,7 @@ import { z } from "zod";
 import { browse, DataError, querySchema, scopeSchema, verifyProject, verifyLocation } from "../autodesk/data.ts";
 import type { DataPage, Entry, Evidence } from "../autodesk/data.ts";
 
-export const chatSchema = z.object({ scope: scopeSchema, messages: z.array(z.object({ role: z.enum(["user", "assistant"]), content: z.string().trim().min(1).max(6000) }).strict()).min(1).max(16) }).strict().refine(v => v.messages.at(-1)?.role === "user", "Se requiere una consulta");
+export const chatSchema = z.object({ conversationId: z.string().uuid().optional(), interactionId: z.string().uuid().optional(), scope: scopeSchema, messages: z.array(z.object({ role: z.enum(["user", "assistant"]), content: z.string().trim().min(1).max(6000) }).strict()).min(1).max(16) }).strict().refine(v => v.messages.at(-1)?.role === "user", "Se requiere una consulta");
 export type Source = Evidence & { id: string; label: string; entries: Entry[] };
 const selectionSchema = z.object({ sourceId: z.string(), entryIds: z.array(z.string()).max(100) }).strict();
 const answerSchema = z.object({ status: z.enum(["found", "not_available", "clarify"]), selections: z.array(selectionSchema).max(12), question: z.string().max(500).nullable() }).strict();

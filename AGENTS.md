@@ -23,6 +23,11 @@ NO EVIDENCE → NO CLAIM.
 Leer y aplicar [Principios del proyecto](docs/PRINCIPIOS.md) antes de desarrollar.
 La política se aplica transversalmente a todas las fases del roadmap.
 
+Memory and learning must follow [docs/memory-architecture.md](docs/memory-architecture.md).
+Recent conversation history expires after 5 days. Behavioral learning may be automatic.
+Technical knowledge requires validated evidence. Never promote inferred technical information to truth.
+NO EVIDENCE → NO CLAIM.
+
 ## Límites de implementación
 
 - Implementar únicamente el alcance solicitado. El roadmap no autoriza por sí solo a implementar fases futuras.

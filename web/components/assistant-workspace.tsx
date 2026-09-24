@@ -8,6 +8,7 @@ import type { Source } from "@/lib/assistant/chat";
 import type { SearchBatch, SearchTerms, SearchStage, SearchHit } from "@/lib/search/contracts";
 import { mergeSearchHits } from "@/lib/search/merge";
 import { SearchResults } from "./search-results";
+import { RecentHistory } from "./recent-history";
 import { DocumentAnswer } from "./document-answer";
 import type { DocumentAnswer as DocumentAnswerData, DocumentMode } from "@/lib/assistant/document-contracts";
 
@@ -127,11 +128,28 @@ function TreeRow(props: BranchProps & { entry: Entry }) {
     {rowScope && <button type="button" className="project-select" aria-label={`Consultar ${kindLabel} ${entry.name}`} aria-pressed={selected} title={selected ? "Alcance seleccionado" : `Buscar en este ${kindLabel}${entry.type === "folders" ? " y sus subcarpetas" : ""}`} onClick={() => { if (!leaf) setOpen(true); selectRow(); }}>{selected ? <CircleCheck size={17}/> : <span className="radio-empty"/>}</button>}
   </div>{!leaf && open && <div className="tree-children"><Branch {...props} query={next} folderIds={entry.type === "folders" ? [...folderIds, entry.id] : []} path={entry.type === "hubs" ? "" : path}/></div>}</div>;
 }
-type Message = { role: "user" | "assistant"; content: string; sources?: Source[]; search?: SearchBatch; answer?: DocumentAnswerData };
+type Message = { historical?: boolean; expires_at?: string; role: "user" | "assistant"; content: string; sources?: Source[]; search?: SearchBatch; answer?: DocumentAnswerData };
 function ChatPanel({ selection, select, aiConfigured, invalidate }: { select: (selection: Selection) => void; selection: Selection; aiConfigured: boolean; invalidate: (code: string) => void }) {
   const documentSelection = selection.scope.kind === "file" || selection.scope.kind === "folder";
   const [mode, setMode] = useState<DocumentMode | "search">(selection.initialMode ?? "search");
   const [messages, setMessages] = useState<Message[]>([]), [draft, setDraft] = useState("");
+  const conversationId = useRef<string | undefined>(undefined);
+  const [memoryNotice,setMemoryNotice] = useState("");
+  const [historyExpiresAt,setHistoryExpiresAt] = useState<string | undefined>();
+  function rememberResult(result: {memory?:{status:string;conversationId?:string;expiresAt?:string}}) {
+    const memory=result.memory;if(!memory)return;
+    if(memory.status==="saved"){conversationId.current=memory.conversationId;setHistoryExpiresAt(memory.expiresAt);setMemoryNotice("Historial guardado · retención de 5 días desde su creación.");}
+    else if(memory.status==="not_configured")setMemoryNotice("Historial persistente pendiente de configuración.");
+    else if(memory.status==="project_required")setMemoryNotice("Selecciona un proyecto para guardar esta conversación.");
+    else setMemoryNotice("Esta respuesta no pudo guardarse en el historial. Tu conversación abierta se conserva.");
+  }
+  useEffect(()=>{
+    const expiries=messages.filter(m=>m.historical&&m.expires_at).map(m=>Date.parse(m.expires_at!));
+    if(historyExpiresAt)expiries.push(Date.parse(historyExpiresAt));
+    if(!expiries.length)return;
+    const timer=setTimeout(()=>{setMessages([]);conversationId.current=undefined;setHistoryExpiresAt(undefined);setMemoryNotice("El historial venció y fue retirado del contexto reciente.");},Math.max(0,Math.min(...expiries)-Date.now()));
+    return()=>clearTimeout(timer);
+  },[messages,historyExpiresAt]);
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
   const [activeSearch, setActiveSearch] = useState<number | null>(null);
   const controller = useRef<AbortController | null>(null), bottom = useRef<HTMLDivElement | null>(null);
@@ -141,8 +159,9 @@ function ChatPanel({ selection, select, aiConfigured, invalidate }: { select: (s
     setActiveSearch(index);
     let current = previous;
     for (let batch = 0; batch < 15 && !abort.signal.aborted; batch++) {
-      const response = await autodeskFetch("/api/assistant/search", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scope: selection.scope, stage, terms, cursor: current?.cursor ?? null }), signal: abort.signal });
+      const response = await autodeskFetch("/api/assistant/search", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ conversationId: conversationId.current, interactionId: crypto.randomUUID(), scope: selection.scope, stage, terms, cursor: current?.cursor ?? null }), signal: abort.signal });
       const result = await response.json();
+      rememberResult(result);
       if (!response.ok) { invalidate(result.error); throw new Error(result.error); }
       if (abort.signal.aborted) return;
       const next = result as SearchBatch;
@@ -182,8 +201,9 @@ function ChatPanel({ selection, select, aiConfigured, invalidate }: { select: (s
     setMessages(outgoing); setDraft(""); setActiveSearch(null); setBusy(true); setError("");
     const abort = new AbortController(); controller.current = abort;
     try {
-      const response = await autodeskFetch(requestedMode === "search" ? "/api/assistant/chat" : "/api/assistant/documents", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(requestedMode === "search" ? { scope: selection.scope, messages: outgoing.slice(-11).map(m => ({ role: m.role, content: m.content.slice(0, 4000) })) } : { scope: selection.scope, mode: requestedMode, question: text.trim() }), signal: abort.signal });
+      const response = await autodeskFetch(requestedMode === "search" ? "/api/assistant/chat" : "/api/assistant/documents", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(requestedMode === "search" ? { conversationId: conversationId.current, interactionId: crypto.randomUUID(), scope: selection.scope, messages: outgoing.slice(-11).map(m => ({ role: m.role, content: (m.historical && m.role === "assistant" ? "HISTORIAL NO VERIFICADO COMO EVIDENCIA ACTUAL: " : "") + m.content.slice(0, 3800) })) } : { conversationId: conversationId.current, interactionId: crypto.randomUUID(), scope: selection.scope, mode: requestedMode, question: text.trim() }), signal: abort.signal });
       const result = await response.json();
+      rememberResult(result);
       if (!response.ok) { invalidate(result.error); throw new Error(result.error); }
       if (!abort.signal.aborted) {
         if (result.kind === "search") { setMessages([...outgoing, { role: "assistant", content: selection.scope.kind === "file" ? "Revisando el nombre del archivo seleccionado…" : "Buscando primero en nombres de carpetas…" }]); await search(outgoing.length, result.terms, abort); }
@@ -195,11 +215,13 @@ function ChatPanel({ selection, select, aiConfigured, invalidate }: { select: (s
   }
   const suggestion = selection.scope.kind === "all" ? "Muéstrame los proyectos a los que tengo acceso." : selection.scope.kind === "folder" ? "Muéstrame el contenido de esta carpeta." : selection.scope.kind === "file" ? "Muéstrame el archivo seleccionado." : "Muéstrame las carpetas raíz de este proyecto.";
   return <section className="chat-panel" aria-label="Asistente IA con OpenAI">
-    <PanelHeading icon={<BrainCircuit size={21}/>} title="Tu asistente de proyectos" subtitle="OpenAI · Consultas con fuentes"><button type="button" className="icon-button" disabled={busy || !messages.length} aria-label="Limpiar conversación" title="Limpiar conversación" onClick={() => { setMessages([]); setError(""); }}><Trash2 size={16}/></button></PanelHeading>
+    <PanelHeading icon={<BrainCircuit size={21}/>} title="Tu asistente de proyectos" subtitle="OpenAI · Consultas con fuentes"><button type="button" className="icon-button" disabled={busy || !messages.length} aria-label="Limpiar conversación" title="Limpiar conversación" onClick={() => { setMessages([]); setError(""); conversationId.current=undefined; setHistoryExpiresAt(undefined); setMemoryNotice(""); }}><Trash2 size={16}/></button></PanelHeading>
+    <RecentHistory scope={selection.scope} busy={busy} onNew={()=>{conversationId.current=undefined;setHistoryExpiresAt(undefined);setMessages([]);setMemoryNotice("");setError("");}} onRestore={(id,rows)=>{conversationId.current=id;setHistoryExpiresAt(rows[0]?.expires_at);setMessages(rows);setError("");setMemoryNotice("Historial recuperado. Cada consulta vuelve a verificar las fuentes actuales.");}}/>
+    {memoryNotice&&<p className="memory-notice" role="status">{memoryNotice}</p>}
     <div className="chat-scope"><span className="small-label">{selection.scope.kind === "file" ? "SÓLO ESTE ARCHIVO" : selection.scope.kind === "folder" ? "CARPETA Y SUBCARPETAS" : "CONSULTANDO"}</span><span>{selection.scope.kind === "file" ? <File size={14}/> : selection.scope.kind === "folder" ? <Folder size={14}/> : <Database size={14}/>}<span>{selection.path ?? selection.label}</span></span></div>
     <div className="chat-messages" aria-live="polite" aria-relevant="additions text">
       {!messages.length && <div className="panel-empty chat-intro"><span className="chat-orb"><BrainCircuit size={33}/></span><h3>¿Qué quieres saber de tus documentos?</h3><p>Dime qué necesitas encontrar. Primero revisaré nombres de carpetas; después podrás buscar nombres de archivos y, finalmente, su contenido. Selecciona un resultado para preguntar, resumir o extraer datos con citas.</p>{documentSelection && <div className="document-suggestions"><button type="button" className="chat-suggestion" disabled={busy || !aiConfigured} onClick={() => { setMode("summary"); void send("Resume los puntos principales de los documentos seleccionados, con citas.", "summary"); }}>Resumir selección</button><button type="button" className="chat-suggestion" disabled={busy || !aiConfigured} onClick={() => { setMode("extract"); setDraft("Extrae los objetivos y responsabilidades que se indican en los documentos seleccionados."); }}>Extraer datos con citas</button></div>}<button className="chat-suggestion" type="button" disabled={!aiConfigured || busy} onClick={() => void send(suggestion, "search")}><MessageSquare size={16}/>{suggestion}<ChevronRight size={16}/></button><div className="evidence-note"><ShieldCheck size={16}/> Cada resultado conserva su fuente Autodesk.</div></div>}
-      {messages.map((message, index) => <article className={`chat-message message-${message.role}`} key={index}><span className="message-author">{message.role === "user" ? "Tú" : "Asistente IA"}</span>{message.answer ? <DocumentAnswer answer={message.answer}/> : message.search ? <SearchResults result={message.search} busy={busy && activeSearch === index} disabled={busy} resume={() => void resume(index)} nextStage={stage => void nextStage(message.search!, stage)} select={selectHit}/> : <div className="message-body">{message.content}</div>}{!!message.sources?.length && <details className="message-sources"><summary>{message.sources.length} {message.sources.length === 1 ? "fuente consultada" : "fuentes consultadas"}</summary>{message.sources.map(source => <div key={source.id} className="source-detail"><strong>[{source.id}] {source.label}</strong><time dateTime={source.fetchedAt}>{new Date(source.fetchedAt).toLocaleString("es-CL")}</time><code>{source.endpoint}</code><span>{source.returnedCount} elementos en la página {source.page + 1}{source.nextPage !== null ? " · Hay más páginas" : ""}{source.partial ? " · Resultado parcial" : ""}</span></div>)}</details>}</article>)}
+      {messages.map((message, index) => <article className={`chat-message message-${message.role}`} key={index}><span className="message-author">{message.role === "user" ? "Tú" : "Asistente IA"}</span>{message.historical&&<small className="historical-label">Historial · no es evidencia actual</small>}{message.answer ? <DocumentAnswer answer={message.answer}/> : message.search ? <SearchResults result={message.search} busy={busy && activeSearch === index} disabled={busy} resume={() => void resume(index)} nextStage={stage => void nextStage(message.search!, stage)} select={selectHit}/> : <div className="message-body">{message.content}</div>}{!!message.sources?.length && <details className="message-sources"><summary>{message.sources.length} {message.sources.length === 1 ? "fuente consultada" : "fuentes consultadas"}</summary>{message.sources.map(source => <div key={source.id} className="source-detail"><strong>[{source.id}] {source.label}</strong><time dateTime={source.fetchedAt}>{new Date(source.fetchedAt).toLocaleString("es-CL")}</time><code>{source.endpoint}</code><span>{source.returnedCount} elementos en la página {source.page + 1}{source.nextPage !== null ? " · Hay más páginas" : ""}{source.partial ? " · Resultado parcial" : ""}</span></div>)}</details>}</article>)}
       {busy && <div className="chat-working" role="status"><LoaderCircle className="spin" size={17}/><span>{mode === "search" ? "Consultando Forma y preparando la respuesta…" : "Leyendo la selección y revisando la respuesta contra sus citas. Puede tardar unos minutos…"}</span></div>}
       {error && <p className="assistant-error chat-error" role="alert">{error}</p>}
       {!aiConfigured && <p className="assistant-error chat-error" role="alert">{errorText("ai_not_configured")}</p>}

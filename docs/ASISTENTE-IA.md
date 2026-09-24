@@ -16,13 +16,13 @@ El área principal de `/asistente` se divide en un explorador izquierdo y un cha
 
 Variables privadas adicionales: `OPENAI_API_KEY`, `OPENAI_MODEL` (por defecto `gpt-5-mini`). Se reutiliza la configuración de Nexo AI sin modificar ese proyecto. No se exponen claves ni tokens Autodesk en el cliente o los mensajes enviados a OpenAI.
 
-La API Responses recibe la consulta, un historial limitado y metadatos necesarios. Usa `store:false`, razonamiento medium, hasta 10 llamadas de herramientas por consulta y 4096 tokens de salida por llamada. La conversación vive en memoria del navegador y no se persiste en esta aplicación. `store:false` no equivale a retención cero por parte del proveedor.
+La API Responses recibe la consulta, un historial limitado y metadatos necesarios. Usa `store:false`, razonamiento medium, hasta 10 llamadas de herramientas por consulta y 4096 tokens de salida por llamada. Las conversaciones de un proyecto seleccionado se conservan cifradas durante cinco días en Recent Context, separado de preferencias, conocimiento validado y métricas. Véase [memoria y operación](memory-operations.md). `store:false` no equivale a retención cero por parte del proveedor.
 
 Para respetar los principios del proyecto, el modelo navega y selecciona registros verificados; el servidor genera los nombres, tipos, listas y conteos mostrados a partir de los resultados APS. Una fuente o ID inventado invalida la respuesta. Las solicitudes para buscar documentos o texto se derivan al motor de búsqueda descrito abajo. Las propiedades BIM, normativa y cubicaciones que requieren cálculo o validación siguen sin implementarse.
 
 ## Protección y límites
 
-OAuth solicita `user-profile:read data:read`. Las sesiones de la versión anterior necesitan nuevo consentimiento. Cookies cifradas HttpOnly; vida máxima una hora. Sin refresh token. Endpoints privados sin caché. Chat exige POST del mismo origen y limita el tamaño de cuerpo/historial, las iteraciones y la duración. Tokens exclusivamente en servidor, sin logs de credenciales o datos de proyecto.
+OAuth solicita `user-profile:read data:read`. Las sesiones de la versión anterior necesitan nuevo consentimiento. Cookies cifradas HttpOnly; renovación automática del token Autodesk y sesión de hasta 14 días, sujeta a revocación y disponibilidad de Autodesk. Endpoints privados sin caché. Chat exige POST del mismo origen y limita el tamaño de cuerpo/historial, las iteraciones y la duración. Tokens exclusivamente en servidor, sin logs de credenciales o datos de proyecto.
 
 La paginación valida origen, ruta y avance; nunca reenvía el token a URLs suministradas por la respuesta. El asistente sólo desciende a registros descubiertos en el turno actual. No existen herramientas de escritura ni borrado de datos en Autodesk. La descarga temporal de originales queda confinada al servidor.
 

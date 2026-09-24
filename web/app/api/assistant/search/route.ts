@@ -1,16 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { authorizeData, apiError } from "@/lib/autodesk/authorize";
+import { authorizeData } from "@/lib/autodesk/authorize";
 import { DataError, scopeSchema } from "@/lib/autodesk/data";
 import { privateHeaders } from "@/lib/autodesk/http";
 import { trustedMutation } from "@/lib/autodesk/oauth";
 import { advanceSearch, startSearch } from "@/lib/search/engine";
 import { ownerOf, packCursor, unpackCursor } from "@/lib/search/cursor";
 import { termsSchema } from "@/lib/search/contracts";
+import { remember, rememberFailure, type PendingCapture } from "@/lib/memory/server";
 export const runtime = "nodejs";
 export const maxDuration = 120;
-const schema = z.object({ scope: scopeSchema, stage: z.enum(["folders", "files", "content"]).default("folders"), terms: termsSchema, cursor: z.string().max(1_500_000).nullable() }).strict();
+const schema = z.object({ conversationId: z.string().uuid().optional(), interactionId: z.string().uuid().optional(), scope: scopeSchema, stage: z.enum(["folders", "files", "content"]).default("folders"), terms: termsSchema, cursor: z.string().max(1_500_000).nullable() }).strict();
 export async function POST(request: NextRequest) {
+  const started = Date.now();
+  let pending:PendingCapture|undefined;
   try {
     const { config, session } = authorizeData(request);
     if (!trustedMutation(request, config)) throw new DataError("forbidden", 403);
@@ -19,6 +22,7 @@ export async function POST(request: NextRequest) {
     const chunks: Uint8Array[] = []; let length = 0;
     while (true) { const next = await reader.read(); if (next.done) break; length += next.value.length; if (length > 1_600_000) { await reader.cancel(); throw new DataError("too_large", 413); } chunks.push(next.value); }
     let value; try { value = schema.parse(JSON.parse(Buffer.concat(chunks).toString())); } catch { throw new DataError("invalid_query", 400); }
+    pending={...value,tool:"search",parameters:{scope:value.scope,terms:value.terms,stage:value.stage},action:"search"};
     const signal = AbortSignal.any([request.signal, AbortSignal.timeout(Math.min(100_000, Math.max(1, session.expiresAt - Date.now())))]);
     const state = value.cursor ? unpackCursor(value.cursor, config.key, session.id ?? session.accessToken) : await startSearch(session.accessToken, value.scope, value.terms, Date.now() + 3_600_000, fetch, signal, value.stage);
     if (!value.cursor) state.owner = ownerOf(session.id ?? session.accessToken);
@@ -28,6 +32,7 @@ export async function POST(request: NextRequest) {
     if (session.expiresAt <= Date.now()) throw new DataError("expired", 401);
     let cursor: string | null = null;
     if (!result.done) { try { cursor = packCursor(state, config.key); } catch { result.warnings.push("search_limit"); } }
-    return NextResponse.json({ kind: "search", ...result, cursor }, { headers: privateHeaders });
-  } catch (error) { return apiError(error); }
+    const memory = await remember(request, value.scope, { ...value, response: "Búsqueda en "+value.stage+": "+result.stats.matched+" coincidencias verificadas; "+result.pending+" tareas pendientes.", tool: "search", parameters: { scope: value.scope, terms: value.terms, stage: value.stage }, result, status: result.done && !result.warnings.length ? "success" : "partial", action: "search", duration: Date.now()-started });
+    return NextResponse.json({ kind: "search", ...result, cursor, memory }, { headers: privateHeaders });
+  } catch (error) { return rememberFailure(request,error,pending,started); }
 }

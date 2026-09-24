@@ -2,6 +2,7 @@ import { z } from "zod";
 import { scopeSchema } from "../autodesk/data.ts";
 
 export const documentQuestionSchema = z.object({
+  conversationId: z.string().uuid().optional(), interactionId: z.string().uuid().optional(),
   scope: scopeSchema.refine(s => s.kind === "file" || s.kind === "folder", "Selecciona un archivo o carpeta"),
   mode: z.enum(["ask", "summary", "extract"]),
   question: z.string().trim().min(1).max(2000),
