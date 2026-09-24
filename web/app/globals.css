@@ -65,7 +65,19 @@ h1 { font-size: clamp(1.75rem, 2.4vw, 2.15rem); font-weight: 650; letter-spacing
 .banner-icon { display: grid; place-items: center; width: 53px; height: 53px; border: 1px solid #ffffff30; border-radius: 12px; color: #a9d0ff; flex-shrink: 0; }
 .workspace-banner h2 { font-size: 1.125rem; font-weight: 550; letter-spacing: -.02em; }
 .workspace-banner p { font-size: .875rem; color: #c2d2e7; margin-top: 5px; }
-.connection-state { margin-left: auto; display: flex; align-items: center; gap: 9px; padding-left: 20px; color: #d3e0ef; font-size: .8rem; white-space: nowrap; }
+.autodesk-connection { margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; gap: 10px; max-width: 350px; flex-shrink: 0; }
+.connection-state { display: flex; align-items: center; gap: 9px; color: #d3e0ef; font-size: .8rem; line-height: 1.5; }
+.connection-state svg { flex-shrink: 0; }
+.connection-state strong { font-weight: 650; overflow-wrap: anywhere; }
+.connection-state.is-connected { color: #e4ffed; }
+.connected-dot { width: 10px; height: 10px; border-radius: 50%; background: #4dff88; box-shadow: 0 0 0 4px #4dff881a, 0 0 13px #4dff88a6; flex-shrink: 0; }
+.disconnected-dot { width: 10px; height: 10px; border-radius: 50%; background: #ff626b; box-shadow: 0 0 0 4px #ff626b1a, 0 0 11px #ff626b80; flex-shrink: 0; }
+.autodesk-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 1px solid #b9d5ff; padding: 9px 14px; border-radius: 7px; background: #f3f8ff; color: #14417b; font-size: .82rem; font-weight: 650; min-height: 40px; }
+.autodesk-button:hover { background: #dcecff; }
+.autodesk-button:disabled { opacity: .65; cursor: wait; }
+.autodesk-button.disconnect { background: transparent; color: #d9e8fb; border-color: #ffffff45; }
+.autodesk-button.disconnect:hover { background: #ffffff12; }
+.workspace-banner .connection-notice { margin: 0; color: #ffe1b4; font-size: .78rem; line-height: 1.5; }
 .section-heading { display: flex; justify-content: space-between; align-items: center; gap: 15px; margin-bottom: 20px; }
 .section-heading h2 { font-size: 1.125rem; font-weight: 650; letter-spacing: -.02em; }
 .section-heading p { font-size: .875rem; color: #6a7a90; margin-top: 5px; }
@@ -91,7 +103,8 @@ h1 { font-size: clamp(1.75rem, 2.4vw, 2.15rem); font-weight: 650; letter-spacing
 .empty-copy { font-size: 1rem; line-height: 1.7; color: #64748b; margin-top: 9px; }
 .mobile-close { display: none; }
 @media (min-width: 1500px) { .page-content { padding-top: 48px; } .module-card { padding: 26px; } }
-@media (max-width: 1180px) { .module-grid { grid-template-columns: repeat(2,minmax(0,1fr)); } .connection-state { display: none; } .page-content { padding: 30px; } .environment-label { display: none; } }
+@media (max-width: 1180px) { .module-grid { grid-template-columns: repeat(2,minmax(0,1fr)); } .workspace-banner { flex-wrap: wrap; } .autodesk-connection { width: 100%; max-width: none; margin-left: 71px; align-items: flex-start; } .page-content { padding: 30px; } .environment-label { display: none; } }
 @media (max-width: 767px) { .mobile-close { display: flex; } .brand-header { flex-direction: row; align-items: center; justify-content: space-between; padding: 24px 17px; } .topbar { height: 62px; padding: 0 14px; } .breadcrumbs { gap: 8px; } .breadcrumbs > span:last-child { font-size: .8rem; } .page-content { padding: 27px 20px 22px; } .stage-label { display: none; } .workspace-banner { padding: 21px; gap: 13px; } .banner-icon { display: none; } .workspace-banner h2 { font-size: 1rem; } .section-heading { align-items: flex-start; } .secondary-label { display: none; } .module-empty { min-height: 390px; } .workspace-footer { flex-direction: column; gap: 5px; } }
 @media (max-width: 540px) { .module-grid { grid-template-columns: 1fr; gap: 13px; } .module-card { padding: 21px; } .breadcrumbs a, .breadcrumb-divider { display: none; } .page-description { font-size: .9375rem; } }
+@media (max-width: 767px) { .autodesk-connection { margin-left: 0; margin-top: 8px; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; } }

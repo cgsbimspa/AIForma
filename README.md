@@ -29,4 +29,4 @@ La aplicación y sus instrucciones técnicas están en [web/README.md](web/READM
 - [Propuesta original de alcance](docs/ETAPA-0.1-PROPUESTA.md).
 - [Entrega y verificación de la Etapa 0.1](docs/ETAPA-0.1-ENTREGA.md).
 
-La web todavía no conecta Autodesk, no ejecuta análisis ni utiliza IA. No contiene datos de proyecto ni autenticación. Su alcance actual es la estructura navegable para desarrollar los módulos de forma incremental.
+La portada permite conectar una cuenta real de Autodesk mediante OAuth y verificar el nombre del usuario. Ver [conexión Autodesk](docs/AUTODESK-OAUTH.md). Los módulos técnicos siguen pendientes: todavía no consulta modelos ni datos de proyecto, no ejecuta análisis ni utiliza IA.
