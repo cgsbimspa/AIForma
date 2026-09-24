@@ -11,7 +11,7 @@ const statuses: Record<string, string> = {
 const messages = {
   not_available: "No encontré lo solicitado en el texto que pude leer. Si hay lectura parcial, todavía puede estar en contenido no revisado. Usa Buscar para localizar primero la carpeta o el archivo.",
   unsupported: "Esta solicitud requiere cálculos o una validación técnica que no están implementados. Puedes pedir que extraiga lo que los documentos dicen explícitamente.",
-  unverified: "No fue posible respaldar la respuesta con las citas y su contexto. No se mostrará una conclusión sin soporte. Prueba una pregunta más específica.",
+  unverified: "No pude confirmar ese dato con suficiente respaldo en el documento. Si me indicas el apartado o el concepto exacto, puedo volver a revisarlo.",
 };
 export function DocumentAnswer({ answer }: { answer: Answer }) {
   const literal = answer.mode === "extract";

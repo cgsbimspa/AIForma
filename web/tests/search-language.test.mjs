@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { expandSearchTerms, acceptsNextSearchStage, searchConversation } from '../lib/search/language.ts';
+import { expandSearchTerms, acceptsNextSearchStage, confirmedSearchStage, searchConversation } from '../lib/search/language.ts';
 import { matchesTerms } from '../lib/search/contracts.ts';
 import { planSearch, literalSearch } from '../lib/search/plan.ts';
 
@@ -29,6 +29,10 @@ test('AI search expansion preserves the literal shortcut and uses no extra AI re
 test('stage confirmation is conversational without ignoring negations or new instructions', () => {
   for (const answer of ['Sí','si por favor','dale','adelante','continúa','sí, busca también','amplía la búsqueda','busca en los archivos']) assert.ok(acceptsNextSearchStage(answer),answer);
   for (const answer of ['no','no, busca contratos','sí, pero sólo en otra carpeta','busca facturas','no continúes']) assert.equal(acceptsNextSearchStage(answer),false,answer);
+  assert.equal(confirmedSearchStage('dale','folders'),'files');
+  assert.equal(confirmedSearchStage('busca dentro de los archivos','folders'),'content');
+  assert.equal(confirmedSearchStage('busca en nombres de archivos','files'),'files');
+  assert.equal(confirmedSearchStage('no, cambia de proyecto','folders'),undefined);
   const partial=searchConversation({stage:'folders',done:false,warnings:[],hits:[]},false);
   assert.match(partial.intro,/pendiente o no disponible/); assert.match(partial.question,/incompleta/);
   const complete=searchConversation({stage:'folders',done:true,warnings:[],hits:[]},false);

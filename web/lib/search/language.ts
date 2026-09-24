@@ -1,4 +1,4 @@
-import { normalizeText, termsSchema, type SearchTerms, type SearchBatch } from "./contracts.ts";
+import { normalizeText, termsSchema, type SearchTerms, type SearchBatch, type SearchStage } from "./contracts.ts";
 
 // Retrieval vocabulary only. These variants never establish a document's type
 // or a technical equivalence; every hit still points to its original source.
@@ -50,4 +50,12 @@ export function searchConversation(result: Pick<SearchBatch, "stage"|"done"|"war
 
 export function acceptsNextSearchStage(text: string) {
   return /^(?:si(?: por favor)?|dale|adelante|continuar|continua|sigamos|amplia(?: la busqueda)?|busca (?:tambien )?(?:en (?:los )?nombres de archivos|en (?:los )?archivos|dentro de (?:los )?archivos|en (?:el )?contenido)|si[, ]+(?:busca|buscar|continua|continuar|amplia)(?: (?:tambien|en archivos|en los archivos|en nombres de archivos|dentro de los archivos|la busqueda|por favor))*)[.!?]*$/.test(normalizeText(text));
+}
+
+export function confirmedSearchStage(text: string, current: SearchStage): SearchStage | undefined {
+  if (!acceptsNextSearchStage(text)) return undefined;
+  const normalized = normalizeText(text);
+  if (/\b(?:dentro|contenido)\b/.test(normalized)) return "content";
+  if (/\bnombres\b/.test(normalized)) return "files";
+  return current === "folders" ? "files" : current === "files" ? "content" : undefined;
 }
