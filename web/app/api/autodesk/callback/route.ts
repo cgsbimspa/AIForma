@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { exchange, profile, readConfig, seal, validState } from "@/lib/autodesk/oauth";
+import { exchange, profile, readConfig, seal, unseal, validState } from "@/lib/autodesk/oauth";
 import { cookieName, home, privateHeaders, setCookie } from "@/lib/autodesk/http";
 
 export const runtime = "nodejs";
@@ -7,8 +7,9 @@ export async function GET(request: NextRequest) {
   let config;
   try { config = readConfig(); } catch { return NextResponse.json({ error: "Conexión Autodesk no configurada." }, { status: 503, headers: privateHeaders }); }
   const query = request.nextUrl.searchParams;
+  const pending = unseal(request.cookies.get(cookieName(config, "attempt"))?.value, config.key, "attempt");
   const finish = (error?: string) => {
-    const response = home(config, error);
+    const response = home(config, error, pending?.returnTo);
     setCookie(response, config, "attempt", "", 0);
     if (error) setCookie(response, config, "session", "", 0);
     return response;

@@ -21,7 +21,8 @@ Para probar localmente, abrir la dirección 127.0.0.1 indicada; el origen debe c
 - Punto verde brillante y «Conectado con usuario [nombre]» solo tras consultar satisfactoriamente `https://api.userprofile.autodesk.com/userinfo` con el token del usuario actual.
 - Estado revisado al abrir la página, recuperar el foco y cada minuto mientras sea visible. Una respuesta rechazada, un error de verificación o la expiración quitan el indicador verde.
 - «Desconectar» elimina la sesión de esta plataforma; no cierra la cuenta global de Autodesk ni la sesión de Nexo.
-- Alcance mínimo actual: `user-profile:read`. Esto verifica identidad, no acredita acceso a proyectos ACC, modelos ni otros módulos.
+- Alcances actuales: `user-profile:read data:read`, exclusivamente lectura. Las sesiones anteriores de sólo perfil requieren volver a autorizar. La identidad verificada no garantiza que una cuenta haya habilitado esta integración para sus proyectos.
+- El módulo Asistente solicita permisos y regresa a `/asistente` mediante una ruta permitida guardada en el estado cifrado. No se aceptan redirecciones arbitrarias.
 - La sesión dura como máximo una hora y nunca supera el vencimiento del token emitido por APS. Después se vuelve a conectar. No se almacenan refresh tokens en esta etapa.
 
 ## Protección

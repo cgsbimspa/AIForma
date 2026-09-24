@@ -7,8 +7,8 @@ export const cookieName = (config: Config, kind: "session" | "attempt") => `${co
 export function setCookie(response: NextResponse, config: Config, kind: "session" | "attempt", value: string, maxAge: number) {
   response.cookies.set(cookieName(config, kind), value, { httpOnly: true, secure: config.secure, sameSite: "lax", path: "/", maxAge });
 }
-export function home(config: Config, error?: string) {
-  const url = new URL("/", config.origin);
+export function home(config: Config, error?: string, returnTo: "/" | "/asistente" = "/") {
+  const url = new URL(returnTo, config.origin);
   if (error) url.searchParams.set("autodesk_error", error);
   return NextResponse.redirect(url, { status: 303, headers: privateHeaders });
 }

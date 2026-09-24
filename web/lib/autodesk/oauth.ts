@@ -2,8 +2,8 @@ import { createCipheriv, createDecipheriv, randomBytes, timingSafeEqual } from "
 import { z } from "zod";
 
 // Adapted from Nexo AI's confidential APS Authorization Code flow.
-// This first connection only requests the user's profile, not project permissions.
-export const SCOPE = "user-profile:read";
+// Read-only access to the signed-in user's Forma Data Management projects.
+export const SCOPE = "user-profile:read data:read";
 export const AUTHORIZE_URL = "https://developer.api.autodesk.com/authentication/v2/authorize";
 export const TOKEN_URL = "https://developer.api.autodesk.com/authentication/v2/token";
 export const PROFILE_URL = "https://api.userprofile.autodesk.com/userinfo";
@@ -22,8 +22,8 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
   return { clientId, clientSecret, callbackUrl: callback.href, key: Buffer.from(secret, "hex"), origin: callback.origin, secure: !local };
 }
 
-const attemptSchema = z.object({ kind: z.literal("attempt"), state: z.string().regex(/^[\w-]{43}$/), expiresAt: z.number().finite() });
-const sessionSchema = z.object({ kind: z.literal("session"), accessToken: z.string().min(1).max(6000), expiresAt: z.number().finite() });
+const attemptSchema = z.object({ kind: z.literal("attempt"), state: z.string().regex(/^[\w-]{43}$/), expiresAt: z.number().finite(), returnTo: z.enum(["/", "/asistente"]).default("/") });
+const sessionSchema = z.object({ kind: z.literal("session"), accessToken: z.string().min(1).max(6000), expiresAt: z.number().finite(), scopes: z.array(z.string()).optional() });
 export type Session = z.infer<typeof sessionSchema>;
 type Payload = z.infer<typeof attemptSchema> | Session;
 
@@ -51,11 +51,11 @@ export function unseal(value: string | undefined, key: Buffer, kind: Payload["ki
     return parsed.success && parsed.data.expiresAt > now ? parsed.data : null;
   } catch { return null; }
 }
-export function begin(config: Config, now = Date.now()) {
+export function begin(config: Config, now = Date.now(), returnTo: "/" | "/asistente" = "/") {
   const state = randomBytes(32).toString("base64url");
   const url = new URL(AUTHORIZE_URL);
   url.search = new URLSearchParams({ response_type: "code", client_id: config.clientId, redirect_uri: config.callbackUrl, scope: SCOPE, state }).toString();
-  return { url: url.href, cookie: seal({ kind: "attempt", state, expiresAt: now + ATTEMPT_TTL * 1000 }, config.key) };
+  return { url: url.href, cookie: seal({ kind: "attempt", state, expiresAt: now + ATTEMPT_TTL * 1000, returnTo }, config.key) };
 }
 export function validState(cookie: string | undefined, state: string | null, config: Config): boolean {
   const pending = unseal(cookie, config.key, "attempt");
@@ -86,10 +86,11 @@ export async function exchange(config: Config, code: string, fetcher: typeof fet
     body: new URLSearchParams({ grant_type: "authorization_code", code, redirect_uri: config.callbackUrl }).toString(),
   }, fetcher);
   const parsed = z.object({ access_token: z.string().min(1).max(6000), token_type: z.string().regex(/^bearer$/i), expires_in: z.number().finite().positive(), scope: z.string().optional() }).safeParse(result);
-  if (!parsed.success || (parsed.data.scope && !parsed.data.scope.split(" ").includes(SCOPE))) throw new AutodeskError("invalid_response");
+  if (!parsed.success || (parsed.data.scope && !SCOPE.split(" ").every(scope => parsed.data.scope!.split(" ").includes(scope)))) throw new AutodeskError("invalid_response");
   // Do not persist refresh tokens. Reconnect after the short-lived APS token expires.
-  return { kind: "session", accessToken: parsed.data.access_token, expiresAt: startedAt + Math.min(parsed.data.expires_in, MAX_SESSION_SECONDS) * 1000 - 5000 };
+  return { kind: "session", accessToken: parsed.data.access_token, scopes: (parsed.data.scope ?? SCOPE).split(" "), expiresAt: startedAt + Math.min(parsed.data.expires_in, MAX_SESSION_SECONDS) * 1000 - 5000 };
 }
+export function hasDataAccess(session: Session) { return session.scopes?.includes("data:read") === true; }
 export async function profile(accessToken: string, fetcher: typeof fetch = fetch) {
   const result = await requestJson(PROFILE_URL, { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } }, fetcher);
   const parsed = z.object({ sub: z.string().trim().min(1).max(256), name: z.string().trim().min(1).max(256) }).safeParse(result);

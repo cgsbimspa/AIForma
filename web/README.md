@@ -18,7 +18,7 @@ npm run build
 node node_modules/typescript/bin/tsc --noEmit
 ```
 
-No se necesitan claves API, variables de entorno ni cuentas Autodesk para esta etapa.
+La navegación pública no requiere cuentas. La conexión real de Autodesk y el Asistente necesitan variables del servidor: consultar `../docs/AUTODESK-OAUTH.md` y `../docs/ASISTENTE-IA.md`. Nunca guardar claves en Git ni usar variables `NEXT_PUBLIC_` para secretos.
 
 ## Tecnología y decisiones
 
@@ -31,7 +31,7 @@ No se necesitan claves API, variables de entorno ni cuentas Autodesk para esta e
 
 ## Publicación en Vercel
 
-Importar el repositorio de AI Forma, seleccionar `web` como Root Directory y Next.js como framework. `web/vercel.json` fija `npm ci` y `npm run build`. Usar Node.js 24.x. Esta etapa no requiere variables de entorno.
+Importar el repositorio de AI Forma, seleccionar `web` como Root Directory y Next.js como framework. `web/vercel.json` fija `npm ci` y `npm run build`. Usar Node.js 24.x y configurar las variables privadas indicadas en los documentos de integración.
 
 El destino solicitado es `app.cgsbim.cl`. Su DNS debe utilizar el valor exacto que indique Vercel para este nuevo proyecto. No reutilizar valores de otros proyectos ni modificar `dashboards.cgsbim.cl`.
 
@@ -45,15 +45,16 @@ El estado real de publicación se registra en `../docs/DESPLIEGUE.md`.
 | `components/workspace-shell.tsx` | Navegación lateral, encabezado y menú móvil |
 | `app/page.tsx` | Inicio y accesos a módulos |
 | `lib/modules.ts` | Nombres, rutas y propósito planificado según el roadmap |
-| `app/[module]/page.tsx` | Estado vacío de los nueve módulos |
+| `app/[module]/page.tsx` | Estado vacío de los módulos pendientes |
+| `app/asistente/page.tsx` | Explorador Forma y consultas mediante OpenAI |
 | `app/not-found.tsx` | Recuperación de direcciones inexistentes |
 | `app/globals.css` | Tema, estilos y adaptación a pantallas estrechas |
 | `components/ui/` | Primitivas de interfaz incluidas en el starter |
 
 ## Continuar con un módulo
 
-Definir primero su alcance y sus fuentes. Cuando exista una implementación autorizada, crear su ruta específica en `app/<ruta>/page.tsx`, que podrá sustituir su página vacía compartida, o extraer componentes propios. Actualizar también el estado mostrado en el inicio; actualmente todos están pendientes de implementación.
+Definir primero su alcance y sus fuentes. Cuando exista una implementación autorizada, crear su ruta específica en `app/<ruta>/page.tsx`, que podrá sustituir su página vacía compartida, o extraer componentes propios. Actualizar también el estado mostrado en el inicio. El Asistente ya tiene explorador y consultas de metadatos; los demás módulos siguen pendientes.
 
 Las descripciones del catálogo son objetivos del roadmap, no resultados de análisis. El estado de cada módulo se informa explícitamente. No añadir datos ficticios ni convertir ausencia de evidencia en un cero.
 
-El esquema de datos, autenticación, permisos, APIs Autodesk, almacenamiento y motores técnicos siguen pendientes de definición e implementación.
+La autenticación Autodesk y la consulta de metadatos usan APIs reales. El almacenamiento de proyectos, la indexación del contenido documental y los motores técnicos siguen pendientes.
