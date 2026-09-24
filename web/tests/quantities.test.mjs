@@ -75,6 +75,13 @@ test('quantity storage: persistent project sharing, tenant isolation, duplicate 
   const draft2=await store.template(actor,{configurationId:config.id,name:'TEST DRAFT',templateId:draft.templateId});
   assert.equal(draft.configuration,null);assert.equal(draft2.version,2);assert.equal((await store.workspace(actor)).templates.length,2);
   const saved=await store.save(actor,{id:config.id,revision:0,source,templateVersionId:draft.id});assert.equal(saved.revision,1);
+  const structure=await store.add(actor,'structure');
+  const structureSource={...source,view:{...source.view,id:'TEST_STRUCTURE_VIEW',name:'TEST structure view'}};
+  await store.save(actor,{id:structure.id,revision:0,source:structureSource,templateVersionId:null});
+  const distinct=(await store.workspace(actor)).configurations;
+  assert.equal(distinct.find(c=>c.id===config.id).source.view.id,'TEST_VIEW');
+  assert.equal(distinct.find(c=>c.id===structure.id).source.view.id,'TEST_STRUCTURE_VIEW');
+  await assert.rejects(store.save(actor,{id:structure.id,revision:1,source:structureSource,templateVersionId:draft.id}),/invalid_template/);
   await assert.rejects(store.save(actor,{id:config.id,revision:0,source:null,templateVersionId:null}),/configuration_conflict/);
   await assert.rejects(store.save(actor,{id:config.id,revision:1,source:{...source,scope:{...source.scope,projectId:'TEST_OTHER'}},templateVersionId:null}),/out_of_scope/);
   await assert.rejects(tx(actor,q=>q('UPDATE quantity_template_version SET version=9 WHERE id=$1',[draft.id])));
