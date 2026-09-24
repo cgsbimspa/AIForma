@@ -4,7 +4,7 @@
 .quantity-heading h1 { font-size:1.9rem; }
 .quantity-heading .page-description { font-size:.85rem; margin-top:7px; }
 .quantity-heading .connection-state, .quantity-heading .connection-state.is-connected { color:#35516e; }
-.quantity-heading .autodesk-button { color:#2462a7; background:white; padding:5px 9px; font-size:.7rem; }
+.quantity-heading .autodesk-button, .quantity-heading .autodesk-button.disconnect { color:#2462a7; background:white; border-color:#d1def1; padding:5px 9px; font-size:.7rem; }
 .quantity-heading .connection-notice { color:#97551b; }
 .quantity-page h2 { font-size:1rem; font-weight:650; }
 .quantity-page h3 { font-size:.9rem; font-weight:650; }
