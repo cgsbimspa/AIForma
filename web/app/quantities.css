@@ -206,6 +206,10 @@
 .quantity-workspace-footer>span:last-child { margin-left:auto; }
 .quantity-page.quantity-modal { display:block; height:auto; max-height:86dvh; overflow:auto; width:min(650px,calc(100vw - 30px)); max-width:650px; padding:24px; border-radius:18px; }
 .quantity-page.quantity-modal .quantity-settings { margin-top:15px; }.quantity-history-modal .quantity-results { margin-top:15px; }
+.quantity-template-definition { margin:10px 0; padding:12px; border:1px solid #d6e6fa; border-radius:10px; background:#f1f7ff; color:#375a80; font-size:.74rem; line-height:1.6; }
+.quantity-template-definition strong { color:#175ab9; }
+.quantity-template-definition p { margin:5px 0; }
+.quantity-template-definition small { display:block; color:#657e9c; font-size:.67rem; }
 .quantity-welcome { margin:16px; }.quantity-page>.quantity-error { margin:4px 16px; }
 @media(max-width:1250px) { .quantity-app-topbar{padding:8px 12px;gap:8px}.quantity-project-bar{padding:0 8px}.quantity-app-topbar .autodesk-connection{max-width:140px}.quantity-top-actions{gap:4px}.quantity-top-actions button{font-size:.6rem;padding:7px 6px;gap:4px}.quantity-context-topbar{gap:7px}.quantity-context-topbar label{width:140px}.quantity-kpi{padding:10px 8px;gap:6px}.quantity-kpi>svg{width:19px;height:19px}.quantity-desk-board{gap:10px}.quantity-kpis{gap:5px}.quantity-grid-scroll th,.quantity-grid-scroll td{padding:7px 5px}.quantity-project-stage{padding:0 10px 8px} }
 @media(max-height:760px) and (min-width:950px) { .quantity-app-topbar{padding-top:6px;padding-bottom:6px}.quantity-section-title{margin:5px 0}.quantity-desk-stage{gap:7px}.quantity-data-column{gap:8px}.quantity-desk-board .quantity-panel-heading{padding:8px 12px;min-height:38px}.quantity-model-context{padding:5px 12px}.quantity-kpi{padding:8px}.quantity-filter-fields{padding-bottom:8px}.quantity-kpis{padding-bottom:9px}.quantity-table-empty{padding:10px 5px}.quantity-panel-heading p{display:none} }

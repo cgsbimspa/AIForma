@@ -69,7 +69,7 @@ function ProjectQuantities({ project, name }: { project: QuantityProject; name: 
     const controller = new AbortController();
     async function load() {
       setBusy(true); setError("");
-      try { setWorkspace(await quantityResponse<Workspace>(`/api/quantities?scope=${encodeURIComponent(JSON.stringify(project))}`, { signal: controller.signal })); }
+      try { setWorkspace(await quantityCommand<Workspace>(project, { action: "prepare-templates" }, controller.signal)); }
       catch (e) { if (!controller.signal.aborted) setError((e as Error).message); }
       finally { if (!controller.signal.aborted) setBusy(false); }
     }
@@ -83,7 +83,7 @@ function ProjectQuantities({ project, name }: { project: QuantityProject; name: 
   async function add() {
     if (!specialty || !workspace) return;
     setBusy(true); setError("");
-    try { const created = await quantityCommand<QuantityConfiguration>(project, { action: "add", specialtyCode: specialty }); setWorkspace({ ...workspace, configurations: [...workspace.configurations, created] }); setAdding(false); setSpecialty(""); setSelected(created.id); }
+    try { const created = await quantityCommand<QuantityConfiguration>(project, { action: "add", specialtyCode: specialty }); setWorkspace(await quantityResponse<Workspace>(`/api/quantities?scope=${encodeURIComponent(JSON.stringify(project))}`)); setAdding(false); setSpecialty(""); setSelected(created.id); }
     catch (e) { setError((e as Error).message); } finally { setBusy(false); }
   }
   const configuration = workspace?.configurations.find(c => c.id === selected);
@@ -183,7 +183,9 @@ function QuantityDesk({ project, configuration, templates, runs, historyPartial,
     <footer className="quantity-workspace-footer"><ShieldCheck size={13}/><span>{projected.rows.length?"Cantidades vinculadas a la versión y vista seleccionadas.":"Modelo completo · Sin clasificación verificada para aplicar los filtros al visor."}</span><span>{changed?"Cambios sin guardar":latest?"Verificado: "+new Date(latest.fetchedAt).toLocaleString("es-CL"):"Fuente pendiente de verificación"}</span></footer>
     <Dialog open={settings} onOpenChange={setSettings}><DialogContent className="quantity-page quantity-modal"><DialogTitle>Configurar fuente BIM</DialogTitle><DialogDescription>{specialtyName(configuration.specialtyCode)} · {projectName}. Selecciona el archivo RVT, su versión y su vista publicada.</DialogDescription><section className="quantity-settings quantity-panel" aria-label="Configuración de la fuente BIM"><div className="quantity-panel-heading"><Boxes size={18}/><h2>Configuración</h2></div><div className="quantity-panel-body">
         <span className="quantity-field-label">Especialidad</span><h3>{specialtyName(configuration.specialtyCode)}</h3>
-        <label htmlFor="quantity-template">Plantilla y versión</label><select id="quantity-template" value={templateId} disabled={busy} onChange={e => setTemplateId(e.target.value)}><option value="">Sin plantilla</option>{templates.map(t => <option key={t.id} value={t.id}>{t.name} · v{t.version}{t.configuration ? "" : " · Sin reglas"}</option>)}</select>
+        <label htmlFor="quantity-template">Plantilla y versión</label><select id="quantity-template" value={templateId} disabled={busy} onChange={e => setTemplateId(e.target.value)}><option value="">Sin plantilla</option>{templates.map(t => <option key={t.id} value={t.id}>{t.name} · v{t.version}{t.configuration ? "" : t.baseDefinition ? " · Base definida" : " · Sin reglas"}</option>)}</select>
+        {template?.baseDefinition && <div className="quantity-template-definition"><strong>Plantilla base de Cálculo</strong><p>{template.baseDefinition.metrics.map(metric => `${metric.name} (${metric.unit})`).join(" · ")}</p><p>Agrupación: {template.baseDefinition.groupings.join(" · ")}</p><small>Seleccionada automáticamente para esta especialidad. La estructura está definida; las reglas y los parámetros del modelo están pendientes de configurar y validar.</small></div>}
+        {!templateId && templates.length > 1 && <p className="quantity-help">Hay varias plantillas de Cálculo disponibles. Selecciona la que corresponde a este proyecto.</p>}
         <button className="quantity-text-button" disabled={busy} onClick={() => { setCreateTemplate(v => !v); setTemplateName(template?.name ?? ""); }}><Plus size={13}/>Crear plantilla / versión</button>
         {createTemplate && <div className="quantity-template-form"><label htmlFor="quantity-template-name">Nombre de la plantilla</label><input id="quantity-template-name" value={templateName} maxLength={200} onChange={e => setTemplateName(e.target.value)} placeholder="Nombre definido por tu equipo"/><p className="quantity-help">Se crea sin reglas. Los parámetros y fórmulas se definirán antes de habilitar el cálculo.</p><div className="quantity-inline-actions"><button className="quantity-secondary" disabled={busy || !templateName.trim()} onClick={() => void addTemplate(false)}>Nueva plantilla</button>{template && <button className="quantity-secondary" disabled={busy || !templateName.trim()} onClick={() => void addTemplate(true)}>Nueva versión</button>}</div></div>}
         <QuantitySourcePicker key={`${source?.scope.itemId ?? "empty"}:${source?.version.id ?? "empty"}`} project={project} source={source} onChange={value=>{setSource(value);setViews(value?.view?[value.view]:[]);setSelectedIds([]);}} disabled={busy}/>

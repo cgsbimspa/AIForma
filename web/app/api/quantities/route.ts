@@ -18,6 +18,7 @@ export const maxDuration = 60;
 const fileScope = scopeSchema.options[3];
 const sourceInput = z.object({ scope: fileScope, versionId: z.string().min(1).max(2000), viewId: z.string().min(1).max(2000).nullable() }).strict();
 const action = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("prepare-templates") }).strict(),
   z.object({ action: z.literal("add"), specialtyCode }).strict(),
   z.object({ action: z.literal("save"), id: z.string().uuid(), revision: z.number().int().nonnegative(), source: sourceInput.nullable(), templateVersionId: z.string().uuid().nullable() }).strict(),
   z.object({ action: z.literal("template"), configurationId: z.string().uuid(), name: z.string().trim().min(1).max(200), templateId: z.string().uuid().optional() }).strict(),
@@ -69,6 +70,10 @@ export async function POST(request: NextRequest) {
       return response(await modelViews(token, version, fetch, request.signal));
     }
     const db = store();
+    if (command.action === "prepare-templates") {
+      await db.prepareTemplates(actor);
+      return response(await db.workspace(actor));
+    }
     if (command.action === "add") return response(await db.add(actor, command.specialtyCode));
     if (command.action === "template") return response(await db.template(actor, command));
     if (command.action === "save") {
