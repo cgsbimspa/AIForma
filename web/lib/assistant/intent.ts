@@ -1,6 +1,6 @@
 import { normalizeText } from "../search/contracts.ts";
 
-export const generalSummaryQuestion = "Entrega un resumen general del contenido de la selección: explica de qué trata, su propósito y sus puntos principales. Incluye conclusiones, condiciones y pendientes sólo si aparecen en el documento. Redacta una síntesis clara con referencias a los pasajes leídos, sin conocimiento externo ni suposiciones. Si la lectura es parcial, indícalo.";
+export const generalSummaryQuestion = "Entrega un resumen general del contenido de la selección: explica de qué trata, su propósito y sus puntos principales. Incluye conclusiones, condiciones y pendientes sólo si aparecen en el documento. Redacta una síntesis clara con referencias a los fragmentos leídos, sin conocimiento externo ni suposiciones. Si la lectura es parcial, indícalo.";
 export function isGeneralSummaryRequest(text: string) {
   const value=normalizeText(text).replace(/^[¿¡\s]+/, "");
   return /^(?:(?:por favor|puedes|podrias)\s+)?(?:resume(?:me)?|resumir|resumen(?:\s+general)?\b|(?:haz(?:me)?|dame|genera|entrega|prepara)\s+(?:un\s+)?resumen)\b/.test(value);

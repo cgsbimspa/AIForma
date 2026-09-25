@@ -44,7 +44,8 @@ test('regional OCR recovers a rotated TEST street label with page, zone and its 
 });
 
 test('general summary intent routes content reading without confusing file-name searches',async()=>{
- const {isGeneralSummaryRequest}=await import('../lib/assistant/intent.ts');
+ const {isGeneralSummaryRequest,generalSummaryQuestion}=await import('../lib/assistant/intent.ts');
+ assert.equal(needsPlanReading(generalSummaryQuestion),false,'General summaries must not trigger street-plan OCR');
  for(const text of ['Resume este documento','RESÚMEME el PDF','Resumen general','Dame un resumen del documento','Puedes preparar una búsqueda']) {
   assert.equal(isGeneralSummaryRequest(text),text!=='Puedes preparar una búsqueda',text);
  }
