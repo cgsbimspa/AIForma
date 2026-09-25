@@ -85,3 +85,13 @@ test('inspection rejects empty/duplicate records and geometry fallback never cre
  await assert.rejects(inspectElements([],binding,async()=>null));await assert.rejects(inspectElements([{dbId:1},{dbId:1}],binding,async()=>null));
  const e=element(1,'Walls',[],geometryFallback({min:[0,0,0],max:[10,10,10]},'TEST no triangle mesh'));assert.equal(concreteQuantity(e).value,null);
 });
+test('published Revit-prefixed categories and user-approved subdiscipline rules retain their evidence',()=>{
+ const e=extractElement({dbId:123,name:'TEST_WALL',properties:[property('Category','Revit Muros'),property('Sub Especialidad','Muros'),property('Volume',1,'m³')]},binding);
+ assert.equal(e.category,'Walls');assert.equal(e.specialty,'Hormigón');assert.equal(e.specialtyEvidence.value,null);assert.equal(e.specialtyRule.id,'cgs-structure-classification');assert.equal(e.text.subspecialty.value,'Muros');
+ const foreign=extractElement({dbId:124,name:'TEST_UNKNOWN',properties:[property('Category','Revit Muros'),property('Sub Especialidad','TEST_RANDOM')]},binding);assert.equal(foreign.specialty,null);
+ const roof=extractElement({dbId:125,name:'TEST_ROOF',properties:[property('Category','Revit Armazón estructural'),property('Especialidad','Hormigón'),property('Nombre de tipo','Metalcon')]},binding);assert.equal(roof.specialty,null);
+});
+test('disjoint overlapping shells do not create a net geometric volume; approved foundation faces remain version-bound',()=>{
+ const overlap=inspectTriangles([...box(2,2,2),...box(2,2,2,[1,1,1])]);assert.equal(overlap.closed,false);assert.equal(overlap.volume,null);
+ const e=element(1,'Structural Foundations',[],inspectTriangles(box(2,3,4))),s={...settings(),levelBinding:{urn:binding.urn,viewId:binding.viewId},foundationFaces:[{dbId:1,confirmed:true}]};assert.equal(formworkQuantity(e,s,binding).value,40);assert.equal(formworkQuantity(e,s,{...binding,urn:'TEST_OTHER'}).value,null);
+});

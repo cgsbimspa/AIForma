@@ -1,3 +1,4 @@
+import { associateSubspecialty, classifyProperties, classificationRule } from '../quantity-classification.js';
 // Explicit Autodesk/Revit labels; no semantic inference or fuzzy parameter matching.
 export const normalize = value => String(value??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[_\s]+/g,' ').trim();
 export const categories = {
@@ -8,7 +9,7 @@ export const categories = {
  'Structural Rebar':['Structural Rebar','Armadura estructural','Armaduras estructurales','OST_Rebar'],
 };
 export const parameterNames={
- category:['Category','Categoría','__category__'],specialty:['Especialidad','Specialty'],family:['Family','Familia'],type:['Type','Tipo','Nombre de tipo','Type Name'],material:['Material','Structural Material','Material estructural'],
+ subspecialty:['Sub Especialidad','Subespecialidad'],category:['Category','Categoría','__category__'],specialty:['Especialidad','Specialty'],family:['Family','Familia'],type:['Type','Tipo','Nombre de tipo','Type Name'],material:['Material','Structural Material','Material estructural'],
  volume:['Volume','Volumen'],area:['Area','Área'],length:['Length','Longitud','Largo'],width:['Width','Anchura','Ancho','b'],depth:['Depth','Fondo'],height:['Height','Altura','Unconnected Height','Altura desconectada','h'],thickness:['Thickness','Espesor','Grosor'],perimeter:['Perimeter','Perímetro'],
  level:['Level','Nivel','Reference Level','Nivel de referencia','Schedule Level'],baseLevel:['Base Level','Nivel base','Base Constraint','Restricción de base'],topLevel:['Top Level','Nivel superior','Top Constraint','Restricción superior'],elevation:['Elevation','Elevación'],
  diameter:['Bar Diameter','Diámetro de barra','Diámetro de la barra','Diameter','Diámetro'],barLength:['Bar Length','Longitud de barra','Longitud de la barra'],count:['Quantity','Cantidad','Bar Quantity','Número de barras'],totalLength:['Total Bar Length','Longitud total de barra','Longitud total de las barras'],host:['Host','Anfitrión','Host Id','ID de anfitrión'],hostCategory:['Host Category','Categoría de anfitrión'],elementId:['ElementId','Element ID','Id de elemento'],
@@ -37,12 +38,21 @@ export function readMeasure(properties,key,dimension){
  if(factor===null||!Number.isFinite(number)||(number<0&&key!=='elevation')||dimension==='count'&&!Number.isInteger(number))return {...unavailable('Valor o unidad no verificados'),inputs};
  return {value:number*factor,source:'REVIT_PARAMETER',issue:null,inputs};
 }
-export function canonicalCategory(properties){const raw=readText(properties,'category');const match=Object.entries(categories).find(([,names])=>names.some(n=>normalize(raw.value)===normalize(n)));return {value:match?.[0]??null,original:raw.value,inputs:raw.inputs};}
+export function canonicalCategory(properties){const raw=readText(properties,'category');const match=Object.entries(categories).find(([,names])=>names.some(n=>normalize(raw.value).replace(/^revit /,'')===normalize(n)));return {value:match?.[0]??null,original:raw.value,inputs:raw.inputs};}
 export function extractElement(element,binding){
  const p=element.properties,category=canonicalCategory(p),specialty=readText(p,'specialty');
  const measures=Object.fromEntries(Object.entries({volume:'m3',area:'m2',length:'m',width:'m',depth:'m',height:'m',thickness:'m',perimeter:'m',elevation:'m',diameter:'m',barLength:'m',count:'count',totalLength:'m'}).map(([k,d])=>[k,readMeasure(p,k,d)]));
- const text=Object.fromEntries(['family','type','material','level','baseLevel','topLevel','host','hostCategory','elementId'].map(k=>[k,readText(p,k)]));
- const resolvedSpecialty=normalize(specialty.value)==='hormigon'?'Hormigón':normalize(specialty.value)==='enfierradura'?'Enfierradura':null;
- return {dbId:element.dbId,externalId:element.externalId??null,name:element.name??'',elementId:text.elementId.value,category:category.value,originalCategory:category.original,specialty:resolvedSpecialty,specialtyEvidence:specialty,categoryEvidence:category,text,measures,source:binding};
+ const text=Object.fromEntries(['subspecialty','family','type','material','level','baseLevel','topLevel','host','hostCategory','elementId'].map(k=>[k,readText(p,k)]));
+ let resolvedSpecialty=normalize(specialty.value)==='hormigon'?'Hormigón':normalize(specialty.value)==='enfierradura'?'Enfierradura':null;
+ let specialtyRule=resolvedSpecialty?{id:'published-specialty',version:'1',basis:'Parámetro Especialidad publicado'}:null;
+ const associated=associateSubspecialty(text.subspecialty.value),legacy=classifyProperties(p,element.name);
+ // Preserve the concrete associations already explicitly supplied by the user.
+ // New scope excludes rebar/roof from concrete, even if legacy OR matched them.
+ const concreteGroups=['Emplantillado','Muros','Losas','Fundaciones','Vigas de Fundación','Vigas','Pilares','Hormigón'];
+ if(!resolvedSpecialty&&legacy.status==='read'&&legacy.specialties.includes('Hormigón')&&concreteGroups.includes(associated.group)&&['Structural Foundations','Structural Columns','Structural Framing','Walls','Floors'].includes(category.value)){
+   resolvedSpecialty='Hormigón';specialtyRule={id:classificationRule.id,version:classificationRule.version,basis:'Asociación de Sub Especialidad definida por el usuario',original:text.subspecialty.value,group:associated.group};
+ }
+ if(legacy.specialties.includes('Cubierta')){resolvedSpecialty=null;specialtyRule=null;}
+ return {dbId:element.dbId,externalId:element.externalId??null,name:element.name??'',elementId:text.elementId.value,category:category.value,originalCategory:category.original,specialty:resolvedSpecialty,specialtyRule,specialtyEvidence:specialty,categoryEvidence:category,text,measures,source:binding};
 }
 export function sum(values){let total=0,correction=0;for(const v of values){if(!Number.isFinite(v)||v<0)throw Error('invalid_quantity');const a=v-correction,n=total+a;correction=(n-total)-a;total=n;}if(!Number.isFinite(total))throw Error('quantity_overflow');return total;}
