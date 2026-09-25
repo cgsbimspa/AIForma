@@ -8,6 +8,7 @@ export type VisualRequest={id:number;dbIds:number[];action:'focus'|'isolate'};
 export function QuantityV2Viewer({project,source,binding,settings,filters,onResult,visualRequest,recalculate=0}:{project:QuantityProject;source:QuantitySource;binding:ModelBinding;settings:CalculationSettings;filters:ViewFilters;onResult:(data:ViewCalculation|null)=>void;visualRequest:VisualRequest|null;recalculate?:number}){
  const frame=useRef<HTMLIFrameElement>(null),request=useRef(''),viewRequest=useRef(''),lastVisualRequest=useRef<VisualRequest|null>(null);
  const [url,setUrl]=useState(''),[ready,setReady]=useState(false),[read,setRead]=useState(false),[status,setStatus]=useState('Preparando vista…'),[error,setError]=useState(''),[reload,setReload]=useState(0);
+ const [readRevision,setReadRevision]=useState(0);
  const [filterState,setFilterState]=useState<{key:string;count:number}|null>(null),[mode,setMode]=useState('filter'),[visualCount,setVisualCount]=useState(0);
  const filterKey=JSON.stringify(filters),filterMatches=filterState?.key===filterKey,readable=read&&filterMatches;
  const post=useCallback((data:Record<string,unknown>)=>frame.current?.contentWindow?.postMessage({type:'aiforma-quantity-v2',urn:binding.urn,viewId:binding.viewId,requestId:crypto.randomUUID(),...data},window.location.origin),[binding]);
@@ -20,12 +21,12 @@ export function QuantityV2Viewer({project,source,binding,settings,filters,onResu
  if(d.phase==='filter'&&d.requestId===viewRequest.current&&Number.isSafeInteger(d.count)){setFilterState({key:d.key,count:d.count});setMode(d.mode);setVisualCount(d.count);return;}
  if(d.phase==='visibility'&&d.requestId===viewRequest.current&&Number.isSafeInteger(d.count)){setMode(d.mode);setVisualCount(d.count);return;}
  if(d.requestId!==request.current)return;
- if(d.phase==='loading'){setRead(false);setFilterState(null);setError('');setStatus(String(d.message));onResult(null);return;}
+ if(d.phase==='loading'){viewRequest.current='';setRead(false);setFilterState(null);setError('');setStatus(String(d.message));onResult(null);return;}
  if(d.phase==='error'){request.current='';setError(String(d.message));setRead(false);onResult(null);return;}
- if(d.phase==='complete'){request.current='';const parsed=calculationSchema.safeParse(d.calculation);if(!parsed.success||parsed.data.binding.urn!==binding.urn||parsed.data.binding.viewId!==binding.viewId||parsed.data.binding.versionId!==binding.versionId){setError('No se pudo verificar la procedencia de la cubicación.');onResult(null);return;}setRead(true);setError('');setStatus(`${parsed.data.coverage.inspected.toLocaleString('es-CL')} elementos leídos`);onResult(parsed.data);}
+ if(d.phase==='complete'){request.current='';const parsed=calculationSchema.safeParse(d.calculation);if(!parsed.success||parsed.data.binding.urn!==binding.urn||parsed.data.binding.viewId!==binding.viewId||parsed.data.binding.versionId!==binding.versionId){setError('No se pudo verificar la procedencia de la cubicación.');onResult(null);return;}setReadRevision(n=>n+1);setRead(true);setError('');setStatus(`${parsed.data.coverage.inspected.toLocaleString('es-CL')} elementos leídos`);onResult(parsed.data);}
  }window.addEventListener('message',receive);return()=>window.removeEventListener('message',receive);},[binding,onResult]);
  useEffect(()=>{if(!ready)return;const id=crypto.randomUUID();request.current=id;post({operation:'calculate',requestId:id,binding,settings});const timer=setTimeout(()=>{if(request.current===id){request.current='';post({operation:'cancel'});setError('La lectura excedió el tiempo disponible. No se confirmó un resultado completo.');setRead(false);onResult(null);}},180000);return()=>{clearTimeout(timer);post({operation:'cancel'});};},[ready,binding,settings,post,onResult,recalculate]);
- useEffect(()=>{if(read){const id=crypto.randomUUID();viewRequest.current=id;post({operation:'filter',filter:filters,requestId:id});}},[read,filters,post]);
+ useEffect(()=>{if(read){const id=crypto.randomUUID();viewRequest.current=id;post({operation:'filter',filter:filters,requestId:id});}},[read,readRevision,filters,post]);
  useEffect(()=>{if(readable&&visualRequest&&visualRequest!==lastVisualRequest.current){lastVisualRequest.current=visualRequest;const id=crypto.randomUUID();viewRequest.current=id;post({operation:'visibility',filterKey,action:visualRequest.action,dbIds:visualRequest.dbIds,requestId:id});}},[visualRequest,readable,filterKey,post]);
  function visibility(action:string){const id=crypto.randomUUID();viewRequest.current=id;post({operation:'visibility',filterKey,action,requestId:id});}
  return <div className={`quantity-live-viewer${readable&&!filterState.count?' quantity-filter-empty':''}`}>
