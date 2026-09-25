@@ -6,6 +6,7 @@ import { concreteQuantity, formworkQuantity, rebarQuantity } from '../public/qua
 import { defaultSettings, calculateQuantities, inspectElements, presentQuantities, quantityFacets, compareCalculations, UNCLASSIFIED } from '../public/quantity-v2/quantity-service.js';
 import { slabCandidates, buildIntervals, resolveLevel } from '../public/quantity-v2/levels.js';
 import { calculationSchema, settingsSchema } from '../lib/quantities-v2/contracts.ts';
+import { AZA_SOURCE, addAzaWeights, rebarDiagnostic } from '../public/quantity-v2/rebar-reference.js';
 // Synthetic TEST geometry and parameters only. Not included in application data.
 const binding={projectId:'TEST_PROJECT',itemId:'TEST_FILE',versionId:'TEST_V1',versionNumber:1,urn:'TEST_URN_1',viewId:'TEST_VIEW',fileName:'TEST.rvt',viewName:'TEST_VIEW',projectName:'TEST_PROJECT'};
 const property=(displayName,displayValue,units='')=>({displayName,displayValue,units,displayCategory:'TEST_PARAMETERS'});
@@ -13,6 +14,25 @@ function box(x,y,z,origin=[0,0,0]){const p=[[0,0,0],[x,0,0],[x,y,0],[0,y,0],[0,0
 function element(dbId,category='Walls',measures=[],geometry=geometryFallback(null,'TEST_NO_GEOMETRY'),specialty='Hormigón'){return {...extractElement({dbId,externalId:'TEST_EXTERNAL_'+dbId,name:'TEST_ELEMENT_'+dbId,properties:[property('Especialidad',specialty),property('Category',category),...measures]},binding),geometry};}
 const settings=()=>settingsSchema.parse(defaultSettings());
 const close=(a,b)=>assert.ok(Math.abs(a-b)<1e-7,`${a} != ${b}`);
+test('native base constraint wins over a conflicting custom level without inventing equivalences',()=>{
+ const wall=element(1,'Walls',[property('Nivel','2'),property('Restricción de base','N1'),property('Restricción superior','Hasta nivel: N2')]);
+ const data=calculateQuantities([wall],binding,settings());
+ assert.deepEqual(quantityFacets(data.records,{specialty:'',category:'',floor:''}).floors,['Nivel Revit: N1']);
+ assert.equal(data.records[0].floor.resolvedBuildingLevel,'Piso no resuelto');
+ assert.equal(data.records[0].floor.evidence.customLevel,'2');assert.equal(data.records[0].floor.evidence.publishedLevel.source,'baseLevel');
+ const ambiguous=element(2,'Walls',[property('Nivel','2'),property('Base Constraint','N1'),property('Restricción de base','N2')]);
+ assert.equal(calculateQuantities([ambiguous],binding,settings()).records[0].floor.originalRevitLevel,null);
+});
+test('approved AZA nominal references apply only to detected diameters and retain custom coefficients',()=>{
+ const bars=[8,10,12,16,18,22,9].map((d,i)=>element(i+1,'Structural Rebar',[property('Bar Diameter',d,'mm'),property('Bar Length',2,'m'),property('Quantity',3)],undefined,'Enfierradura'));
+ const initial=calculateQuantities(bars,binding,settings());
+ const table=addAzaWeights([],initial.records);assert.deepEqual(table.map(r=>r.unit_weight_kg_m),[.395,.617,.888,1.58,2,2.98]);assert.ok(table.every(r=>r.source===AZA_SOURCE));
+ const calculated=calculateQuantities(bars,binding,{...settings(),rebarWeightTable:table});
+ close(calculated.records[3].quantities.rebar.value,9.48);assert.equal(calculated.records[6].quantities.rebar.value,null);
+ const diagnostic=rebarDiagnostic(calculated.records,calculated.records);assert.equal(diagnostic.ready,6);assert.equal(diagnostic.missingDiameters.length,1);close(diagnostic.missingDiameters[0],9);
+ assert.equal(rebarDiagnostic(calculated.records,[]).filtered,0);
+ const custom={diameter:8,unit_weight_kg_m:.4,source:'TEST_CUSTOM',version:'TEST'};assert.deepEqual(addAzaWeights([custom],initial.records)[0],custom);
+});
 test('closed translated/rotated tessellation measures volume, centroid and faces, not bounding-box volume',()=>{
  const g=inspectTriangles(box(2,3,4,[1000,-2000,-3]));assert.equal(g.closed,true);close(g.volume,24);assert.deepEqual(g.centroid,[1001,-1998.5,-1]);close(g.surfaceArea,52);close(g.perimeter,10);close(g.bottomArea,6);close(g.twoLateralArea,24);
  const rotate=p=>[p[0]*Math.cos(.3)-p[1]*Math.sin(.3),p[0]*Math.sin(.3)+p[1]*Math.cos(.3),p[2]];

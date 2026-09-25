@@ -2,7 +2,7 @@ import { geometryFallback } from './geometry.js';
 import { extractElement, sum } from './properties.js';
 import { concreteQuantity, formworkQuantity, rebarQuantity, metricCoverage } from './services.js';
 import { slabCandidates, buildIntervals, resolveLevel, UNRESOLVED } from './levels.js';
-export const ENGINE='view-quantities-v2.1';
+export const ENGINE='view-quantities-v2.2';
 // Yield between batches without the nested-timer delay of an inactive tab.
 function yieldRead(){return new Promise(resolve=>{const channel=new MessageChannel();channel.port1.onmessage=()=>{channel.port1.close();channel.port2.close();resolve();};channel.port2.postMessage(null);});}
 export function defaultSettings(){return {version:1,levelToleranceM:.002,levelBinding:null,levelReferences:[],manualFloors:[],slabRoles:[],foundationFaces:[],rebarWeightTable:[]};}

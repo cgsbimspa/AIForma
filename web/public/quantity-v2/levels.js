@@ -1,5 +1,12 @@
 import { normalize } from './properties.js';
 export const UNRESOLVED='Piso no resuelto';
+// A native base constraint is stronger evidence than a generic/custom Nivel.
+// Keep both inputs visible; never equate labels such as 2 and N2.
+export function publishedLevel(record){
+ const base=record.text.baseLevel,level=record.text.level;
+ if(base?.inputs.some(input=>input.rawValue.trim()))return {value:base.value,source:'baseLevel',inputs:base.inputs,issue:base.issue};
+ return {value:level?.value??null,source:'level',inputs:level?.inputs??[],issue:level?.issue??'Nivel no publicado'};
+}
 export function slabCandidates(records,toleranceM){
  const slabs=records.filter(e=>e.specialty==='Hormigón'&&e.category==='Floors'&&e.geometry?.horizontalPrism&&e.geometry?.bbox);
  if(!Number.isFinite(toleranceM)||toleranceM<=0)return [];
@@ -22,8 +29,8 @@ export function buildIntervals(records,settings,binding){
 }
 const inXY=(p,box)=>p[0]>=box.min[0]&&p[0]<=box.max[0]&&p[1]>=box.min[1]&&p[1]<=box.max[1];
 export function resolveLevel(record,resolver,settings,binding){
- const original=record.text.level.value??record.text.baseLevel.value??null;
- const empty={originalRevitLevel:original,resolvedBuildingLevel:UNRESOLVED,floor_assignment_method:null,floor_confidence:0,multilevel:false,intervals:[],status:'REQUIRES_REVIEW',issue:resolver.issue??'Elemento fuera de los intervalos confirmados',evidence:null};
+ const published=publishedLevel(record),original=published.value;
+ const empty={originalRevitLevel:original,resolvedBuildingLevel:UNRESOLVED,floor_assignment_method:null,floor_confidence:0,multilevel:false,intervals:[],status:'REQUIRES_REVIEW',issue:resolver.issue??'Elemento fuera de los intervalos confirmados',evidence:{publishedLevel:published,customLevel:record.text.level.value,baseLevel:record.text.baseLevel.value,topLevel:record.text.topLevel.value}};
  const manual=settings.manualFloors?.find(m=>m.dbId===record.dbId);
  const bound=settings.levelBinding?.urn===binding.urn&&settings.levelBinding?.viewId===binding.viewId;
  if(manual&&bound)return {...empty,resolvedBuildingLevel:manual.label,floor_assignment_method:'MANUAL',floor_confidence:1,status:'VALIDATED',issue:null,evidence:{source:'USER_CONFIGURATION'}};

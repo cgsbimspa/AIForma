@@ -52,7 +52,7 @@ export function rebarQuantity(e,settings){
  const table=(settings.rebarWeightTable??[]).filter(r=>diameterMm!==null&&Math.abs(r.diameter-diameterMm)<1e-6);
  const entry=table.length===1?table[0]:null;
  const valid=entry&&Number.isFinite(entry.unit_weight_kg_m)&&entry.unit_weight_kg_m>0&&entry.source?.trim()&&entry.version?.trim();
- const weight=totalLengthM===null?unavailable('Largo individual o cantidad de barras no disponibles'):!valid?unavailable('Falta un coeficiente kg/m con fuente y versión para este diámetro'):measured(totalLengthM*entry.unit_weight_kg_m,'CALCULATED_PARAMETERS','Largo individual × Cantidad × kg/m',[...m.barLength.inputs,...m.count.inputs,...(m.barLength.value===null?m.totalLength.inputs:[])],{weightTable:entry});
+ const weight=totalLengthM===null?unavailable('Largo individual o cantidad de barras no disponibles'):diameterMm===null?unavailable('Diámetro de barra no disponible o unidad no verificada'):!valid?unavailable('Falta un coeficiente kg/m con fuente y versión para este diámetro'):measured(totalLengthM*entry.unit_weight_kg_m,'CALCULATED_PARAMETERS','Largo individual × Cantidad × kg/m',[...m.barLength.inputs,...m.count.inputs,...(m.barLength.value===null?m.totalLength.inputs:[])],{weightTable:entry});
  return {diameterMm,barLengthM,count,totalLengthM,unitWeightKgM:valid?entry.unit_weight_kg_m:null,weight,table:valid?entry:null};
 }
 export const metricDefinitions=[{key:'concrete',name:'Hormigón',unit:'m³'},{key:'formwork',name:'Moldaje',unit:'m²'},{key:'rebar',name:'Enfierradura',unit:'kg'}];

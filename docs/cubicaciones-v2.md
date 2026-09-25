@@ -1,4 +1,4 @@
-# Cubicaciones de la vista activa — motor 2.1
+# Cubicaciones de la vista activa — motor 2.2
 
 Implementa la especificación del usuario del 24 de septiembre de 2026. Sustituye la mesa de Cálculo por Especialidad → Categoría Revit → Piso resuelto. Los módulos restantes y los resultados históricos del motor anterior conservan su comportamiento.
 
@@ -26,7 +26,7 @@ Mientras el piso espacial esté sin resolver, el filtro y la tabla muestran «Ni
 - Muros: Área publicada de una cara × 2; alternativa geométrica para prismas rectangulares.
 - Losas elevadas: área inferior + perímetro × espesor. Radier/fundación: solo perímetro × espesor. La condición de apoyo se confirma por tipo en la vista; las denominaciones explícitas radier/losa de fundación identifican el caso sin fondo.
 - Fundaciones no lineales: se calcula el área potencial de caras verticales y se excluye del total hasta que el usuario confirme que todas requieren moldaje y no hay contactos que descontar. No se realiza una unión booleana entre elementos.
-- Barras Structural Rebar: largo individual × cantidad; luego largo total × kg/m. El diámetro se mantiene como agrupación obligatoria. Los coeficientes requieren diámetro, kg/m, fuente y versión aportados por el usuario. No hay pesos normativos precargados ni cantidad de barras implícita.
+- Barras Structural Rebar: largo individual × cantidad; luego largo total × kg/m. El diámetro se mantiene como agrupación obligatoria. Los coeficientes requieren diámetro, kg/m, fuente y versión aportados por el usuario. No se aplica una tabla por defecto ni se supone una cantidad de barras. El preset AZA (tabla 1.2, página 2, ficha consultada el 25-09-2026) ofrece Ø8=0,395; Ø10=0,617; Ø12=0,888; Ø16=1,58; Ø18=2,00; Ø22=2,98 kg/m. Solo agrega diámetros detectados, conserva coeficientes existentes y requiere guardar explícitamente. El usuario autorizó esta tabla para Distrito Verde en esta conversación. Fuente: https://www.aza.cl/2024/wp-content/uploads/2024/06/FT-Barras-de-Refuerzo.pdf. No acredita material, fabricación ni cumplimiento normativo.
 
 Las sumas usan acumulación compensada. Un total solo aparece completo cuando todos los elementos elegibles tienen cantidad. En otro caso se muestra subtotal parcial y su cobertura; cero sigue siendo un valor distinto de pendiente/no disponible.
 
@@ -54,4 +54,7 @@ Criterios, referencias, condiciones de apoyo, confirmación de caras y tabla de 
 
 La comparación usa lecturas efectivamente calculadas del mismo archivo en la sesión (hasta seis). Muestra ambos modelos/vistas/versiones y cambios de criterio; las diferencias de totales incompletos no se calculan. No se infieren altas/bajas por dbId. La exportación JSON conserva las entradas, fórmulas, cobertura, criterios y filtro activo. Las lecturas de sesión no se anuncian como historial persistente.
 
-El filtro no usa la selección azul del SDK. Atenuar, ocultar y aislar se aplican explícitamente al conjunto filtrado, sin cambiar su suma; filas y tarjetas permiten aislar sus propios elementos. Mensajes de otras ventanas, orígenes, vistas, revisiones o IDs ajenos al filtro no pueden aplicar acciones.
+El filtro no usa la selección azul del SDK. Cada cambio de filtros actualiza automáticamente la visibilidad (aislamiento inicial), conservando el modo elegido. Limpiar muestra todo el modelo. Filas actualizan categoría/piso/especialidad y aíslan el grupo; un detalle temporal se identifica con su conteo. Las respuestas atrasadas no sustituyen la acción actual. El conjunto vacío se enmascara sin llamar isolate([]). Atenuar, ocultar y aislar no alteran las sumas. Mensajes de otras ventanas, orígenes, vistas, revisiones o IDs ajenos al filtro no pueden aplicar acciones.
+
+
+La restricción base publicada tiene prioridad sobre el parámetro genérico Nivel. Un conflicto interno en la restricción base queda sin resolver. Se conservan ambos valores y sus entradas: por ejemplo, Nivel=2 y Base=N1 no constituyen una equivalencia 2=N1 ni 2=N2. Esta selección mejora la navegación por nivel nativo sin inventar un piso espacial. El diagnóstico de enfierradura distingue exclusión por filtro, falta de largo/cantidad/diámetro y falta de coeficiente.
