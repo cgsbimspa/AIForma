@@ -1,6 +1,6 @@
 import { classificationRule, elementFloor, associateSubspecialty } from './quantity-classification.js';
 
-export const bimActions = ['select', 'isolate', 'attenuate', 'hide', 'color', 'focus', 'properties', 'showAll', 'resetColors', 'clearSelection'];
+export const bimActions = ['filter', 'select', 'isolate', 'attenuate', 'hide', 'color', 'focus', 'properties', 'showAll', 'resetColors', 'clearSelection', 'clearFilter'];
 export const bimColors = { rojo:[0.93,0.16,0.19], azul:[0.07,0.4,0.94], verde:[0.05,0.7,0.35], amarillo:[1,0.78,0.05], naranja:[1,0.4,0.05], violeta:[0.6,0.22,0.9] };
 export const normalizeBim = value => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('es').replace(/\s+/g,' ').trim();
 const printable = v => typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean';
@@ -40,17 +40,18 @@ export function bimCatalog(index) {
   return {total:index.rows.length,fields,partial:fields.length<index.fields.size,ruleVersion:classificationRule.version};
 }
 export function validateBimPlan(plan) {
-  if(!plan||!bimActions.includes(plan.action)||!['model','selection'].includes(plan.target)||!Array.isArray(plan.filters)||plan.filters.length>6)throw Error('La instrucción no se pudo validar. No se aplicó ninguna acción.');
+  if(!plan||!bimActions.includes(plan.action)||!['model','selection','filter'].includes(plan.target)||!Array.isArray(plan.filters)||plan.filters.length>6)throw Error('La instrucción no se pudo validar. No se aplicó ninguna acción.');
   if(plan.action==='color'&&!Object.hasOwn(bimColors,plan.color))throw Error('Elige rojo, azul, verde, amarillo, naranja o violeta.');
   for(const f of plan.filters)if(typeof f.field!=='string'||!['equals','contains','not_equals'].includes(f.operator)||!Array.isArray(f.values)||!f.values.length||f.values.length>12||f.values.some(v=>typeof v!=='string'||!normalizeBim(v)||v.length>200))throw Error('Los criterios de búsqueda no son válidos.');
-  if(['showAll','resetColors','clearSelection'].includes(plan.action)){if(plan.filters.length||plan.target!=='model')throw Error('La acción global no admite filtros.');}
+  if(['showAll','resetColors','clearSelection','clearFilter'].includes(plan.action)){if(plan.filters.length||plan.target!=='model')throw Error('La acción global no admite filtros.');}
   else if(plan.target==='model'&&!plan.filters.length)throw Error('Indica qué elementos quieres consultar o selecciona elementos en el visor.');
   return plan;
 }
-export function queryBim(index,plan,selection=[]) {
+export function queryBim(index,plan,selection=[],filteredIds=null) {
   validateBimPlan(plan);
   for(const f of plan.filters)if(!index.fields.has(f.field))throw Error('El parámetro solicitado no está disponible en esta vista: '+f.field.replace(/^p:/,''));
-  const selected=new Set(selection);
+  if(plan.target==='filter'&&(filteredIds===null||filteredIds.some(id=>!index.ids.has(id))))throw Error('No hay un filtro válido. Busca elementos primero.');
+  const selected=new Set(plan.target==='filter'?filteredIds:selection);
   if(plan.target==='selection'&&(!selected.size||[...selected].some(id=>!index.ids.has(id))))throw Error('No hay una selección válida. Busca elementos o selecciónalos primero en el modelo.');
   return index.rows.filter(({element,facts})=>(plan.target==='model'||selected.has(element.dbId))&&plan.filters.every(f=>{
     const actual=facts.get(f.field)?.map(normalizeBim);if(!actual?.length)return false; // Missing is UNKNOWN, including negative filters.

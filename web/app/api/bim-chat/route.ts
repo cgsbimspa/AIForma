@@ -10,7 +10,7 @@ import { catalogSchema, planSchema } from '@/lib/bim-chat/contracts';
 import { planBim } from '@/lib/bim-chat/plan';
 export const runtime='nodejs';
 export const maxDuration=90;
-const schema=z.object({file:scopeSchema.options[3],versionId:z.string().min(1).max(2000),viewId:z.string().min(1).max(2000),question:z.string().trim().min(1).max(2000),catalog:catalogSchema,previous:z.array(z.object({question:z.string().max(2000),plan:planSchema})).max(4),selectionCount:z.number().int().nonnegative()}).strict();
+const schema=z.object({file:scopeSchema.options[3],versionId:z.string().min(1).max(2000),viewId:z.string().min(1).max(2000),question:z.string().trim().min(1).max(2000),catalog:catalogSchema,previous:z.array(z.object({question:z.string().max(2000),plan:planSchema})).max(4),selectionCount:z.number().int().nonnegative(),filterActive:z.boolean().default(false),filteredCount:z.number().int().nonnegative().default(0)}).strict();
 export async function POST(request:NextRequest){
   try {
     const {config,session}=authorizeData(request);

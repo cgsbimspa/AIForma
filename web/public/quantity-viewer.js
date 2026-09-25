@@ -1,16 +1,17 @@
 /* global Autodesk */
 import { installPropertyInspector } from "./quantity-properties.js";
 import { buildViewCalculation } from "./quantity-calculation.js";
+import { createQuantityFilter } from "./quantity-filter.js";
 import { installBimChat } from "./bim-chat-viewer.js";
-import { readViewClassification, classificationInventory, matchesClassification, classificationRule } from "./quantity-classification.js";
+import { readViewClassification, classificationInventory, classificationRule } from "./quantity-classification.js";
 // Real Autodesk SDK viewer. Never fall back to the model's default geometry:
 // the server-verified geometry GUID must be present in this exact version.
 (() => {
   const status = document.getElementById("status");
   const input = JSON.parse(document.getElementById("viewer-data").textContent);
-  let viewer, disposeBimChat;
-  let externalMap, reverseMap, applyingSelection = false, selectionRevision = 0;
-  let classification, visibilityFilterKey;
+  let viewer, disposeBimChat, quantityFilter;
+  let externalMap, reverseMap;
+  let classification;
   const classified = () => classification ??= readViewClassification(viewer.model).catch(error => { classification = undefined; throw error; });
   const classificationReport = (state, message) => window.parent.postMessage({ type: 'aiforma-viewer', state: 'classification', result: state, message, viewId: input.viewId, urn: input.urn, ruleId: classificationRule.id, ruleVersion: classificationRule.version }, window.location.origin);
   const mapping = () => externalMap ? Promise.resolve(externalMap) : new Promise((resolve,reject)=>viewer.model.getExternalIdMapping(map=>{externalMap=map;reverseMap=new Map(Object.entries(map).map(([id,dbId])=>[dbId,id]));resolve(map);},reject));
@@ -18,10 +19,7 @@ import { readViewClassification, classificationInventory, matchesClassification,
     const data=event.data;
     if(event.origin!==window.location.origin||event.source!==window.parent||data?.viewId!==input.viewId||data.urn!==input.urn||!viewer?.model)return;
     if(data.type==='aiforma-viewer-action') {
-      const ids=viewer.getSelection();
-      if(data.action==='showAll'){viewer.setGhosting(false);viewer.showAll();}
-      else if(ids.length&&(data.action==='isolate'||data.action==='attenuate')){viewer.setGhosting(data.action==='attenuate');viewer.showAll();viewer.isolate(ids);viewer.fitToView(ids);}
-      else if(ids.length&&data.action==='hide'){viewer.setGhosting(false);viewer.hide(ids);}
+      quantityFilter?.applyVisibility(data.action,data.target,data.filterKey);
       return;
     }
     if(data.type==='aiforma-viewer-calculate' && Number.isSafeInteger(data.requestId)) {
@@ -33,40 +31,7 @@ import { readViewClassification, classificationInventory, matchesClassification,
     }
     if(data.type!=='aiforma-viewer-selection')return;
     if(!Array.isArray(data.highlightedElementIds)||!data.highlightedElementIds.every(id=>typeof id==="string")||data.filteredElementIds!==null&&(!Array.isArray(data.filteredElementIds)||!data.filteredElementIds.every(id=>typeof id==="string")))return;
-    const revision=++selectionRevision;
-    const filterKey=JSON.stringify([data.filteredElementIds,data.classificationFilter??null]);
-    try {
-      if(filterKey!==visibilityFilterKey) {
-        let selected=[];
-        if(data.filteredElementIds!==null) {
-          const map=await mapping();
-          if(data.filteredElementIds.some(id=>!Object.hasOwn(map,id)))throw Error('unmapped_filter');
-          selected=data.filteredElementIds.map(id=>map[id]);
-        } else if(data.classificationFilter) {
-          const filter=data.classificationFilter;
-          if(!['specialty','subspecialty','floor'].every(key=>typeof filter[key]==='string'))return;
-          const elements=await classified();
-          const active=Boolean(filter.specialty||filter.subspecialty||filter.floor);
-          selected=active?classificationInventory(elements).filter(e=>matchesClassification(e,filter)).map(e=>e.dbId):[];
-          classificationReport('ready',active?`${selected.length} de ${elements.length} elementos seleccionados por los filtros. Criterios v${classificationRule.version}.`:'Sin filtros: modelo completo.');
-        }
-        if(revision!==selectionRevision)return;
-        viewer.setGhosting(false);viewer.showAll();
-        applyingSelection=true;viewer.select(selected);applyingSelection=false;
-        window.parent.postMessage({type:'aiforma-viewer',state:'selection-count',count:viewer.getSelection().length,viewId:input.viewId,urn:input.urn},window.location.origin);
-        visibilityFilterKey=filterKey;
-        return;
-      }
-      if(!data.highlightedElementIds.length)return;
-      const map=await mapping();if(revision!==selectionRevision)return;
-      const all=[...data.highlightedElementIds,...(data.filteredElementIds??[])];
-      if(all.some(id=>!Object.hasOwn(map,id))) { status.hidden=false;status.textContent="No se pudo vincular esta selección a elementos de esta vista. No se aplicó el filtro.";return; }
-      const desired=data.highlightedElementIds.map(id=>map[id]), current=viewer.getSelection();
-      if(current.length!==desired.length||current.some(id=>!desired.includes(id))){applyingSelection=true;viewer.select(desired);applyingSelection=false;viewer.fitToView(desired);}
-      // Programmatic table selection suppresses the native callback to avoid a
-      // selection loop, but visibility controls still need the actual count.
-      window.parent.postMessage({type:'aiforma-viewer',state:'selection-count',count:viewer.getSelection().length,viewId:input.viewId,urn:input.urn},window.location.origin);
-    } catch { if (revision !== selectionRevision) return; viewer.showAll();visibilityFilterKey=undefined; classificationReport('error', 'No se pudo completar la lectura. Se muestra el modelo sin filtrar.'); }
+    await quantityFilter?.update(data);
   };
   window.addEventListener("message",selectionMessage);
   let done = false;
@@ -86,7 +51,7 @@ import { readViewClassification, classificationInventory, matchesClassification,
       if (viewer.start() !== 0) { clearTimeout(timeout); fail("No se pudo iniciar el visor 3D. Comprueba que WebGL esté habilitado en tu navegador."); return; }
       viewer.setTheme("light-theme");
       viewer.addEventListener(Autodesk.Viewing.SELECTION_CHANGED_EVENT, async event=>{
-        if(applyingSelection)return;
+        if(quantityFilter?.isApplyingSelection())return;
         try { await mapping();window.parent.postMessage({type:"aiforma-viewer",state:"selection",count:event.dbIdArray.length,ids:event.dbIdArray.flatMap(id=>reverseMap.has(id)?[reverseMap.get(id)]:[]),viewId:input.viewId,urn:input.urn},window.location.origin); } catch { /* No inferred element IDs. */ }
       });
       report("loading", "Cargando la versión y vista seleccionadas…");
@@ -96,6 +61,7 @@ import { readViewClassification, classificationInventory, matchesClassification,
         viewer.addEventListener(Autodesk.Viewing.GEOMETRY_LOADED_EVENT, () => {
           clearTimeout(timeout);
           if (!done) {
+            quantityFilter = createQuantityFilter(viewer,{mapping,classified,report:classificationReport,send:payload=>window.parent.postMessage({type:'aiforma-viewer',viewId:input.viewId,urn:input.urn,...payload},window.location.origin)});
             disposeBimChat = installBimChat(viewer, input, classified);
             viewer.fitToView(); report("ready", "Vista seleccionada cargada"); done = true;
             void classified().then(elements=>window.parent.postMessage({type:'aiforma-viewer',state:'inventory',elements:classificationInventory(elements),viewId:input.viewId,urn:input.urn},window.location.origin)).catch(()=>classificationReport('error','No se pudieron cargar las opciones de filtros de esta vista.'));
@@ -110,5 +76,5 @@ import { readViewClassification, classificationInventory, matchesClassification,
     });
   } catch { clearTimeout(timeout); fail("No se pudo iniciar Autodesk Viewer."); }
   const resize = new ResizeObserver(() => viewer?.resize()); resize.observe(document.body);
-  window.addEventListener("pagehide", () => { done = true; clearTimeout(timeout); resize.disconnect(); disposeBimChat?.(); window.removeEventListener("message",selectionMessage); viewer?.finish(); }, { once: true });
+  window.addEventListener("pagehide", () => { done = true; clearTimeout(timeout); resize.disconnect(); disposeBimChat?.(); quantityFilter?.dispose(); window.removeEventListener("message",selectionMessage); viewer?.finish(); }, { once: true });
 })();

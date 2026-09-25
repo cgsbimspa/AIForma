@@ -11,7 +11,7 @@ const property=(displayName,displayValue)=>({displayCategory:'TEST',displayName,
 const element=(dbId,name,properties)=>({dbId,name,externalId:`TEST-${dbId}`,properties,...classifyProperties(properties,name)});
 const elements=[element(1,'TEST Muro A',[property('Especialidad','HORMIGÓN'),property('Sub Especialidad','Muro'),property('Nivel','2'),property('Material','Hormigón G25')]),element(2,'TEST Viga',[property('Especialidad','Hormigón'),property('Sub Especialidad','Viga'),property('Nivel','20')]),element(3,'TEST 40CA085',[property('Nombre de tipo','40CA085'),property('Nivel','2')]),element(4,'TEST sin nivel',[property('Especialidad','Hormigón')])];
 const index=createBimIndex(elements),catalog=bimCatalog(index);
-const plan=(filters=[],action='select',target='model')=>({kind:'execute',reason:'none',action,target,color:null,filters});
+const plan=(filters=[],action='filter',target='model')=>({kind:'execute',reason:'none',action,target,color:null,filters});
 const filter=(field,values,operator='equals')=>({field,values,operator});
 
 test('catalog only describes observed properties and retains rule provenance',()=>{assert.ok(catalogSchema.safeParse(catalog).success);assert.equal(catalog.total,4);assert.ok(catalog.fields.some(f=>f.id==='@specialty'));assert.ok(!catalog.fields.some(f=>f.id.includes('Costo')));});
@@ -38,14 +38,43 @@ function fakeViewer(){
   const send=(requestId,p,overrides={})=>listeners.get('message')({origin:window.location.origin,source:parent,data:{type:'aiforma-bim-request',...input,requestId,operation:'execute',plan:p,...overrides}});
   return {viewer,calls,messages,send,input};
 }
-test('viewer validates context, acknowledges actual actions, retains colored selection, and rejects replay',async()=>{
+test('filtering leaves geometry untouched and actions use the filter independently of native clicks',async()=>{
   const f=fakeViewer(),dispose=installBimChat(f.viewer,f.input,async()=>elements);
   await f.send('wrong',plan([filter('@specialty',['Hormigón'])]),{urn:'OTHER'});assert.equal(f.calls.length,0);
-  await f.send('select',plan([filter('@specialty',['Hormigón'])]));assert.equal(f.messages.at(-1).result.count,3);
-  await f.send('color',{...plan([],'color','selection'),color:'rojo'});assert.equal(f.calls.filter(c=>c[0]==='setThemingColor').length,3);assert.equal(f.messages.at(-1).result.selectionCount,3);
-  await f.send('isolate',plan([],'isolate','selection'));assert.deepEqual(f.calls.find(c=>c[0]==='isolate')[1],[1,2,4]);
-  const count=f.calls.length;await f.send('isolate',plan([],'isolate','selection'));assert.equal(f.calls.length,count);
-  await f.send('not-found',plan([filter('@floor',['999'])]));assert.equal(f.messages.at(-1).result.applied,false);
-  await f.send('no-current',plan([],'hide','selection'));assert.match(f.messages.at(-1).error,/selección válida/);dispose();
+  await f.send('filter',plan([filter('@specialty',['Hormigón'])]));
+  assert.equal(f.messages.at(-1).result.filteredCount,3);assert.equal(f.messages.at(-1).result.selectionCount,0);
+  assert.equal(f.messages.at(-1).result.filterActive,true);
+  assert.ok(f.calls.every(c=>c[0]==='select'&&c[1].length===0),'filter never isolates, colors, selects or moves camera');
+  f.viewer.select([3]);assert.equal(f.messages.at(-1).selectionCount,1);assert.equal(f.messages.at(-1).filteredCount,3);
+  await f.send('color',{...plan([],'color','filter'),color:'rojo'});
+  assert.deepEqual(f.calls.filter(c=>c[0]==='setThemingColor').map(c=>c[1]),[1,2,4]);assert.equal(f.messages.at(-1).result.selectionCount,0);
+  f.viewer.select([]);
+  await f.send('isolate',plan([],'isolate','filter'));assert.deepEqual(f.calls.find(c=>c[0]==='isolate')[1],[1,2,4]);
+  const count=f.calls.length;await f.send('isolate',plan([],'isolate','filter'));assert.equal(f.calls.length,count);
+  await f.send('not-found',plan([filter('@floor',['999'])]));assert.equal(f.messages.at(-1).result.filteredCount,0);
+  const hides=f.calls.filter(c=>c[0]==='hide').length;
+  f.viewer.select([1]);await f.send('no-current',plan([],'hide','filter'));
+  assert.equal(f.messages.at(-1).result.count,0);assert.equal(f.calls.filter(c=>c[0]==='hide').length,hides);
+  await f.send('clear',plan([],'clearFilter'));assert.equal(f.messages.at(-1).result.filterActive,false);
+  await f.send('no-filter',plan([],'hide','filter'));assert.match(f.messages.at(-1).error,/filtro válido/);
+  dispose();
 });
+test('legacy select plans filter and a new conversation clears the filter',async()=>{
+  const f=fakeViewer(),dispose=installBimChat(f.viewer,f.input,async()=>elements);
+  await f.send('legacy',plan([filter('@floor',['2'])],'select'));
+  assert.equal(f.messages.at(-1).result.filteredCount,2);assert.deepEqual(f.viewer.getSelection(),[]);
+  assert.ok(f.calls.every(c=>c[0]!=='select'||c[1].length===0));
+  await f.send('reset',null,{operation:'cancel',resetFilter:true});
+  assert.equal(f.messages.at(-1).filterActive,false);
+  await f.send('stale',plan([],'hide','filter'));assert.match(f.messages.at(-1).error,/filtro válido/);dispose();
+});
+test('filter cannot fall back to manual selection or the model; explicit manual actions remain possible',()=>{
+  const p=plan([],'properties','filter');
+  assert.throws(()=>queryBim(index,p,[1],null),/filtro válido/);
+  assert.throws(()=>queryBim(index,p,[1],[999]),/filtro válido/);
+  assert.deepEqual(queryBim(index,p,[1],[]),[]);
+  assert.deepEqual(queryBim(index,p,[3],[1,2]).map(r=>r.element.dbId),[1,2]);
+  assert.deepEqual(queryBim(index,plan([],'properties','selection'),[3],[1,2]).map(r=>r.element.dbId),[3]);
+});
+
 test('model changed/cancelled while reading never applies stale action',async()=>{const f=fakeViewer();let finish;const dispose=installBimChat(f.viewer,f.input,()=>new Promise(resolve=>finish=resolve));const running=f.send('slow',plan([filter('@specialty',['Hormigón'])]));await f.send('cancel',null,{operation:'cancel'});finish(elements);await running;assert.equal(f.calls.length,0);assert.equal(f.messages.length,0);dispose();});
