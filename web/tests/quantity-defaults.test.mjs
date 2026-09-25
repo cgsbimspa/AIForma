@@ -52,5 +52,11 @@ test('Cálculo defaults persist once, preserve selections, isolate projects and 
   const fixed=await store.workspace(legacyActor);
   assert.equal(fixed.templates.length,1);assert.equal(fixed.configurations[0].templateVersionId,fixed.templates[0].id);
   assert.equal((await store.add(legacyActor,'architecture')).templateVersionId,null);
+  const mep=await store.add(actor,'mep');
+  const mepWorkspace=await store.workspace(actor),mepTemplate=mepWorkspace.templates.find(t=>t.id===mep.templateVersionId);
+  assert.equal(mepTemplate.baseDefinition.code,'mep-base');assert.equal(mepTemplate.name,'MEP · Instalaciones');
+  assert.deepEqual(mepTemplate.baseDefinition.metrics.map(m=>m.unit),['ml','un','m²']);
+  await store.prepareTemplates(actor);assert.equal((await store.workspace(actor)).templates.filter(t=>t.specialtyCode==='mep').length,1);
+  assert.equal((await store.workspace({...actor,projectId:'TEST_MEP_OTHER'})).templates.length,0);
  }finally{await db.close();}
 });

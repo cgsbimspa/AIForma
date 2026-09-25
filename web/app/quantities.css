@@ -335,6 +335,29 @@
 }
 /* Active model controls share the application header, freeing the work area. */
 .quantity-header-slot:empty { display:none; }
+.qv2-mep .mep-kpis { display:grid; grid-auto-flow:column; grid-auto-columns:minmax(145px,1fr); grid-template-columns:none; overflow-x:auto; }
+.qv2-mep .mep-kpis>.quantity-help { grid-column:1/-1; margin:4px 0; }
+.qv2-mep .quantity-grid-scroll th,.qv2-mep .quantity-grid-scroll td { text-align:left; }
+.qv2-mep .quantity-grid-scroll td small { display:block; font-size:9px; margin-top:3px; }
+.qv2-mep .quantity-grid-scroll table { min-width:680px; }
+.mep-element-detail { margin-top:18px; padding-top:14px; border-top:1px solid #dce5f1; }
+.mep-element-detail dl { display:grid; grid-template-columns:180px minmax(0,1fr); gap:8px 14px; margin:15px 0; font-size:12px; }
+.mep-element-detail dd { overflow-wrap:anywhere; }
+.mep-element-detail pre { white-space:pre-wrap; overflow-wrap:anywhere; font-size:10px; }
+.mep-element-detail details { margin-top:16px; }
+@media(min-width:950px) {
+ .qv2-mep .quantity-desk-board { grid-template-areas:'filters filters' 'summary summary' 'model detail'; grid-template-rows:auto auto minmax(0,1fr); }
+ .qv2-mep .quantity-data-column { display:contents; }
+ .qv2-mep .quantity-model { grid-area:model; }
+ .qv2-mep .quantity-filters { grid-area:filters; }
+ .qv2-mep .quantity-summary { grid-area:summary; }
+ .qv2-mep .quantity-detail { grid-area:detail; min-height:0; }
+ .qv2-mep .quantity-filter-fields { gap:16px; }
+ .qv2-mep .quantity-panel-heading { min-height:30px; padding:6px 12px; }
+ .qv2-mep .quantity-kpi { padding:7px 10px; gap:3px; }
+ .qv2-mep .quantity-kpi>strong { font-size:1.05rem; }
+ .qv2-mep .quantity-kpis { padding-bottom:6px; }
+}
 .quantity-page:has(.qv2-desk) .quantity-app-topbar { display:grid; grid-template-columns:auto minmax(280px,1.05fr) minmax(155px,.6fr) 106px auto minmax(130px,160px); gap:12px; padding:10px 16px; }
 .quantity-header-slot { display:contents; }
 .quantity-page:has(.qv2-desk) .quantity-app-topbar>.quantity-icon-button { display:none; }

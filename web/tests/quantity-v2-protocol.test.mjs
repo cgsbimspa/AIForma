@@ -19,6 +19,14 @@ test('changing filters discards a row subset and preserves visual mode; clearing
 });
 const input={urn:'TEST_URN',viewId:'TEST_VIEW'},binding={...input,projectId:'TEST_PROJECT',itemId:'TEST_FILE',versionId:'TEST_V1',versionNumber:1,fileName:'TEST.rvt',viewName:'TEST_VIEW',projectName:'TEST_PROJECT'};
 const elements=[1,2,3].map(dbId=>({dbId,externalId:'TEST_'+dbId,properties:[{displayName:'Especialidad',displayValue:dbId===3?'Otro':'Hormigón'},{displayName:'Category',displayValue:'Walls'},{displayName:'Volume',displayValue:dbId,units:'m³'}]}));
+test('MEP viewer calculates actual length and filters the same IDs; template changes cannot reuse structural extraction',async()=>{
+ const pipes=[1,2].map(dbId=>({dbId,externalId:'TEST_MEP_'+dbId,properties:[{displayName:'ElementId',displayValue:String(dbId)},{displayName:'Especialidad',displayValue:dbId===1?'APF':'APC'},{displayName:'Category',displayValue:'Pipes'},{displayName:'Length',displayValue:dbId*2,units:'m'}]}));
+ const f=fixture(async()=>pipes);try{
+  await f.send({operation:'calculate',template:'mep',binding,settings:defaultSettings()});const data=f.messages.at(-1).calculation;assert.equal(data.engine,'mep-quantities-v1.0');assert.deepEqual(data.records.map(e=>e.mep.quantity.value),[2,4]);
+  await f.send({operation:'filter',filter:{specialty:['APF'],category:[],floor:[],selection:null}});assert.equal(f.messages.at(-1).count,1);assert.deepEqual(f.calls.findLast(c=>c[0]==='isolate')[1],[1]);
+  await f.send({operation:'calculate',binding,settings:defaultSettings()});assert.equal(f.messages.at(-1).calculation.engine,'view-quantities-v2.5');assert.ok(f.messages.at(-1).calculation.records.every(e=>!e.mep));
+ }finally{f.close();}
+});
 // TEST viewer and window only. No Autodesk model is mutated.
 function fixture(read=async()=>elements){
  const calls=[],messages=[],listeners=new Map(),selectionListeners=new Map(),parent={postMessage:m=>messages.push(m)},old=globalThis.window,oldSdk=globalThis.Autodesk;

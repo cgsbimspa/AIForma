@@ -1,7 +1,8 @@
 import { createGeometryService } from './geometry-viewer.js';
 import { inspectElements, calculateQuantities, validateSettings, filterRecords } from './quantity-service.js';
+import { inspectMEPElements, calculateMEPQuantities } from './mep-service.js';
 export function installQuantityV2(viewer,input,readElements){
- let inspected,calculated,revision=0,filterRevision=0,activeIds=null,activeKey=null,visualMode='isolate';
+ let inspected,inspectedMode,calculated,revision=0,filterRevision=0,activeIds=null,activeKey=null,visualMode='isolate';
  let applyingVisibility=false,selectionRevision=0,selectionPending=false,calculationId=null;
  const readGeometry=createGeometryService(viewer),seen=new Set();
  const send=(requestId,payload)=>window.parent.postMessage({type:'aiforma-quantity-v2-result',requestId,urn:input.urn,viewId:input.viewId,...payload},window.location.origin);
@@ -28,11 +29,13 @@ export function installQuantityV2(viewer,input,readElements){
    const run=++revision;calculated=null;calculationId=null;activeIds=null;activeKey=null;
    try{
     validateSettings(d.settings);
+    if(d.template!==undefined&&!['structure','mep'].includes(d.template))throw Error('Plantilla de cálculo no válida');
+    const mep=d.template==='mep';if(inspectedMode!==mep){inspected=undefined;inspectedMode=mep;}
     if(d.binding?.urn!==input.urn||d.binding?.viewId!==input.viewId)throw Error('La fuente no coincide con el visor');
     send(d.requestId,{phase:'loading',message:'Leyendo parámetros y geometría de la vista…'});
-    inspected??=readElements().then(elements=>inspectElements(elements,d.binding,readGeometry,(done,total)=>{if(run===revision)send(d.requestId,{phase:'loading',message:`Geometría y propiedades: ${done} de ${total} elementos`});})).catch(error=>{inspected=undefined;throw error;});
+    inspected??=readElements().then(elements=>(mep?inspectMEPElements:inspectElements)(elements,d.binding,readGeometry,(done,total)=>{if(run===revision)send(d.requestId,{phase:'loading',message:`Geometría y propiedades: ${done} de ${total} elementos`});})).catch(error=>{inspected=undefined;throw error;});
     const elements=await inspected;if(run!==revision)return;
-    calculated=calculateQuantities(elements,d.binding,d.settings);calculationId=d.requestId;
+    calculated=(mep?calculateMEPQuantities:calculateQuantities)(elements,d.binding,d.settings);calculationId=d.requestId;
     send(d.requestId,{phase:'complete',calculation:calculated});
    }catch(e){if(run===revision)send(d.requestId,{phase:'error',message:e.message||'Lectura no disponible'});}
    return;

@@ -7,6 +7,7 @@ export const ENGINE='view-quantities-v2.5';
 function yieldRead(){return new Promise(resolve=>{const channel=new MessageChannel();channel.port1.onmessage=()=>{channel.port1.close();channel.port2.close();resolve();};channel.port2.postMessage(null);});}
 export function defaultSettings(){return {version:1,levelToleranceM:.002,levelBinding:null,levelReferences:[],manualFloors:[],slabRoles:[],foundationFaces:[],rebarWeightTable:[]};}
 export function validateSettings(s){
+ if(s?.mepSystemRules&&(!Array.isArray(s.mepSystemRules)||s.mepSystemRules.length>500||s.mepSystemRules.some(r=>!['specialty','systemType','systemClassification'].includes(r.field)||!r.value?.trim()||!r.specialty?.trim())||new Set(s.mepSystemRules.map(r=>JSON.stringify([r.field,r.value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim()]))).size!==s.mepSystemRules.length))throw Error('Asociaciones MEP inválidas o duplicadas');
  if(!s||s.version!==1||!Number.isFinite(s.levelToleranceM)||s.levelToleranceM<.0001||s.levelToleranceM>.05)throw Error('Tolerancia de elevación no válida (0,1 a 50 mm)');
  if(!Array.isArray(s.rebarWeightTable)||s.rebarWeightTable.length>100||s.rebarWeightTable.some(r=>!Number.isFinite(r.diameter)||r.diameter<=0||!Number.isFinite(r.unit_weight_kg_m)||r.unit_weight_kg_m<=0||!r.source?.trim()||!r.version?.trim())||new Set(s.rebarWeightTable.map(r=>r.diameter)).size!==s.rebarWeightTable.length)throw Error('Tabla de acero no válida; diámetro único, kg/m positivo, fuente y versión obligatorios');
  for(const key of ['levelReferences','manualFloors','slabRoles'])if(!Array.isArray(s[key])||s[key].length>10000)throw Error('Configuración de niveles no válida');
@@ -38,7 +39,7 @@ export function calculateQuantities(inspected,binding,settings){
 export const UNCLASSIFIED='Sin especialidad de cubicación';
 // Browsing and visibility must not depend on eligibility for a quantity formula.
 // A published level remains filterable without claiming a spatial assignment.
-export function filterValues(e){return {specialty:e.specialty??UNCLASSIFIED,category:e.category??e.originalCategory??'Categoría no disponible',floor:e.floor.resolvedBuildingLevel!==UNRESOLVED?e.floor.resolvedBuildingLevel:e.floor.originalRevitLevel?`Nivel publicado: ${e.floor.originalRevitLevel}`:UNRESOLVED};}
+export function filterValues(e){return {specialty:e.specialty??UNCLASSIFIED,category:e.category??e.originalCategory??'Categoría no disponible',floor:e.mep?e.floor.resolvedBuildingLevel:e.floor.resolvedBuildingLevel!==UNRESOLVED?e.floor.resolvedBuildingLevel:e.floor.originalRevitLevel?`Nivel publicado: ${e.floor.originalRevitLevel}`:UNRESOLVED};}
 // OR within each facet, AND across facets and the exact model selection.
 // Scalar facets remain readable for earlier exports; the UI sends arrays.
 export function matchesFilter(e,filter,selected=filter.selection==null?null:new Set(filter.selection)){const values=filterValues(e);return (!selected||selected.has(e.dbId))&&['specialty','category','floor'].every(key=>Array.isArray(filter[key])?(!filter[key].length||filter[key].includes(values[key])):(!filter[key]||filter[key]===values[key]));}

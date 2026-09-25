@@ -3,7 +3,7 @@ import { DataError } from "../autodesk/data.ts";
 import { decryptHistory, encryptHistory, type Actor } from "../memory/domain.ts";
 import type { Query, Transaction } from "../memory/database.ts";
 import { configurationSchema, runSchema, templateVersionSchema, type QuantityConfiguration, type QuantitySource, type QuantityWorkspace } from "./contracts.ts";
-import { structureTemplateDefinition } from "./template-defaults.ts";
+import { structureTemplateDefinition, mepTemplateDefinition } from "./template-defaults.ts";
 import type { CalculationSettings } from '../quantities-v2/contracts.ts';
 
 export function createQuantityStore(transaction: Transaction, key: Buffer) {
@@ -17,7 +17,7 @@ export function createQuantityStore(transaction: Transaction, key: Buffer) {
   }
   async function assignTemplate(q: Query, actor: Actor, previous: QuantityConfiguration) {
     // A saved version is a deliberate choice. Never replace it with a newer one.
-    if (previous.templateVersionId || previous.specialtyCode !== "structure") return previous;
+    if (previous.templateVersionId || !["structure", "mep"].includes(previous.specialtyCode)) return previous;
     const rows = await q("SELECT * FROM quantity_template_version WHERE specialty_code=$1 ORDER BY version DESC", [previous.specialtyCode]);
     const families = new Map<string, ReturnType<typeof templateVersionSchema.parse>>();
     for (const row of rows) {
@@ -29,9 +29,9 @@ export function createQuantityStore(transaction: Transaction, key: Buffer) {
     let template = [...families.values()][0];
     if (!template) {
       template = templateVersionSchema.parse({
-        id: randomUUID(), templateId: randomUUID(), specialtyCode: "structure",
-        name: "Cálculo base", version: 1, configuration: null,
-        baseDefinition: structureTemplateDefinition,
+        id: randomUUID(), templateId: randomUUID(), specialtyCode: previous.specialtyCode,
+        name: previous.specialtyCode === "mep" ? "MEP · Instalaciones" : "Cálculo base", version: 1, configuration: null,
+        baseDefinition: previous.specialtyCode === "mep" ? mepTemplateDefinition : structureTemplateDefinition,
         createdAt: new Date().toISOString(), createdBy: actor.userId,
       });
       await q("INSERT INTO quantity_template_version(id,organization_id,project_id,specialty_code,template_id,version,payload,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8)", [template.id, actor.organizationId, actor.projectId, template.specialtyCode, template.templateId, template.version, encode(actor, template.id, template), actor.userId]);
