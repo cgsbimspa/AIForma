@@ -1,4 +1,4 @@
-# Cubicaciones de la vista activa — motor 2.3
+# Cubicaciones de la vista activa — motor 2.4
 
 Implementa la especificación del usuario del 24 de septiembre de 2026. Sustituye la mesa de Cálculo por Especialidad → Categoría Revit → Piso resuelto. Los módulos restantes y los resultados históricos del motor anterior conservan su comportamiento.
 
@@ -60,3 +60,5 @@ El filtro no usa la selección azul del SDK. Cada cambio de filtros actualiza au
 La restricción base publicada tiene prioridad sobre el parámetro genérico Nivel. Un conflicto interno en la restricción base queda sin resolver. Se conservan ambos valores y sus entradas: por ejemplo, Nivel=2 y Base=N1 no constituyen una equivalencia 2=N1 ni 2=N2. Esta selección mejora la navegación por nivel nativo sin inventar un piso espacial. El diagnóstico de enfierradura distingue exclusión por filtro, falta de largo/cantidad/diámetro y falta de coeficiente.
 
 La inspección nativa confirmó que __internalref__/Level es un identificador interno (p. ej. 3) y no un nombre de nivel (Nivel=N2 en Restricciones). Se conserva separado como levelReference y se excluye de la resolución de nombres. Cuando no hay nivel nativo, se utiliza el valor publicado AEC Piso, observado en las barras de Distrito Verde (p. ej. N5). El filtro reúne etiquetas publicadas exactamente iguales bajo «Nivel publicado» y conserva el parámetro de origen en la evidencia. No las presenta como pisos espaciales calculados.
+
+La geometría de barras se limita a la caja publicada y su centro para ubicación espacial (método BOUNDING_BOX, boundsOnly). Su peso se obtiene exclusivamente de los parámetros y la tabla nominal. No se triangulan miles de barras ni se calcula volumen de acero por caja; las mallas de Hormigón mantienen su análisis de volumen y caras.

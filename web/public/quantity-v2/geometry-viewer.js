@@ -5,9 +5,10 @@ import { inspectTriangles, geometryFallback } from './geometry.js';
 export function createGeometryService(viewer){
  const cache=new Map(),model=viewer.model,unit=model.getUnitString?.(),scale=unitFactor(unit,'m'),up=model.getUpVector?.();
  const zUp=Array.isArray(up)&&Math.abs(up[0])<1e-8&&Math.abs(up[1])<1e-8&&Math.abs(up[2]-1)<1e-8;
- return async function geometry(dbId){
-  if(cache.has(dbId))return cache.get(dbId);
-  if(scale===null){const value=geometryFallback(null,'Unidad de geometría no publicada');cache.set(dbId,value);return value;}
+ return async function geometry(dbId,detail='mesh'){
+  const cacheKey=`${dbId}:${detail}`;
+  if(cache.has(cacheKey))return cache.get(cacheKey);
+  if(scale===null){const value=geometryFallback(null,'Unidad de geometría no publicada');cache.set(cacheKey,value);return value;}
   const fragments=model.getFragmentList(),tree=model.getInstanceTree(),ids=[];
   tree.enumNodeFragments(dbId,id=>ids.push(id),false);
   let bbox=null;
@@ -16,6 +17,10 @@ export function createGeometryService(viewer){
    for(const id of ids){const part=new THREE.Box3();fragments.getOriginalWorldBounds(id,part);box.union(part);}
    if(!box.isEmpty())bbox={min:[box.min.x,box.min.y,box.min.z].map(v=>v*scale),max:[box.max.x,box.max.y,box.max.z].map(v=>v*scale)};
    if(!zUp)throw Error('Eje vertical de la vista no compatible con el análisis Z');
+   if(detail==='bounds'){
+    const value={...geometryFallback(bbox,bbox?null:'Caja de ubicación no disponible'),available:Boolean(bbox),boundsOnly:true,modelUnit:unit,scaleToMeters:scale,fragmentIds:ids};
+    cache.set(cacheKey,value);return value;
+   }
    const triangles=[];
    for(const id of ids){
     const dbIds=fragments.getDbIds(id),owners=Array.isArray(dbIds)||ArrayBuffer.isView(dbIds)?Array.from(dbIds):[dbIds];
@@ -30,7 +35,7 @@ export function createGeometryService(viewer){
     });
     if(!count)throw Error('Triángulos no disponibles');
    }
-   const value={...inspectTriangles(triangles),modelUnit:unit,scaleToMeters:scale,fragmentIds:ids};cache.set(dbId,value);return value;
-  }catch(error){const value={...geometryFallback(bbox,error.message),modelUnit:unit,scaleToMeters:scale,fragmentIds:ids};cache.set(dbId,value);return value;}
+   const value={...inspectTriangles(triangles),modelUnit:unit,scaleToMeters:scale,fragmentIds:ids};cache.set(cacheKey,value);return value;
+  }catch(error){const value={...geometryFallback(bbox,error.message),modelUnit:unit,scaleToMeters:scale,fragmentIds:ids};cache.set(cacheKey,value);return value;}
  };
 }

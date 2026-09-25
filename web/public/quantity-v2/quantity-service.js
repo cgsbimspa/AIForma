@@ -2,7 +2,7 @@ import { geometryFallback } from './geometry.js';
 import { extractElement, sum } from './properties.js';
 import { concreteQuantity, formworkQuantity, rebarQuantity, metricCoverage } from './services.js';
 import { slabCandidates, buildIntervals, resolveLevel, UNRESOLVED } from './levels.js';
-export const ENGINE='view-quantities-v2.3';
+export const ENGINE='view-quantities-v2.4';
 // Yield between batches without the nested-timer delay of an inactive tab.
 function yieldRead(){return new Promise(resolve=>{const channel=new MessageChannel();channel.port1.onmessage=()=>{channel.port1.close();channel.port2.close();resolve();};channel.port2.postMessage(null);});}
 export function defaultSettings(){return {version:1,levelToleranceM:.002,levelBinding:null,levelReferences:[],manualFloors:[],slabRoles:[],foundationFaces:[],rebarWeightTable:[]};}
@@ -21,7 +21,7 @@ export function validateSettings(s){
 export async function inspectElements(elements,binding,geometry,progress=()=>{}){
  if(!elements.length||new Set(elements.map(e=>e.dbId)).size!==elements.length)throw Error('Lectura vacía o elementos duplicados');
  const records=[];
- for(const e of elements){const record=extractElement(e,binding);record.geometry=record.specialty?await geometry(e.dbId):geometryFallback(null,'Geometría no analizada: elemento fuera de las especialidades de esta cubicación');records.push(record);if(records.length%25===0){progress(records.length,elements.length);await yieldRead();}}
+ for(const e of elements){const record=extractElement(e,binding);record.geometry=record.specialty?await geometry(e.dbId,record.specialty==='Enfierradura'?'bounds':'mesh'):geometryFallback(null,'Geometría no analizada: elemento fuera de las especialidades de esta cubicación');records.push(record);if(records.length%25===0){progress(records.length,elements.length);await yieldRead();}}
  return records;
 }
 export function calculateQuantities(inspected,binding,settings){

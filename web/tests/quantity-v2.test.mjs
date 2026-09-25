@@ -122,6 +122,14 @@ test('published Revit-prefixed categories and user-approved subdiscipline rules 
  const foreign=extractElement({dbId:124,name:'TEST_UNKNOWN',properties:[property('Category','Revit Muros'),property('Sub Especialidad','TEST_RANDOM')]},binding);assert.equal(foreign.specialty,null);
  const roof=extractElement({dbId:125,name:'TEST_ROOF',properties:[property('Category','Revit Armazón estructural'),property('Especialidad','Hormigón'),property('Nombre de tipo','Metalcon')]},binding);assert.equal(roof.specialty,null);
 });
+test('rebar uses published bounds for location and parameters for weight without a triangle analysis',async()=>{
+ const calls=[],raw=[{dbId:1,properties:[property('Category','Structural Rebar'),property('AEC Piso','N5'),property('Bar Diameter',12,'mm'),property('Bar Length',2,'m'),property('Quantity',3)]}];
+ const inspected=await inspectElements(raw,binding,async(id,detail)=>{calls.push([id,detail]);return {...geometryFallback({min:[0,0,12],max:[1,1,14]},null),boundsOnly:true};});
+ assert.deepEqual(calls,[[1,'bounds']]);
+ const table=[{diameter:12,unit_weight_kg_m:.888,source:AZA_SOURCE,version:'TEST_APPROVED_REFERENCE'}];
+ const result=calculateQuantities(inspected,binding,{...settings(),rebarWeightTable:table});close(result.records[0].quantities.rebar.value,5.328);assert.equal(result.records[0].floor.originalRevitLevel,'N5');
+ assert.equal(result.records[0].geometry.volume,undefined);
+});
 test('disjoint overlapping shells do not create a net geometric volume; approved foundation faces remain version-bound',()=>{
  const overlap=inspectTriangles([...box(2,2,2),...box(2,2,2,[1,1,1])]);assert.equal(overlap.closed,false);assert.equal(overlap.volume,null);
  const e=element(1,'Structural Foundations',[],inspectTriangles(box(2,3,4))),s={...settings(),levelBinding:{urn:binding.urn,viewId:binding.viewId},foundationFaces:[{dbId:1,confirmed:true}]};assert.equal(formworkQuantity(e,s,binding).value,40);assert.equal(formworkQuantity(e,s,{...binding,urn:'TEST_OTHER'}).value,null);
