@@ -15,6 +15,15 @@ export const parameterNames={
  level:['Level','Nivel','Reference Level','Nivel de referencia','Schedule Level'],baseLevel:['Base Level','Nivel base','Base Constraint','Restricción de base'],topLevel:['Top Level','Nivel superior','Top Constraint','Restricción superior'],elevation:['Elevation','Elevación'],
  diameter:['Bar Diameter','Diámetro de barra','Diámetro de la barra','Diameter','Diámetro'],barLength:['Bar Length','Longitud de barra','Longitud de la barra'],count:['Quantity','Cantidad','Bar Quantity','Número de barras'],totalLength:['Total Bar Length','Longitud total de barra','Longitud total de las barras'],host:['Host','Anfitrión','Host Id','ID de anfitrión'],hostCategory:['Host Category','Categoría de anfitrión'],elementId:['ElementId','Element ID','Id de elemento'],
 };
+// Property arrays are immutable Autodesk snapshots. Normalize each name once,
+// retaining duplicate properties so ambiguity checks remain unchanged.
+const parameterKeys=Object.fromEntries(Object.entries(parameterNames).map(([key,names])=>[key,[...new Set(names.map(normalize))]]));
+const propertyIndexes=new WeakMap();
+function matchingProperties(properties,key){
+ let index=propertyIndexes.get(properties);
+ if(!index){index=new Map();for(const property of properties){const name=normalize(property.displayName),list=index.get(name)??[];list.push(property);index.set(name,list);}propertyIndexes.set(properties,index);}
+ return parameterKeys[key].flatMap(name=>index.get(name)??[]);
+}
 // H.A. = Hormigón explicitly confirmed by the user on 2026-09-25 after
 // inspecting the published material in Distrito Verde. Not inferred from type names.
 const concreteMaterials=new Map([
@@ -32,12 +41,12 @@ export function unitFactor(unit,dimension){
 }
 export const unavailable=(issue)=>({value:null,source:'NOT_AVAILABLE',issue,inputs:[]});
 export function readText(properties,key){
- const matches=properties.filter(p=>parameterNames[key].some(n=>normalize(p.displayName)===normalize(n))&&(!['level','baseLevel','topLevel'].includes(key)||p.displayCategory!=='__internalref__'));
+ const matches=matchingProperties(properties,key).filter(p=>!['level','baseLevel','topLevel'].includes(key)||p.displayCategory!=='__internalref__');
  const values=[...new Set(matches.map(p=>String(p.displayValue??'').trim()).filter(Boolean))];
  return {value:values.length===1?values[0]:null,issue:values.length>1?'Parámetros con valores distintos':values.length?'':'Parámetro no disponible',inputs:matches.map(p=>({name:p.displayName,category:p.displayCategory??'',rawValue:String(p.displayValue??''),unit:String(p.units??'')}))};
 }
 export function readMeasure(properties,key,dimension){
- const matches=properties.filter(p=>parameterNames[key].some(n=>normalize(p.displayName)===normalize(n)));
+ const matches=matchingProperties(properties,key);
  if(matches.length!==1)return unavailable(matches.length?'Parámetro ambiguo; seleccionar una propiedad específica':'Parámetro no disponible');
  const p=matches[0],raw=p.displayValue,number=typeof raw==='number'?raw:typeof raw==='string'&&/^[-+]?\d+(?:\.\d+)?$/.test(raw.trim())?Number(raw):NaN;
  const factor=dimension==='count'&&(!p.units||['count','unitless',''].includes(normalize(p.units)))?1:unitFactor(p.units,dimension);

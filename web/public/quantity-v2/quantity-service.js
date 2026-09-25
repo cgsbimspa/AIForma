@@ -21,7 +21,7 @@ export function validateSettings(s){
 export async function inspectElements(elements,binding,geometry,progress=()=>{}){
  if(!elements.length||new Set(elements.map(e=>e.dbId)).size!==elements.length)throw Error('Lectura vacía o elementos duplicados');
  const records=[];
- for(const e of elements){const record=extractElement(e,binding);record.geometry=record.specialty?await geometry(e.dbId,record.specialty==='Enfierradura'?'bounds':'mesh'):geometryFallback(null,'Geometría no analizada: elemento fuera de las especialidades de esta cubicación');records.push(record);if(records.length%25===0){progress(records.length,elements.length);await yieldRead();}}
+ for(const e of elements){const record=extractElement(e,binding);record.geometry=record.specialty?await geometry(e.dbId,record.specialty==='Enfierradura'?'bounds':'mesh'):geometryFallback(null,'Geometría no analizada: elemento fuera de las especialidades de esta cubicación');records.push(record);if(records.length%(record.specialty==='Hormigón'?25:250)===0){progress(records.length,elements.length);await yieldRead();}}
  return records;
 }
 export function calculateQuantities(inspected,binding,settings){
