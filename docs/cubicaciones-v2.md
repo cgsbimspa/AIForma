@@ -1,4 +1,4 @@
-# Cubicaciones de la vista activa — motor 2.4
+# Cubicaciones de la vista activa — motor 2.5
 
 Implementa la especificación del usuario del 24 de septiembre de 2026. Sustituye la mesa de Cálculo por Especialidad → Categoría Revit → Piso resuelto. Los módulos restantes y los resultados históricos del motor anterior conservan su comportamiento.
 
@@ -24,7 +24,7 @@ Mientras el piso espacial esté sin resolver, el filtro y la tabla muestran «Ni
 - Vigas y fundaciones lineales: Largo × Altura × 2. Si faltan dimensiones y existe un prisma rectangular verificado, suma de sus dos caras laterales principales.
 - Pilares: Perímetro × Altura. En sección rectangular verificada, 2 × (Ancho + Fondo) × Altura. Puede derivarse de un prisma geométrico vertical.
 - Muros: Área publicada de una cara × 2; alternativa geométrica para prismas rectangulares.
-- Losas elevadas: área inferior + perímetro × espesor. Radier/fundación: solo perímetro × espesor. La condición de apoyo se confirma por tipo en la vista; las denominaciones explícitas radier/losa de fundación identifican el caso sin fondo.
+- Losas elevadas: área inferior + perímetro × espesor. Radier/fundación: solo perímetro × espesor. El 25-09-2026 el usuario confirmó explícitamente «fondo + cantos por defecto; radieres y fundaciones sólo cantos». Se aplica esa convención a Floors de Hormigón con geometría horizontal verificable, sin exigir una confirmación por cada losa. Las denominaciones explícitas radier/losa de fundación identifican el caso sin fondo; se conservan las excepciones por elemento ligadas a la vista/versión. La regla `cgs-slab-formwork` v2 registra si proviene del criterio por defecto, de familia/tipo publicado o de una excepción confirmada. No afirma haber detectado físicamente un apoyo. La evidencia incluye fondo, cantos, perímetro y espesor medidos; si falta geometría, no se inventa un valor.
 - Fundaciones no lineales: se calcula el área potencial de caras verticales y se excluye del total hasta que el usuario confirme que todas requieren moldaje y no hay contactos que descontar. No se realiza una unión booleana entre elementos.
 - Barras Structural Rebar: largo individual × cantidad; luego largo total × kg/m. El diámetro se mantiene como agrupación obligatoria. Los coeficientes requieren diámetro, kg/m, fuente y versión aportados por el usuario. No se aplica una tabla por defecto ni se supone una cantidad de barras. El preset AZA (tabla 1.2, página 2, ficha consultada el 25-09-2026) ofrece Ø8=0,395; Ø10=0,617; Ø12=0,888; Ø16=1,58; Ø18=2,00; Ø22=2,98 kg/m. Solo agrega diámetros detectados, conserva coeficientes existentes y requiere guardar explícitamente. El usuario autorizó esta tabla para Distrito Verde en esta conversación. Fuente: https://www.aza.cl/2024/wp-content/uploads/2024/06/FT-Barras-de-Refuerzo.pdf. No acredita material, fabricación ni cumplimiento normativo.
 

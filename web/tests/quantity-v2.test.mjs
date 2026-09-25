@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { inspectTriangles, geometryFallback } from '../public/quantity-v2/geometry.js';
 import { readMeasure, extractElement } from '../public/quantity-v2/properties.js';
-import { concreteQuantity, formworkQuantity, rebarQuantity } from '../public/quantity-v2/services.js';
+import { concreteQuantity, formworkQuantity, rebarQuantity, formworkDiagnostic } from '../public/quantity-v2/services.js';
 import { defaultSettings, calculateQuantities, inspectElements, presentQuantities, quantityFacets, compareCalculations, UNCLASSIFIED } from '../public/quantity-v2/quantity-service.js';
 import { slabCandidates, buildIntervals, resolveLevel } from '../public/quantity-v2/levels.js';
 import { calculationSchema, settingsSchema } from '../lib/quantities-v2/contracts.ts';
@@ -71,11 +71,28 @@ test('concrete prioritizes Revit and formwork uses category-specific formulas wi
  const other=element(5,'Structural Foundations',[],g);assert.equal(formworkQuantity(other,settings(),binding).value,null);assert.equal(formworkQuantity(other,settings(),binding).proposedValue,40);
  const steel=element(6,'Structural Rebar',[],g,'Enfierradura');assert.equal(formworkQuantity(steel,settings(),binding).value,null);assert.equal(concreteQuantity(steel).value,null);
 });
-test('ground slabs exclude their bottom and elevated slabs require explicit confirmed role',()=>{
- const e=element(1,'Floors',[],inspectTriangles(box(10,10,.2)));assert.equal(formworkQuantity(e,settings(),binding).value,null);
+test('user-confirmed default calculates slab bottom and edges; ground exceptions remain version-bound',()=>{
+ const e=element(1,'Floors',[],inspectTriangles(box(10,10,.2))),automatic=formworkQuantity(e,settings(),binding);close(automatic.value,108);
+ assert.equal(automatic.formworkCriteria.source,'USER_CONFIRMED_DEFAULT');assert.equal(automatic.formworkCriteria.rule.version,'2');
+ close(automatic.components.bottomAreaM2,100);close(automatic.components.edgeAreaM2,8);close(automatic.components.perimeterM,40);close(automatic.components.thicknessM,.2);
  const s={...settings(),levelBinding:{urn:binding.urn,viewId:binding.viewId},slabRoles:[{dbId:1,role:'ground'}]};close(formworkQuantity(e,s,binding).value,8);
+ assert.equal(formworkQuantity(e,s,binding).formworkCriteria.source,'ELEMENT_CONFIGURATION');
+ close(formworkQuantity(e,s,{...binding,urn:'TEST_OTHER_VERSION'}).value,108);
  s.slabRoles[0].role='elevated';close(formworkQuantity(e,s,binding).value,108);
- assert.equal(formworkQuantity(e,s,{...binding,urn:'TEST_OTHER_VERSION'}).value,null);
+});
+
+test('published radier/foundation labels exclude the bottom and keep the source; no geometry means no invented moldaje',()=>{
+ for(const name of ['RADIER TEST','Losa de Fundación TEST','Foundation slab TEST']){
+  const e=element(1,'Floors',[property('Type',name)],inspectTriangles(box(10,10,.2))),q=formworkQuantity(e,settings(),binding);
+  close(q.value,8);assert.equal(q.components.bottomAreaM2,0);assert.equal(q.formworkCriteria.source,'PUBLISHED_FAMILY_TYPE');assert.equal(q.inputs[0].rawValue,name);
+ }
+ const unavailable=element(2,'Floors',[property('Volume',20,'m³')]);assert.equal(concreteQuantity(unavailable).value,20);assert.equal(formworkQuantity(unavailable,settings(),binding).value,null);
+ const malformed=element(3,'Floors',[],{...inspectTriangles(box(10,10,.2)),bottomArea:null});assert.equal(formworkQuantity(malformed,settings(),binding).value,null);
+ const ready=element(4,'Floors',[],inspectTriangles(box(10,10,.2))),data=calculateQuantities([ready,unavailable],binding,settings());
+ assert.equal(calculationSchema.safeParse(data).success,true);
+ const presentation=presentQuantities(data,{specialty:[],category:['Floors'],floor:[],selection:null});assert.equal(presentation.coverage.formwork.total,null);close(presentation.coverage.formwork.subtotal,108);
+ const diagnostic=formworkDiagnostic(presentation.records);assert.equal(diagnostic.eligible,2);assert.equal(diagnostic.ready,1);assert.equal(diagnostic.reasons[0].count,1);assert.match(diagnostic.reasons[0].issue,/Geometría/);
+ const selected=presentQuantities(data,{specialty:[],category:[],floor:[],selection:[4]});close(selected.coverage.formwork.total,108);assert.equal(selected.rows[0].quantities.formwork.total,selected.coverage.formwork.total);
 });
 test('steel derives lengths and weights only from traceable configured coefficients per diameter',()=>{
  const e=element(1,'Structural Rebar',[property('Bar Diameter',12,'mm'),property('Bar Length',2000,'mm'),property('Quantity',3)],undefined,'Enfierradura');

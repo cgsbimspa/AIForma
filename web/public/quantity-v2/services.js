@@ -1,5 +1,16 @@
 import { unavailable, normalize, sum } from './properties.js';
 const measured=(value,source,formula,inputs=[],extra={})=>Number.isFinite(value)&&value>=0?{value,source,formula,inputs,issue:null,...extra}:unavailable('Resultado geométrico no válido');
+// Calculation convention explicitly confirmed by the user on 2026-09-25.
+// It defines what to measure; it does not claim that a support was found in Revit.
+export const slabFormworkRule={id:'cgs-slab-formwork',version:'2',basis:'Criterio confirmado por el usuario el 25-09-2026: fondo + cantos por defecto; radieres y losas de fundación identificados, sólo cantos'};
+export function slabFormworkCriteria(e,settings,binding){
+ const role=settings.slabRoles?.find(r=>r.dbId===e.dbId&&settings.levelBinding?.urn===binding.urn&&settings.levelBinding?.viewId===binding.viewId)?.role;
+ const inputs=[...(e.text.type?.inputs??[]),...(e.text.family?.inputs??[])];
+ const name=normalize([e.text.type?.value,e.text.family?.value].join(' '));
+ const identifiedGround=/\bradier\b|losa.*fundacion|foundation slab/.test(name);
+ const ground=role==='ground'||identifiedGround;
+ return {role:ground?'ground':'elevated',basis:role==='ground'?'Condición por elemento confirmada para esta vista y versión':identifiedGround?'Radier o losa de fundación identificado en familia/tipo publicado':role==='elevated'?'Condición por elemento confirmada para esta vista y versión':slabFormworkRule.basis,source:role==='ground'||role==='elevated'&&!identifiedGround?'ELEMENT_CONFIGURATION':identifiedGround?'PUBLISHED_FAMILY_TYPE':'USER_CONFIRMED_DEFAULT',inputs:identifiedGround?inputs:[],rule:slabFormworkRule};
+}
 export function concreteQuantity(e){
  if(e.specialty!=='Hormigón')return unavailable('No corresponde a Hormigón');
  if(!['Structural Foundations','Structural Columns','Structural Framing','Walls','Floors'].includes(e.category))return unavailable('Categoría Revit no disponible o fuera del alcance');
@@ -10,7 +21,6 @@ export function concreteQuantity(e){
 export function formworkQuantity(e,settings,binding){
  if(e.specialty!=='Hormigón')return unavailable('Moldaje solo corresponde a Hormigón');
  const m=e.measures,g=e.geometry,ready=g?.closed;
- const role=settings.slabRoles?.find(r=>r.dbId===e.dbId&&settings.levelBinding?.urn===binding.urn&&settings.levelBinding?.viewId===binding.viewId)?.role;
  switch(e.category){
  case 'Walls':
   if(m.area.value!==null)return measured(m.area.value*2,'CALCULATED_PARAMETERS','Área de una cara × 2',m.area.inputs);
@@ -36,10 +46,10 @@ export function formworkQuantity(e,settings,binding){
  }
  case 'Floors': {
   if(!ready||!g.horizontalPrism)return unavailable('Geometría horizontal y perímetro de la losa no verificables');
-  const name=normalize([e.text.type.value,e.text.family.value].join(' '));
-  const ground=role==='ground'||/\bradier\b|losa.*fundacion|foundation slab/.test(name);
-  if(!ground&&role!=='elevated')return unavailable('Confirma si la losa es elevada o está apoyada sobre terreno/fundación');
-  return measured(g.perimeter*g.thickness+(ground?0:g.bottomArea),'CALCULATED_GEOMETRY',ground?'Radier/fundación: Perímetro × Espesor (sin fondo)':'Losa elevada: Área inferior + Perímetro × Espesor',[],{slabRole:ground?'ground':'elevated'});
+  const criteria=slabFormworkCriteria(e,settings,binding),ground=criteria.role==='ground';
+  if(!Number.isFinite(g.perimeter)||g.perimeter<0||!Number.isFinite(g.thickness)||g.thickness<=0||!ground&&(!Number.isFinite(g.bottomArea)||g.bottomArea<0))return unavailable('Perímetro, espesor o área inferior de losa no disponibles en la geometría publicada');
+  const edges=g.perimeter*g.thickness,bottom=ground?0:g.bottomArea;
+  return measured(edges+bottom,'CALCULATED_GEOMETRY',ground?'Radier/fundación: Perímetro × Espesor (sin fondo)':'Losa: Área inferior + Perímetro × Espesor',criteria.inputs,{slabRole:criteria.role,formworkCriteria:criteria,components:{bottomAreaM2:bottom,edgeAreaM2:edges,perimeterM:g.perimeter,thicknessM:g.thickness},precision:'TESSELLATED_GEOMETRY'});
  }
  default:return unavailable('Categoría sin regla de moldaje');
  }
@@ -59,4 +69,9 @@ export const metricDefinitions=[{key:'concrete',name:'Hormigón',unit:'m³'},{ke
 export function metricCoverage(records,metric){
  const eligible=records.filter(e=>metric==='rebar'?e.specialty==='Enfierradura':e.specialty==='Hormigón'),read=eligible.filter(e=>e.quantities[metric]?.value!==null&&e.quantities[metric]?.value!==undefined),subtotal=read.length?sum(read.map(e=>e.quantities[metric].value)):null;
  return {eligible:eligible.length,read:read.length,missing:eligible.length-read.length,subtotal,total:eligible.length&&read.length===eligible.length?subtotal:null,status:eligible.length===0?'NOT_APPLICABLE':read.length===eligible.length?'COMPLETE':read.length?'PARTIAL':'NOT_AVAILABLE'};
+}
+export function formworkDiagnostic(records){
+ const concrete=records.filter(r=>r.specialty==='Hormigón'),reasons=new Map();
+ for(const r of concrete)if(r.quantities.formwork.value===null){const issue=r.quantities.formwork.issue??'Datos pendientes de revisión';reasons.set(issue,(reasons.get(issue)??0)+1);}
+ return {eligible:concrete.length,ready:concrete.filter(r=>r.quantities.formwork.value!==null).length,slabs:concrete.filter(r=>r.category==='Floors').length,reasons:[...reasons].map(([issue,count])=>({issue,count}))};
 }
