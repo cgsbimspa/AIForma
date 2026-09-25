@@ -32,7 +32,7 @@ export function resolveMEPSystem(element,settings){
  const confirmed=[...new Set(configured.map(r=>r.specialty))];
  if(confirmed.length>1)return {specialty:null,issue:'Asociaciones confirmadas contradictorias',inputs:configured.flatMap(r=>fields[r.field].inputs),source:'USER_CONFIGURATION'};
  if(confirmed.length===1)return {specialty:confirmed[0],issue:null,inputs:configured.flatMap(r=>fields[r.field].inputs),source:'USER_CONFIGURATION',rule:mepRule};
- if(Object.values(fields).some(f=>f.inputs.length&&!f.value))return {specialty:null,issue:'Parámetros de especialidad o sistema ambiguos; confirma una asociación',inputs:Object.values(fields).flatMap(f=>f.inputs),source:'NOT_AVAILABLE'};
+ if(Object.values(fields).some(f=>f.inputs.some(p=>p.rawValue.trim())&&!f.value))return {specialty:null,issue:'Parámetros de especialidad o sistema ambiguos; confirma una asociación',inputs:Object.values(fields).flatMap(f=>f.inputs),source:'NOT_AVAILABLE'};
  const explicit=explicitCode(fields.specialty.value),typeCode=explicitCode(fields.systemType.value);
  const classification=Object.entries(systemClassifications).find(([,values])=>values.some(v=>normalize(v)===normalize(fields.systemClassification.value)))?.[0];
  const codes=[...new Set([explicit,typeCode,classification].filter(Boolean))];

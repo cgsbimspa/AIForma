@@ -19,6 +19,7 @@ test('MEP does not classify Pipes from category, file names, or approximate syst
  const r=calculate([element(1,'Pipes',[p('System Classification','Domestic Cold Water'),p('Length',12540,'mm')])]).records[0];assert.equal(r.specialty,'APF');near(r.mep.quantity.value,12.54);assert.equal(r.mep.system.source,'REVIT_SYSTEM_CLASSIFICATION');
 });
 test('explicit MEP specialty and system conflicts are visible, not silently combined',()=>{
+ const blankSpecialty=calculate([element(9,'Pipes',[p('Especialidad',''),p('System Classification','DomesticColdWater')])]).records[0];assert.equal(blankSpecialty.specialty,'APF');
  const e=element(1,'Pipes',[p('Especialidad','APF'),p('System Classification','DomesticHotWater')]);assert.equal(resolveMEPSystem(e,defaultSettings()).specialty,null);
  const settings={...defaultSettings(),mepSystemRules:[{field:'systemClassification',value:'DomesticHotWater',specialty:'APC'}]};
  const r=calculate([e],settings).records[0];assert.equal(r.specialty,'APC');assert.equal(r.mep.system.source,'USER_CONFIGURATION');assert.equal(settingsSchema.safeParse(settings).success,true);
