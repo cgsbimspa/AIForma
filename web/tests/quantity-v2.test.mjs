@@ -95,3 +95,8 @@ test('disjoint overlapping shells do not create a net geometric volume; approved
  const overlap=inspectTriangles([...box(2,2,2),...box(2,2,2,[1,1,1])]);assert.equal(overlap.closed,false);assert.equal(overlap.volume,null);
  const e=element(1,'Structural Foundations',[],inspectTriangles(box(2,3,4))),s={...settings(),levelBinding:{urn:binding.urn,viewId:binding.viewId},foundationFaces:[{dbId:1,confirmed:true}]};assert.equal(formworkQuantity(e,s,binding).value,40);assert.equal(formworkQuantity(e,s,{...binding,urn:'TEST_OTHER'}).value,null);
 });
+test('reads every element metadata but avoids unrelated geometry work; repeated filters never re-read geometry',async()=>{
+ const calls=[];const raw=[1,2].map(dbId=>({dbId,name:'TEST_'+dbId,properties:[property('Especialidad',dbId===1?'Hormigón':'Otra'),property('Category','Walls'),property('Volume',3,'m³')]}));
+ const records=await inspectElements(raw,binding,async id=>{calls.push(id);return geometryFallback(null,'TEST');});assert.deepEqual(calls,[1]);assert.equal(records.length,2);assert.equal(records[1].measures.volume.value,3);assert.match(records[1].geometry.issue,/fuera de/);
+ const data=calculateQuantities(records,binding,settings());presentQuantities(data,{specialty:'Hormigón',category:'',floor:''});presentQuantities(data,{specialty:'',category:'Walls',floor:''});assert.deepEqual(calls,[1]);
+});

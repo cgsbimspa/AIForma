@@ -1,3 +1,4 @@
+import { geometryFallback } from './geometry.js';
 import { extractElement, sum } from './properties.js';
 import { concreteQuantity, formworkQuantity, rebarQuantity, metricCoverage } from './services.js';
 import { slabCandidates, buildIntervals, resolveLevel, UNRESOLVED } from './levels.js';
@@ -18,7 +19,7 @@ export function validateSettings(s){
 export async function inspectElements(elements,binding,geometry,progress=()=>{}){
  if(!elements.length||new Set(elements.map(e=>e.dbId)).size!==elements.length)throw Error('Lectura vacía o elementos duplicados');
  const records=[];
- for(const e of elements){const record=extractElement(e,binding);record.geometry=await geometry(e.dbId);records.push(record);if(records.length%25===0){progress(records.length,elements.length);await new Promise(resolve=>setTimeout(resolve,0));}}
+ for(const e of elements){const record=extractElement(e,binding);record.geometry=record.specialty?await geometry(e.dbId):geometryFallback(null,'Geometría no analizada: elemento fuera de las especialidades de esta cubicación');records.push(record);if(records.length%25===0){progress(records.length,elements.length);await new Promise(resolve=>setTimeout(resolve,0));}}
  return records;
 }
 export function calculateQuantities(inspected,binding,settings){
@@ -30,7 +31,7 @@ export function calculateQuantities(inspected,binding,settings){
   if(e.externalId&&externalCounts.get(e.externalId)>1){rebar.totalLengthM=null;for(const q of Object.values(quantities)){q.value=null;q.issue='Identificador externo repetido; requiere revisión';q.source='NOT_AVAILABLE';}}
   return {...e,quantities,rebar,floor:resolveLevel(e,resolver,settings,binding)};
  });
- return {binding,engine:ENGINE,calculatedAt:new Date().toISOString(),settings,records,slabs:slabCandidates(records,settings.levelToleranceM),resolver,coverage:{inspected:records.length,unclassified:records.filter(r=>!r.specialty).length,unknownCategory:records.filter(r=>r.specialty&&!r.category).length,geometryUnavailable:records.filter(r=>!r.geometry?.closed).length,unresolvedFloors:records.filter(r=>r.specialty&&r.floor.resolvedBuildingLevel===UNRESOLVED).length}};
+ return {binding,engine:ENGINE,calculatedAt:new Date().toISOString(),settings,records,slabs:slabCandidates(records,settings.levelToleranceM),resolver,coverage:{inspected:records.length,unclassified:records.filter(r=>!r.specialty).length,unknownCategory:records.filter(r=>r.specialty&&!r.category).length,geometryUnavailable:records.filter(r=>r.specialty&&!r.geometry?.closed).length,unresolvedFloors:records.filter(r=>r.specialty&&r.floor.resolvedBuildingLevel===UNRESOLVED).length}};
 }
 export function matchesFilter(e,filter){return Boolean(e.specialty)&&(!filter.specialty||e.specialty===filter.specialty)&&(!filter.category||(e.category??'Categoría no disponible')===filter.category)&&(!filter.floor||e.floor.resolvedBuildingLevel===filter.floor);}
 export function quantityFacets(records,filter){const unique=a=>[...new Set(a)].sort((a,b)=>a.localeCompare(b,'es',{numeric:true}));return {specialties:unique(records.filter(e=>matchesFilter(e,{...filter,specialty:''})).map(e=>e.specialty)),categories:unique(records.filter(e=>matchesFilter(e,{...filter,category:''})).map(e=>e.category??'Categoría no disponible')),floors:unique(records.filter(e=>matchesFilter(e,{...filter,floor:''})).map(e=>e.floor.resolvedBuildingLevel))};}
