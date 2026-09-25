@@ -280,3 +280,21 @@
  .qv2-desk .quantity-workspace-footer{font-size:.56rem}.qv2-desk .quantity-workspace-footer>span:last-child{display:none}.qv2-desk .quantity-context-topbar{padding:6px 9px}.qv2-desk .quantity-filter-fields{gap:5px}
 }
 @media(max-height:650px) { .qv2-desk .quantity-kpi{padding:6px}.qv2-desk .quantity-model-bottom{display:none}.qv2-desk .quantity-coverage{padding-bottom:4px}.qv2-desk .quantity-viewer-controls>p{margin:2px 0}.qv2-desk .quantity-panel-heading{padding:5px 10px;min-height:30px} }
+@media(max-width:949px) {
+ .quantity-page:has(.qv2-desk) .quantity-app-topbar{display:grid;grid-template-columns:minmax(110px,.8fr) minmax(160px,1.2fr);gap:4px;padding:6px 10px}
+ .quantity-page:has(.qv2-desk) .quantity-app-topbar>.quantity-icon-button{display:none}
+ .quantity-page:has(.qv2-desk) .quantity-app-topbar .autodesk-connection{justify-self:end;max-width:220px;min-width:0;font-size:.6rem}
+ .quantity-page:has(.qv2-desk) .quantity-project-bar{grid-column:1/-1;order:unset;flex-basis:auto;width:100%;padding:0;border:0;gap:7px}
+ .quantity-page:has(.qv2-desk) .quantity-project-bar label{min-width:0;flex:1}
+ .quantity-page:has(.qv2-desk) .quantity-project-bar select{min-height:29px;padding:4px;font-size:.67rem}
+ .quantity-project-stage:has(.qv2-desk) .quantity-section-title{flex-wrap:nowrap;margin:4px 0;gap:6px}
+ .quantity-project-stage:has(.qv2-desk) .quantity-section-title p{display:none}
+ .quantity-project-stage:has(.qv2-desk) .quantity-section-title button{font-size:.62rem;padding:4px 6px}
+ .qv2-desk .quantity-top-actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px}
+ .qv2-desk .quantity-top-actions button{min-width:0;white-space:normal;line-height:1.2;font-size:.59rem;padding:5px 3px}
+ .qv2-desk .quantity-top-actions button svg{display:none}
+ .qv2-desk .quantity-context-topbar{gap:5px}.qv2-desk .qv2-context-source{gap:2px;font-size:.67rem}
+ .qv2-desk .quantity-kpi{padding:6px}.qv2-desk .quantity-kpi>strong{font-size:.8rem}.qv2-desk .quantity-kpi>strong.quantity-no-value{font-size:.68rem}
+ .qv2-desk .quantity-filter-fields{padding:0 10px 8px}.qv2-desk .quantity-data-column{gap:8px}.qv2-desk .quantity-panel-heading{min-height:30px;padding:6px 10px}
+ .qv2-desk .quantity-kpis{padding:0 10px 8px}.qv2-desk .qv2-coverage{gap:3px;padding:0 10px 6px}.qv2-desk .qv2-coverage button{font-size:.58rem}
+}
