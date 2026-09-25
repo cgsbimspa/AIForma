@@ -11,6 +11,7 @@ export const categories = {
 export const parameterNames={
  subspecialty:['Sub Especialidad','Subespecialidad'],category:['Category','Categoría','__category__'],specialty:['Especialidad','Specialty'],family:['Family','Familia'],type:['Type','Tipo','Nombre de tipo','Type Name'],material:['Material','Structural Material','Material estructural'],
  volume:['Volume','Volumen'],area:['Area','Área'],length:['Length','Longitud','Largo'],width:['Width','Anchura','Ancho','b'],depth:['Depth','Fondo'],height:['Height','Altura','Unconnected Height','Altura desconectada','h'],thickness:['Thickness','Espesor','Grosor'],perimeter:['Perimeter','Perímetro'],
+ aecFloor:['AEC Piso'],levelReference:['Level'],
  level:['Level','Nivel','Reference Level','Nivel de referencia','Schedule Level'],baseLevel:['Base Level','Nivel base','Base Constraint','Restricción de base'],topLevel:['Top Level','Nivel superior','Top Constraint','Restricción superior'],elevation:['Elevation','Elevación'],
  diameter:['Bar Diameter','Diámetro de barra','Diámetro de la barra','Diameter','Diámetro'],barLength:['Bar Length','Longitud de barra','Longitud de la barra'],count:['Quantity','Cantidad','Bar Quantity','Número de barras'],totalLength:['Total Bar Length','Longitud total de barra','Longitud total de las barras'],host:['Host','Anfitrión','Host Id','ID de anfitrión'],hostCategory:['Host Category','Categoría de anfitrión'],elementId:['ElementId','Element ID','Id de elemento'],
 };
@@ -31,7 +32,7 @@ export function unitFactor(unit,dimension){
 }
 export const unavailable=(issue)=>({value:null,source:'NOT_AVAILABLE',issue,inputs:[]});
 export function readText(properties,key){
- const matches=properties.filter(p=>parameterNames[key].some(n=>normalize(p.displayName)===normalize(n)));
+ const matches=properties.filter(p=>parameterNames[key].some(n=>normalize(p.displayName)===normalize(n))&&(!['level','baseLevel','topLevel'].includes(key)||p.displayCategory!=='__internalref__'));
  const values=[...new Set(matches.map(p=>String(p.displayValue??'').trim()).filter(Boolean))];
  return {value:values.length===1?values[0]:null,issue:values.length>1?'Parámetros con valores distintos':values.length?'':'Parámetro no disponible',inputs:matches.map(p=>({name:p.displayName,category:p.displayCategory??'',rawValue:String(p.displayValue??''),unit:String(p.units??'')}))};
 }
@@ -48,7 +49,7 @@ export function canonicalCategory(properties){const raw=readText(properties,'cat
 export function extractElement(element,binding){
  const p=element.properties,category=canonicalCategory(p),specialty=readText(p,'specialty');
  const measures=Object.fromEntries(Object.entries({volume:'m3',area:'m2',length:'m',width:'m',depth:'m',height:'m',thickness:'m',perimeter:'m',elevation:'m',diameter:'m',barLength:'m',count:'count',totalLength:'m'}).map(([k,d])=>[k,readMeasure(p,k,d)]));
- const text=Object.fromEntries(['subspecialty','family','type','material','level','baseLevel','topLevel','host','hostCategory','elementId'].map(k=>[k,readText(p,k)]));
+ const text=Object.fromEntries(['subspecialty','family','type','material','level','baseLevel','topLevel','host','hostCategory','elementId','aecFloor','levelReference'].map(k=>[k,readText(k==='levelReference'?p.filter(p=>p.displayCategory==='__internalref__'):p,k)]));
  let resolvedSpecialty=normalize(specialty.value)==='hormigon'?'Hormigón':normalize(specialty.value)==='enfierradura'?'Enfierradura':null;
  let specialtyRule=resolvedSpecialty?{id:'published-specialty',version:'1',basis:'Parámetro Especialidad publicado'}:null;
  const associated=associateSubspecialty(text.subspecialty.value),legacy=classifyProperties(p,element.name);

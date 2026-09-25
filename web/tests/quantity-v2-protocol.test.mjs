@@ -28,7 +28,7 @@ test('category and published-level filters also control visibility for elements 
  const raw=[1,2].map(dbId=>({dbId,properties:[{displayName:'Category',displayValue:'Walls'},{displayName:'Level',displayValue:String(dbId)}]}));
  const f=fixture(async()=>raw);try{
   await f.send({operation:'calculate',binding,settings:defaultSettings()});
-  const filter={specialty:'',category:'Walls',floor:'Nivel Revit: 2'};await f.send({operation:'filter',filter});assert.equal(f.messages.at(-1).count,1);assert.equal(f.calls.some(c=>c[0]==='isolate'),true);
+  const filter={specialty:'',category:'Walls',floor:'Nivel publicado: 2'};await f.send({operation:'filter',filter});assert.equal(f.messages.at(-1).count,1);assert.equal(f.calls.some(c=>c[0]==='isolate'),true);
   for(const action of ['isolate','hide','attenuate']){await f.send({operation:'visibility',filterKey:JSON.stringify(filter),action});assert.deepEqual(f.calls.findLast(c=>c[0]===(action==='hide'?'hide':'isolate'))[1],[2]);}
   await f.send({operation:'filter',filter:{specialty:'',category:'',floor:''}});assert.equal(f.messages.at(-1).count,2);
  }finally{f.close();}

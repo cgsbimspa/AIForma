@@ -2,7 +2,7 @@ import { geometryFallback } from './geometry.js';
 import { extractElement, sum } from './properties.js';
 import { concreteQuantity, formworkQuantity, rebarQuantity, metricCoverage } from './services.js';
 import { slabCandidates, buildIntervals, resolveLevel, UNRESOLVED } from './levels.js';
-export const ENGINE='view-quantities-v2.2';
+export const ENGINE='view-quantities-v2.3';
 // Yield between batches without the nested-timer delay of an inactive tab.
 function yieldRead(){return new Promise(resolve=>{const channel=new MessageChannel();channel.port1.onmessage=()=>{channel.port1.close();channel.port2.close();resolve();};channel.port2.postMessage(null);});}
 export function defaultSettings(){return {version:1,levelToleranceM:.002,levelBinding:null,levelReferences:[],manualFloors:[],slabRoles:[],foundationFaces:[],rebarWeightTable:[]};}
@@ -38,7 +38,7 @@ export function calculateQuantities(inspected,binding,settings){
 export const UNCLASSIFIED='Sin especialidad de cubicación';
 // Browsing and visibility must not depend on eligibility for a quantity formula.
 // A published level remains filterable without claiming a spatial assignment.
-export function filterValues(e){return {specialty:e.specialty??UNCLASSIFIED,category:e.category??e.originalCategory??'Categoría no disponible',floor:e.floor.resolvedBuildingLevel!==UNRESOLVED?e.floor.resolvedBuildingLevel:e.floor.originalRevitLevel?`Nivel Revit: ${e.floor.originalRevitLevel}`:UNRESOLVED};}
+export function filterValues(e){return {specialty:e.specialty??UNCLASSIFIED,category:e.category??e.originalCategory??'Categoría no disponible',floor:e.floor.resolvedBuildingLevel!==UNRESOLVED?e.floor.resolvedBuildingLevel:e.floor.originalRevitLevel?`Nivel publicado: ${e.floor.originalRevitLevel}`:UNRESOLVED};}
 export function matchesFilter(e,filter){const values=filterValues(e);return ['specialty','category','floor'].every(key=>!filter[key]||filter[key]===values[key]);}
 export function quantityFacets(records,filter){const unique=a=>[...new Set(a)].sort((a,b)=>a.localeCompare(b,'es',{numeric:true}));return {specialties:unique(records.filter(e=>matchesFilter(e,{...filter,specialty:''})).map(e=>filterValues(e).specialty)),categories:unique(records.filter(e=>matchesFilter(e,{...filter,category:''})).map(e=>filterValues(e).category)),floors:unique(records.filter(e=>matchesFilter(e,{...filter,floor:''})).map(e=>filterValues(e).floor))};}
 export function presentQuantities(data,filter){

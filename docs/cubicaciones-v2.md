@@ -1,4 +1,4 @@
-# Cubicaciones de la vista activa — motor 2.2
+# Cubicaciones de la vista activa — motor 2.3
 
 Implementa la especificación del usuario del 24 de septiembre de 2026. Sustituye la mesa de Cálculo por Especialidad → Categoría Revit → Piso resuelto. Los módulos restantes y los resultados históricos del motor anterior conservan su comportamiento.
 
@@ -16,7 +16,7 @@ Los filtros incluyen todos los elementos leídos: la ausencia del parámetro per
 
 Cuando falta Especialidad, la categoría nativa Structural Rebar identifica Enfierradura. Un material publicado inequívoco Hormigón/Concrete/Concreto en una de las cinco categorías de hormigón identifica Hormigón. Se incorpora la equivalencia de material **H.A. → Hormigón**, confirmada explícitamente por el usuario en esta conversación al revisar Distrito Verde el 25-09-2026. Cada elemento conserva el material original y el identificador de la regla; no se clasifica por el nombre del archivo, vista o tipo. Materiales ambiguos, especialidades contradictorias y materiales sin equivalencia confirmada permanecen sin clasificar.
 
-Mientras el piso espacial esté sin resolver, el filtro y la tabla muestran «Nivel Revit: valor original» si el parámetro existe. No se mezclan nombres distintos ni se modifica el estado de la asignación espacial. Una asignación espacial/manual resuelta tiene prioridad. El visor, las opciones dependientes y las filas usan la misma función de filtro; las fórmulas y la elegibilidad para sumar se verifican por separado.
+Mientras el piso espacial esté sin resolver, el filtro y la tabla muestran «Nivel publicado: valor original» si el parámetro existe. No se mezclan nombres distintos ni se modifica el estado de la asignación espacial. Una asignación espacial/manual resuelta tiene prioridad. El visor, las opciones dependientes y las filas usan la misma función de filtro; las fórmulas y la elegibilidad para sumar se verifican por separado.
 
 ## Fórmulas
 
@@ -58,3 +58,5 @@ El filtro no usa la selección azul del SDK. Cada cambio de filtros actualiza au
 
 
 La restricción base publicada tiene prioridad sobre el parámetro genérico Nivel. Un conflicto interno en la restricción base queda sin resolver. Se conservan ambos valores y sus entradas: por ejemplo, Nivel=2 y Base=N1 no constituyen una equivalencia 2=N1 ni 2=N2. Esta selección mejora la navegación por nivel nativo sin inventar un piso espacial. El diagnóstico de enfierradura distingue exclusión por filtro, falta de largo/cantidad/diámetro y falta de coeficiente.
+
+La inspección nativa confirmó que __internalref__/Level es un identificador interno (p. ej. 3) y no un nombre de nivel (Nivel=N2 en Restricciones). Se conserva separado como levelReference y se excluye de la resolución de nombres. Cuando no hay nivel nativo, se utiliza el valor publicado AEC Piso, observado en las barras de Distrito Verde (p. ej. N5). El filtro reúne etiquetas publicadas exactamente iguales bajo «Nivel publicado» y conserva el parámetro de origen en la evidencia. No las presenta como pisos espaciales calculados.

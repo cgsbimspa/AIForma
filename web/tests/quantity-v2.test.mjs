@@ -14,10 +14,21 @@ function box(x,y,z,origin=[0,0,0]){const p=[[0,0,0],[x,0,0],[x,y,0],[0,y,0],[0,0
 function element(dbId,category='Walls',measures=[],geometry=geometryFallback(null,'TEST_NO_GEOMETRY'),specialty='Hormigón'){return {...extractElement({dbId,externalId:'TEST_EXTERNAL_'+dbId,name:'TEST_ELEMENT_'+dbId,properties:[property('Especialidad',specialty),property('Category',category),...measures]},binding),geometry};}
 const settings=()=>settingsSchema.parse(defaultSettings());
 const close=(a,b)=>assert.ok(Math.abs(a-b)<1e-7,`${a} != ${b}`);
+test('internal Level references are never floor names; native levels and published AEC Piso remain verifiable',()=>{
+ const internal={...property('Level',3),displayCategory:'__internalref__'};
+ const slab=element(1,'Floors',[property('Nivel','N2'),internal]);
+ assert.equal(slab.text.level.value,'N2');assert.equal(slab.text.levelReference.value,'3');
+ const onlyRef=element(2,'Floors',[internal]);assert.equal(onlyRef.text.level.value,null);
+ const bar=element(3,'Structural Rebar',[property('AEC Piso','N5')],undefined,'Enfierradura');
+ const data=calculateQuantities([slab,onlyRef,bar],binding,settings());
+ assert.equal(data.records[2].floor.originalRevitLevel,'N5');assert.equal(data.records[2].floor.evidence.publishedLevel.source,'aecFloor');
+ assert.deepEqual(quantityFacets(data.records,{specialty:'',category:'',floor:''}).floors,['Nivel publicado: N2','Nivel publicado: N5','Piso no resuelto']);
+ assert.equal(calculationSchema.safeParse(data).success,true);
+});
 test('native base constraint wins over a conflicting custom level without inventing equivalences',()=>{
  const wall=element(1,'Walls',[property('Nivel','2'),property('Restricción de base','N1'),property('Restricción superior','Hasta nivel: N2')]);
  const data=calculateQuantities([wall],binding,settings());
- assert.deepEqual(quantityFacets(data.records,{specialty:'',category:'',floor:''}).floors,['Nivel Revit: N1']);
+ assert.deepEqual(quantityFacets(data.records,{specialty:'',category:'',floor:''}).floors,['Nivel publicado: N1']);
  assert.equal(data.records[0].floor.resolvedBuildingLevel,'Piso no resuelto');
  assert.equal(data.records[0].floor.evidence.customLevel,'2');assert.equal(data.records[0].floor.evidence.publishedLevel.source,'baseLevel');
  const ambiguous=element(2,'Walls',[property('Nivel','2'),property('Base Constraint','N1'),property('Restricción de base','N2')]);
@@ -138,8 +149,8 @@ test('unclassified model elements remain filterable by category and published le
  const data=calculateQuantities(records,binding,settings()),blank={specialty:'',category:'',floor:''};
  assert.equal(calculationSchema.safeParse(data).success,true);
  const all=presentQuantities(data,blank);assert.deepEqual(all.records.map(r=>r.dbId),[1,2,3,4]);assert.equal(all.coverage.concrete.total,99);assert.equal(all.coverage.concrete.eligible,1);
- const options=quantityFacets(data.records,blank);assert.ok(options.specialties.includes(UNCLASSIFIED));assert.deepEqual(new Set(options.categories),new Set(['Walls','Floors','Revit Doors']));assert.deepEqual(new Set(options.floors),new Set(['Nivel Revit: 2','Nivel Revit: 02','Nivel Revit: 3']));
- const level={...blank,floor:'Nivel Revit: 2'};assert.deepEqual(presentQuantities(data,level).records.map(r=>r.dbId),[1,2]);assert.deepEqual(new Set(quantityFacets(data.records,level).categories),new Set(['Walls','Floors']));
+ const options=quantityFacets(data.records,blank);assert.ok(options.specialties.includes(UNCLASSIFIED));assert.deepEqual(new Set(options.categories),new Set(['Walls','Floors','Revit Doors']));assert.deepEqual(new Set(options.floors),new Set(['Nivel publicado: 2','Nivel publicado: 02','Nivel publicado: 3']));
+ const level={...blank,floor:'Nivel publicado: 2'};assert.deepEqual(presentQuantities(data,level).records.map(r=>r.dbId),[1,2]);assert.deepEqual(new Set(quantityFacets(data.records,level).categories),new Set(['Walls','Floors']));
  const unknown={...blank,specialty:UNCLASSIFIED,category:'Walls'};assert.deepEqual(presentQuantities(data,unknown).records.map(r=>r.dbId),[4]);assert.equal(presentQuantities(data,unknown).coverage.concrete.total,null);
  assert.equal(data.records[0].floor.resolvedBuildingLevel,'Piso no resuelto');assert.equal(data.records[0].floor.floor_assignment_method,null);assert.equal(data.records[0].floor.status,'REQUIRES_REVIEW');
  const resolved={...data.records[0],floor:{...data.records[0].floor,resolvedBuildingLevel:'Piso confirmado',floor_assignment_method:'MANUAL'}};

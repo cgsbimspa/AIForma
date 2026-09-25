@@ -3,15 +3,16 @@ export const UNRESOLVED='Piso no resuelto';
 // A native base constraint is stronger evidence than a generic/custom Nivel.
 // Keep both inputs visible; never equate labels such as 2 and N2.
 export function publishedLevel(record){
- const base=record.text.baseLevel,level=record.text.level;
+ const base=record.text.baseLevel,level=record.text.level,aec=record.text.aecFloor;
  if(base?.inputs.some(input=>input.rawValue.trim()))return {value:base.value,source:'baseLevel',inputs:base.inputs,issue:base.issue};
+ if(!level?.inputs.some(input=>input.rawValue.trim())&&aec?.inputs.some(input=>input.rawValue.trim()))return {value:aec.value,source:'aecFloor',inputs:aec.inputs,issue:aec.issue};
  return {value:level?.value??null,source:'level',inputs:level?.inputs??[],issue:level?.issue??'Nivel no publicado'};
 }
 export function slabCandidates(records,toleranceM){
  const slabs=records.filter(e=>e.specialty==='Hormigón'&&e.category==='Floors'&&e.geometry?.horizontalPrism&&e.geometry?.bbox);
  if(!Number.isFinite(toleranceM)||toleranceM<=0)return [];
  const sorted=[...slabs].sort((a,b)=>a.geometry.bbox.max[2]-b.geometry.bbox.max[2]),groups=[];
- for(const e of sorted){const z=e.geometry.bbox.max[2];let group=groups.find(g=>z-g.minZ<=toleranceM);if(!group){group={id:'slab-'+e.dbId,minZ:z,maxZ:z,z,dbIds:[],area:0,bbox:{min:[...e.geometry.bbox.min],max:[...e.geometry.bbox.max]},originalLevels:[]};groups.push(group);}group.maxZ=z;group.z=(group.minZ+z)/2;group.dbIds.push(e.dbId);group.area+=e.geometry.topArea;for(let i=0;i<3;i++){group.bbox.min[i]=Math.min(group.bbox.min[i],e.geometry.bbox.min[i]);group.bbox.max[i]=Math.max(group.bbox.max[i],e.geometry.bbox.max[i]);}if(e.text.level.value&&!group.originalLevels.includes(e.text.level.value))group.originalLevels.push(e.text.level.value);}
+ for(const e of sorted){const z=e.geometry.bbox.max[2];let group=groups.find(g=>z-g.minZ<=toleranceM);if(!group){group={id:'slab-'+e.dbId,minZ:z,maxZ:z,z,dbIds:[],area:0,bbox:{min:[...e.geometry.bbox.min],max:[...e.geometry.bbox.max]},originalLevels:[]};groups.push(group);}group.maxZ=z;group.z=(group.minZ+z)/2;group.dbIds.push(e.dbId);group.area+=e.geometry.topArea;for(let i=0;i<3;i++){group.bbox.min[i]=Math.min(group.bbox.min[i],e.geometry.bbox.min[i]);group.bbox.max[i]=Math.max(group.bbox.max[i],e.geometry.bbox.max[i]);}const original=publishedLevel(e).value;if(original&&!group.originalLevels.includes(original))group.originalLevels.push(original);}
  const max=Math.max(0,...groups.map(g=>g.area));return groups.map(g=>({...g,relativeArea:max?g.area/max:0,status:'PROPOSED'}));
 }
 export function buildIntervals(records,settings,binding){
