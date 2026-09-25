@@ -33,7 +33,7 @@ export function installBimChat(viewer,input,readElements) {
           else if(plan.action==='clearSelection'){viewer.clearSelection();lastSelection=[];}
           else {
             lastSelection=ids;
-            if(plan.action==='select'){viewer.show(ids);viewer.select(ids);viewer.fitToView(ids);}
+            if(plan.action==='select'){viewer.setGhosting(false);viewer.showAll();viewer.select(ids);viewer.fitToView(ids);}
             if(plan.action==='isolate'||plan.action==='attenuate'){viewer.setGhosting(plan.action==='attenuate');viewer.showAll();viewer.isolate(ids);viewer.select(ids);viewer.fitToView(ids);}
             if(plan.action==='hide'){viewer.clearSelection();viewer.setGhosting(false);viewer.hide(ids);}
             if(plan.action==='focus')viewer.fitToView(ids);
