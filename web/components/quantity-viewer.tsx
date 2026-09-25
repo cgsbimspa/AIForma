@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { Box, ExternalLink, RefreshCw } from "lucide-react";
-import { quantityCommand } from "@/lib/quantities/client";
+import { quantityResponse } from "@/lib/quantities/client";
 import type { QuantityProject, QuantitySource } from "@/lib/quantities/contracts";
 import { inventorySchema, type ClassificationInventory, liveCalculationSchema, type CalculationEvent } from "@/lib/quantities/live";
 
@@ -16,22 +16,23 @@ export function QuantityViewer({ project, source, highlightedElementIds=[], filt
   const filterKey=JSON.stringify([filteredElementIds,classificationFilter??null]);
   const calculationTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
   const selection = source?.view ? `${source.scope.projectId}:${source.scope.itemId}:${source.version.id}:${source.view.id}` : "";
+  const frameRequest = source?.view && source.version.modelId ? JSON.stringify({scope:project,command:{action:'viewer',file:source.scope,versionId:source.version.id,viewId:source.view.id}}) : '';
   useEffect(() => {
-    if (!source?.view || !source.version.modelId) return;
+    if (!frameRequest) return;
     const controller = new AbortController();
-    const selectedSource = source;
+    const expected = JSON.parse(frameRequest).command, deadline = AbortSignal.timeout(90000);
     async function load() {
       setStatus("Verificando acceso a la versión y vista seleccionadas…"); setError(""); setLoaded(null); setClassification(null); setSelectionCount(0); setFilterState(null);
       try {
-        const result = await quantityCommand<{ frameUrl: string; versionId: string; viewId: string }>(project, { action: "viewer", file: selectedSource.scope, versionId: selectedSource.version.id, viewId: selectedSource.view!.id }, controller.signal);
+        const result = await quantityResponse<{ frameUrl: string; versionId: string; viewId: string }>('/api/quantities', {method:'POST',headers:{'Content-Type':'application/json'},body:frameRequest,signal:AbortSignal.any([controller.signal,deadline])});
         if (controller.signal.aborted) return;
-        if (result.versionId !== selectedSource.version.id || result.viewId !== selectedSource.view!.id || !result.frameUrl.startsWith("/api/quantities/viewer-frame?ticket=")) throw Error("La fuente del visor no coincide con la selección.");
+        if (result.versionId !== expected.versionId || result.viewId !== expected.viewId || !result.frameUrl.startsWith("/api/quantities/viewer-frame?ticket=")) throw Error("La fuente del visor no coincide con la selección.");
         setLoaded({ key: selection, url: result.frameUrl }); setStatus("Cargando modelo BIM…");
-      } catch (e) { if (!controller.signal.aborted) { setError((e as Error).message); setStatus(""); } }
+      } catch (e) { if (!controller.signal.aborted) { setError(deadline.aborted?'No se pudo preparar la vista a tiempo. Comprueba la conexión y vuelve a cargar el modelo.':(e as Error).message); setStatus(""); } }
     }
     void load();
     return () => controller.abort();
-  }, [project, source, selection, retry]);
+  }, [frameRequest, selection, retry]);
   useEffect(() => {
     function receive(event: MessageEvent) {
       if (event.origin !== window.location.origin || event.source !== frame.current?.contentWindow || event.data?.type !== "aiforma-viewer" || event.data?.viewId !== source?.view?.id || event.data?.urn !== source?.version.modelId) return;

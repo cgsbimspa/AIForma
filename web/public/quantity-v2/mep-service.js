@@ -1,4 +1,4 @@
-import { extractElement, normalize, readText, readMeasure, sum, unavailable } from './properties.js';
+import { extractElement, normalize, propertiesNamed, readText, readMeasure, sum, unavailable } from './properties.js';
 import { buildIntervals, resolveLevel, slabCandidates, UNRESOLVED } from './levels.js';
 import { validateSettings, filterRecords } from './quantity-service.js';
 import { mepCategories, mepSpecialties, mepRule, systemClassifications, systemClassificationSource } from './mep-catalog.js';
@@ -15,9 +15,11 @@ const measureNames={
  offset:['Offset','Desfase'],startElevation:['Start Elevation','Elevación inicial'],endElevation:['End Elevation','Elevación final'],insulationThickness:['Insulation Thickness','Espesor de aislamiento','Espesor de aislamiento térmico'],
  connectorDiameter:['Connector Diameter','Diámetro de conector'],connectorWidth:['Connector Width','Anchura de conector'],connectorHeight:['Connector Height','Altura de conector'],connectorCount:['Connector Count','Número de conectores'],
 };
+const nameKeys=new Map();
 function named(properties,names,key,dimension){
- const keys=new Set(names.map(normalize));
- const selected=properties.filter(p=>keys.has(normalize(p.displayName))&&p.displayCategory!=='__internalref__');
+ const signature=names.join('\u0000');
+ if(!nameKeys.has(signature))nameKeys.set(signature,[...new Set(names.map(normalize))]);
+ const selected=propertiesNamed(properties,nameKeys.get(signature)).filter(p=>p.displayCategory!=='__internalref__');
  const renamed=selected.map(p=>({...p,displayName:dimension?'Elevation':'Type'}));
  const result=dimension?readMeasure(renamed,'elevation',dimension):readText(renamed,'type');
  result.inputs=selected.map(p=>({name:p.displayName,category:p.displayCategory??'',rawValue:String(p.displayValue??''),unit:String(p.units??'')}));

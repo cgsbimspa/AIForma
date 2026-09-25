@@ -1,12 +1,11 @@
 // Credentials stay in HttpOnly cookies. Serialize rotations across tabs, then
 // release the lock before long document requests so browsing remains responsive.
-let pending: Promise<Response> | undefined;
-async function refresh(force = false): Promise<Response> {
+import { createSessionRefresh } from './session-refresh.ts';
+const refresh = createSessionRefresh(async force => {
   const run = () => fetch(`/api/autodesk/refresh${force ? "?force=1" : ""}`, { method: "POST", cache: "no-store", signal: AbortSignal.timeout(20_000) });
   if (typeof navigator !== "undefined" && navigator.locks) return navigator.locks.request("ai-forma-autodesk-session", run);
-  if (!pending) { pending = run().finally(() => { pending = undefined; }); }
-  return pending.then(response => response.clone());
-}
+  return run();
+});
 export async function autodeskStatus(signal?: AbortSignal) {
   signal = signal ? AbortSignal.any([signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000);
   const renewal = await refresh();

@@ -1,3 +1,4 @@
+import { publishedCall, readPublishedBatch } from './quantity-property-reader.js';
 // Classification supplied by the user on 2026-09-24. These rules select
 // elements; they do not define volume, formwork, weight or length quantities.
 export const classificationRule = {
@@ -98,25 +99,27 @@ export function classificationFacets(elements, filter) {
 // Only objects owning geometry in the selected published view are inspected.
 // Parent/type records without geometry are not counted again as elements.
 export async function readViewClassification(model, progress = () => {}, timeoutMs = 30000) {
-  const call = run => new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('classification_timeout')), timeoutMs);
-    const ok = value => { clearTimeout(timer); resolve(value); };
-    const fail = () => { clearTimeout(timer); reject(new Error('classification_unavailable')); };
-    try { run(ok, fail); } catch { fail(); }
-  });
-  const tree = await call((ok, fail) => model.getObjectTree(ok, fail));
+  const tree = await publishedCall((ok, fail) => model.getObjectTree(ok, fail), timeoutMs);
   const ids = new Set();
   const inspect = id => { tree.enumNodeFragments(id, () => ids.add(id), false); };
   inspect(tree.getRootId()); tree.enumNodeChildren(tree.getRootId(), inspect, true);
   if (!ids.size) throw new Error('view_geometry_unavailable');
-  const elements = [], ordered = [...ids];
-  for (let offset = 0; offset < ordered.length; offset += 400) {
-    const batch = ordered.slice(offset, offset + 400);
-    const results = await call((ok, fail) => model.getBulkProperties2(batch, { ignoreHidden: false, needsExternalId: true }, ok, fail));
-    if (!Array.isArray(results) || results.length !== batch.length || new Set(results.map(r => r.dbId)).size !== batch.length || results.some(r => !batch.includes(r.dbId) || !Array.isArray(r.properties))) throw new Error('incomplete_classification');
-    for (const result of results) elements.push({ dbId: result.dbId, name: result.name ?? '', externalId: result.externalId ?? null, properties: result.properties, ...classifyProperties(result.properties, result.name) });
-    progress(elements.length, ordered.length);
+  const ordered = [...ids], elements = new Array(ordered.length);
+  let offset = 0, completed = 0, failed = false;
+  progress(0, ordered.length);
+  async function read() {
+    while (!failed && offset < ordered.length) {
+      const start = offset; offset += 800;
+      try {
+        const results = await readPublishedBatch(model, ordered.slice(start, start + 800), timeoutMs);
+        if (failed) return;
+        results.forEach((result, index) => { elements[start + index] = { dbId: result.dbId, name: result.name ?? '', externalId: result.externalId ?? null, properties: result.properties, ...classifyProperties(result.properties, result.name) }; });
+        completed += results.length; progress(completed, ordered.length);
+      } catch (error) { failed = true; throw error; }
+    }
   }
+  // Bounded pipeline: fewer worker round trips, never an unbounded all-model request.
+  await Promise.all([read(), read()]);
   return elements;
 }
 

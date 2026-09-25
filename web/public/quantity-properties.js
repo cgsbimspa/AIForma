@@ -1,21 +1,11 @@
 /* global Autodesk */
 import { classifyProperties } from './quantity-classification.js';
+import { readPublishedBatch } from './quantity-property-reader.js';
 // Read every property returned by the selected model's published property DB.
 // No name/category filter and no hidden-property exclusion. No BIM calculations.
-export function readElementProperties(model, dbId, timeoutMs = 30000) {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('property_timeout')), timeoutMs);
-    const fail = () => { clearTimeout(timer); reject(new Error('properties_unavailable')); };
-    try {
-      model.getBulkProperties2([dbId], { ignoreHidden: false, needsExternalId: true }, results => {
-        clearTimeout(timer);
-        if (!Array.isArray(results) || results.length !== 1 || results[0]?.dbId !== dbId || !Array.isArray(results[0]?.properties)) {
-          reject(new Error('properties_unavailable')); return;
-        }
-        resolve(results[0]);
-      }, fail);
-    } catch { fail(); }
-  });
+export async function readElementProperties(model, dbId, timeoutMs = 30000) {
+  try { return (await readPublishedBatch(model, [dbId], timeoutMs))[0]; }
+  catch (error) { throw Error(error.message === 'classification_timeout' ? 'property_timeout' : 'properties_unavailable'); }
 }
 
 export function propertyText(value) {

@@ -10,11 +10,14 @@ import { readViewClassification, classificationInventory, classificationRule } f
 (() => {
   const status = document.getElementById("status");
   const input = JSON.parse(document.getElementById("viewer-data").textContent);
-  let viewer, disposeBimChat, quantityFilter, disposeQuantityV2;
+  let viewer, disposeBimChat, quantityFilter, disposeQuantityV2, inspector;
   let externalMap, reverseMap;
   let classification;
-  const classified = () => classification ??= readViewClassification(viewer.model).catch(error => { classification = undefined; throw error; });
+  const classified = () => classification ??= readViewClassification(viewer.model, (count, total) => {
+    window.parent.postMessage({type:'aiforma-viewer',state:'parameters',count,total,viewId:input.viewId,urn:input.urn},window.location.origin);
+  }).catch(error => { classification = undefined; throw error; });
   const classificationReport = (state, message) => window.parent.postMessage({ type: 'aiforma-viewer', state: 'classification', result: state, message, viewId: input.viewId, urn: input.urn, ruleId: classificationRule.id, ruleVersion: classificationRule.version }, window.location.origin);
+  const inspectProperties = () => inspector ??= installPropertyInspector(viewer).catch(() => classificationReport('error','La paleta completa no está disponible. Vuelve a cargar la vista para reintentar.'));
   const mapping = () => externalMap ? Promise.resolve(externalMap) : new Promise((resolve,reject)=>viewer.model.getExternalIdMapping(map=>{externalMap=map;reverseMap=new Map(Object.entries(map).map(([id,dbId])=>[dbId,id]));resolve(map);},reject));
   const selectionMessage = async event => {
     const data=event.data;
@@ -51,6 +54,16 @@ import { readViewClassification, classificationInventory, classificationRule } f
       viewer = new Autodesk.Viewing.GuiViewer3D(document.getElementById("model"), { extensions: [] });
       if (viewer.start() !== 0) { clearTimeout(timeout); fail("No se pudo iniciar el visor 3D. Comprueba que WebGL esté habilitado en tu navegador."); return; }
       viewer.setTheme("light-theme");
+      // The property DB and geometry arrive independently. Read the complete
+      // property inventory as soon as its tree is ready, while SVF streams.
+      viewer.addEventListener(Autodesk.Viewing.OBJECT_TREE_CREATED_EVENT, event => {
+        if (event.model === viewer.model && !done) void classified().catch(() => {});
+      });
+      viewer.addEventListener(Autodesk.Viewing.MODEL_ROOT_LOADED_EVENT, event => {
+        if (event.model !== viewer.model || done) return;
+        report('loading', 'Modelo abierto; descargando geometría y preparando parámetros…');
+        void inspectProperties();
+      });
       viewer.addEventListener(Autodesk.Viewing.SELECTION_CHANGED_EVENT, async event=>{
         if(quantityFilter?.isApplyingSelection())return;
         try { await mapping();window.parent.postMessage({type:"aiforma-viewer",state:"selection",count:event.dbIdArray.length,ids:event.dbIdArray.flatMap(id=>reverseMap.has(id)?[reverseMap.get(id)]:[]),viewId:input.viewId,urn:input.urn},window.location.origin); } catch { /* No inferred element IDs. */ }
@@ -62,18 +75,18 @@ import { readViewClassification, classificationInventory, classificationRule } f
         viewer.addEventListener(Autodesk.Viewing.GEOMETRY_LOADED_EVENT, () => {
           clearTimeout(timeout);
           if (!done) {
+            void inspectProperties();
             quantityFilter = createQuantityFilter(viewer,{mapping,classified,report:classificationReport,send:payload=>window.parent.postMessage({type:'aiforma-viewer',viewId:input.viewId,urn:input.urn,...payload},window.location.origin)});
             disposeBimChat = installBimChat(viewer, input, classified);
             disposeQuantityV2 = installQuantityV2(viewer, input, classified);
             viewer.fitToView(); report("ready", "Vista seleccionada cargada"); done = true;
             void classified().then(elements=>window.parent.postMessage({type:'aiforma-viewer',state:'inventory',elements:classificationInventory(elements),viewId:input.viewId,urn:input.urn},window.location.origin)).catch(()=>classificationReport('error','No se pudieron cargar las opciones de filtros de esta vista.'));
 
-            void installPropertyInspector(viewer).catch(() => {
-              status.hidden=false;status.textContent="La paleta completa no está disponible. Las propiedades estándar no confirman una lectura completa.";
-            });
           }
         });
-        viewer.loadDocumentNode(doc, matches[0]).catch(() => { clearTimeout(timeout); fail("No se pudo cargar la geometría de esta vista. Verifica sus permisos y su publicación en Autodesk."); });
+        // Avoid eager mesh consolidation during opening. Original fragments and
+        // the full property database remain available for technical calculations.
+        viewer.loadDocumentNode(doc, matches[0], {useConsolidation:false}).catch(() => { clearTimeout(timeout); fail("No se pudo cargar la geometría de esta vista. Verifica sus permisos y su publicación en Autodesk."); });
       }, () => { clearTimeout(timeout); fail("No se pudo leer el modelo publicado en Autodesk. Vuelve a cargar o abre la versión en Autodesk."); });
     });
   } catch { clearTimeout(timeout); fail("No se pudo iniciar Autodesk Viewer."); }

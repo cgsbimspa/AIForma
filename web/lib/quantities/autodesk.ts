@@ -48,10 +48,11 @@ export async function modelViews(token: string, version: ModelVersion, fetcher: 
   const fetchedAt = new Date().toISOString();
   return { views: raw.data.metadata.map(view => ({ id: view.guid, name: view.name, role: view.role, endpoint, fetchedAt })), unavailable: false };
 }
-export async function verifiedSource(token: string, scope: Extract<DataScope, { kind: "file" }>, versionId: string, viewId: string | null, signal?: AbortSignal): Promise<QuantitySource> {
-  const location = await verifyLocation(token, scope, fetch, signal);
-  const version = await modelVersion(token, scope, versionId, fetch, signal);
-  const view = viewId ? (await modelViews(token, version, fetch, signal)).views.find(v => v.id === viewId) : null;
+export async function verifiedSource(token: string, scope: Extract<DataScope, { kind: "file" }>, versionId: string, viewId: string | null, signal?: AbortSignal, fetcher: typeof fetch = fetch): Promise<QuantitySource> {
+  const [location, {version, view}] = await Promise.all([
+    verifyLocation(token, scope, fetcher, signal),
+    modelVersion(token, scope, versionId, fetcher, signal).then(async version => ({version, view: viewId ? (await modelViews(token, version, fetcher, signal)).views.find(v => v.id === viewId) : null})),
+  ]);
   if (viewId && !view) throw new DataError("view_unavailable", 409);
   return { scope, projectName: location.project.name, fileName: location.entry.name, path: location.path, version, view: view ?? null, versionPolicy: "manual" };
 }

@@ -19,11 +19,12 @@ export const parameterNames={
 // retaining duplicate properties so ambiguity checks remain unchanged.
 const parameterKeys=Object.fromEntries(Object.entries(parameterNames).map(([key,names])=>[key,[...new Set(names.map(normalize))]]));
 const propertyIndexes=new WeakMap();
-function matchingProperties(properties,key){
+export function propertiesNamed(properties,names){
  let index=propertyIndexes.get(properties);
  if(!index){index=new Map();for(const property of properties){const name=normalize(property.displayName),list=index.get(name)??[];list.push(property);index.set(name,list);}propertyIndexes.set(properties,index);}
- return parameterKeys[key].flatMap(name=>index.get(name)??[]);
+ return names.flatMap(name=>index.get(name)??[]);
 }
+const matchingProperties=(properties,key)=>propertiesNamed(properties,parameterKeys[key]);
 // H.A. = Hormigón explicitly confirmed by the user on 2026-09-25 after
 // inspecting the published material in Distrito Verde. Not inferred from type names.
 const concreteMaterials=new Map([

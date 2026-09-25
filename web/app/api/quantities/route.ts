@@ -50,7 +50,6 @@ export async function POST(request: NextRequest) {
     const parsed = schema.safeParse(await memoryInput(request));
     if (!parsed.success) throw new DataError("invalid_query", 400);
     const { scope, command } = parsed.data;
-    const actor = await memoryActor(request, scope);
     const token = session.accessToken;
     const selectedFile = "file" in command ? command.file : command.action === "save" ? command.source?.scope : null;
     if (selectedFile && (selectedFile.hubId !== scope.hubId || selectedFile.projectId !== scope.projectId)) throw new DataError("out_of_scope", 403);
@@ -59,8 +58,10 @@ export async function POST(request: NextRequest) {
       const source = await verifiedSource(token, command.file, command.versionId, command.viewId, request.signal);
       if (!source.version.modelId || !source.view) throw new DataError("viewer_derivative_unavailable", 422);
       const urn = source.version.modelId;
-      const manifest = await get(token, new URL(`https://developer.api.autodesk.com/derivativeservice/v2/manifest/${encodeURIComponent(urn)}`), fetch, request.signal);
-      const metadataManifest = await get(token, new URL(`https://developer.api.autodesk.com/modelderivative/v2/designdata/${encodeURIComponent(urn)}/manifest`), fetch, request.signal);
+      const [manifest, metadataManifest] = await Promise.all([
+        get(token, new URL(`https://developer.api.autodesk.com/derivativeservice/v2/manifest/${encodeURIComponent(urn)}`), fetch, request.signal),
+        get(token, new URL(`https://developer.api.autodesk.com/modelderivative/v2/designdata/${encodeURIComponent(urn)}/manifest`), fetch, request.signal),
+      ]);
       const geometryId = resolveViewerGeometry(source.view.id, manifest, metadataManifest);
       const ticket = packViewerGrant({ owner: viewerOwner(session.id ?? token), urn, viewId: source.view.id, geometryId, roots: manifestRoots(manifest), expiresAt: Date.now() + 60 * 60_000 }, config.key);
       return response({ frameUrl: `/api/quantities/viewer-frame?ticket=${ticket}`, versionId: source.version.id, viewId: source.view.id });
@@ -70,6 +71,9 @@ export async function POST(request: NextRequest) {
       const version = await modelVersion(token, command.file, command.versionId, fetch, request.signal);
       return response(await modelViews(token, version, fetch, request.signal));
     }
+    // Read-only model commands above verify project/path with the live Autodesk
+    // token themselves. Resolve storage identity only for stored workspace actions.
+    const actor = await memoryActor(request, scope);
     const db = store();
     if (command.action === "prepare-templates") {
       await db.prepareTemplates(actor);

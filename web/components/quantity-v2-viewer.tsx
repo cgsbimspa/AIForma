@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Box, RefreshCw, ExternalLink } from 'lucide-react';
-import { quantityCommand } from '@/lib/quantities/client';
+import { quantityResponse } from '@/lib/quantities/client';
 import type { QuantityProject, QuantitySource } from '@/lib/quantities/contracts';
 import { calculationSchema, type CalculationSettings, type ModelBinding, type ViewCalculation, type ViewFilters } from '@/lib/quantities-v2/contracts';
 export type VisualRequest={id:number;dbIds:number[];action:'focus'|'isolate'|'attenuate'};
@@ -13,12 +13,15 @@ export function QuantityV2Viewer({project,source,binding,settings,filters,onResu
  const [selectionRevision,setSelectionRevision]=useState(0);
  const [filterState,setFilterState]=useState<{key:string;count:number}|null>(null),[mode,setMode]=useState('filter'),[visualCount,setVisualCount]=useState(0);
  const filterKey=JSON.stringify(filters),filterMatches=filterState?.key===filterKey,readable=read&&filterMatches;
+ const frameRequest=JSON.stringify({scope:project,command:{action:'viewer',file:source.scope,versionId:source.version.id,viewId:source.view!.id}});
  const post=useCallback((data:Record<string,unknown>)=>frame.current?.contentWindow?.postMessage({type:'aiforma-quantity-v2',urn:binding.urn,viewId:binding.viewId,requestId:crypto.randomUUID(),...data},window.location.origin),[binding]);
  useEffect(()=>{const controller=new AbortController();
- void quantityCommand<{frameUrl:string;versionId:string;viewId:string}>(project,{action:'viewer',file:source.scope,versionId:source.version.id,viewId:source.view!.id},controller.signal).then(r=>{if(controller.signal.aborted)return;if(r.versionId!==binding.versionId||r.viewId!==binding.viewId||!r.frameUrl.startsWith('/api/quantities/viewer-frame?ticket='))throw Error('Fuente de visor no válida');setUrl(r.frameUrl);}).catch(e=>{if(!controller.signal.aborted)setError(e.message);});return()=>controller.abort();
- },[project,source,binding,onResult,reload]);
+ const expected=JSON.parse(frameRequest).command;
+ const deadline=AbortSignal.timeout(90000);
+ void quantityResponse<{frameUrl:string;versionId:string;viewId:string}>('/api/quantities',{method:'POST',headers:{'Content-Type':'application/json'},body:frameRequest,signal:AbortSignal.any([controller.signal,deadline])}).then(r=>{if(controller.signal.aborted)return;if(r.versionId!==expected.versionId||r.viewId!==expected.viewId||!r.frameUrl.startsWith('/api/quantities/viewer-frame?ticket='))throw Error('Fuente de visor no válida');setUrl(r.frameUrl);setStatus('Cargando modelo y parámetros…');}).catch(e=>{if(!controller.signal.aborted)setError(deadline.aborted?'No se pudo preparar la vista a tiempo. Comprueba la conexión y pulsa Recargar modelo.':e.message);});return()=>controller.abort();
+ },[frameRequest,reload]);
  useEffect(()=>{function receive(event:MessageEvent){const d=event.data;if(event.origin!==window.location.origin||event.source!==frame.current?.contentWindow||d?.urn!==binding.urn||d.viewId!==binding.viewId)return;
- if(d.type==='aiforma-viewer'){if(d.state==='ready'){setReady(true);setError('');}if(d.state==='error'){setError(String(d.message));setReady(false);setRead(false);onResult(null);}return;}
+ if(d.type==='aiforma-viewer'){if(d.state==='loading'&&!completedRequest.current)setStatus(String(d.message));if(d.state==='parameters'&&!completedRequest.current&&Number.isSafeInteger(d.count)&&Number.isSafeInteger(d.total))setStatus(`Parámetros publicados: ${d.count.toLocaleString('es-CL')} de ${d.total.toLocaleString('es-CL')} elementos`);if(d.state==='ready'){setReady(true);setError('');}if(d.state==='error'){setError(String(d.message));setReady(false);setRead(false);onResult(null);}return;}
  if(d.type!=='aiforma-quantity-v2-result')return;
  if(d.phase==='filter'&&d.requestId===viewRequest.current&&Number.isSafeInteger(d.count)){setFilterState({key:d.key,count:d.count});setMode(d.mode);setVisualCount(d.count);return;}
  if(d.phase==='visibility'&&d.requestId===viewRequest.current&&Number.isSafeInteger(d.count)){setMode(d.mode);setVisualCount(d.count);return;}
