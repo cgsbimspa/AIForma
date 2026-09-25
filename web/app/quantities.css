@@ -298,3 +298,4 @@
  .qv2-desk .quantity-filter-fields{padding:0 10px 8px}.qv2-desk .quantity-data-column{gap:8px}.qv2-desk .quantity-panel-heading{min-height:30px;padding:6px 10px}
  .qv2-desk .quantity-kpis{padding:0 10px 8px}.qv2-desk .qv2-coverage{gap:3px;padding:0 10px 6px}.qv2-desk .qv2-coverage button{font-size:.58rem}
 }
+.quantity-page .qv2-filter-help { margin: 0; padding: 0 14px 7px; color: #627b9c; font-size: 10px; line-height: 1.3; }

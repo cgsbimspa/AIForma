@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { inspectTriangles, geometryFallback } from '../public/quantity-v2/geometry.js';
 import { readMeasure, extractElement } from '../public/quantity-v2/properties.js';
 import { concreteQuantity, formworkQuantity, rebarQuantity } from '../public/quantity-v2/services.js';
-import { defaultSettings, calculateQuantities, inspectElements, presentQuantities, quantityFacets, compareCalculations } from '../public/quantity-v2/quantity-service.js';
+import { defaultSettings, calculateQuantities, inspectElements, presentQuantities, quantityFacets, compareCalculations, UNCLASSIFIED } from '../public/quantity-v2/quantity-service.js';
 import { slabCandidates, buildIntervals, resolveLevel } from '../public/quantity-v2/levels.js';
 import { calculationSchema, settingsSchema } from '../lib/quantities-v2/contracts.ts';
 // Synthetic TEST geometry and parameters only. Not included in application data.
@@ -99,4 +99,29 @@ test('reads every element metadata but avoids unrelated geometry work; repeated 
  const calls=[];const raw=[1,2].map(dbId=>({dbId,name:'TEST_'+dbId,properties:[property('Especialidad',dbId===1?'Hormigón':'Otra'),property('Category','Walls'),property('Volume',3,'m³')]}));
  const records=await inspectElements(raw,binding,async id=>{calls.push(id);return geometryFallback(null,'TEST');});assert.deepEqual(calls,[1]);assert.equal(records.length,2);assert.equal(records[1].measures.volume.value,3);assert.match(records[1].geometry.issue,/fuera de/);
  const data=calculateQuantities(records,binding,settings());presentQuantities(data,{specialty:'Hormigón',category:'',floor:''});presentQuantities(data,{specialty:'',category:'Walls',floor:''});assert.deepEqual(calls,[1]);
+});
+
+test('native rebar and unambiguous published concrete material work without a custom specialty',()=>{
+ const native=(category,props=[])=>extractElement({dbId:1,name:'TEST_NAME_NOT_CLASSIFICATION',properties:[property('Category',category),...props]},binding);
+ const concrete=native('Revit Floors',[property('Material','HORMIGÓN'),property('Volume',3,'m³')]);
+ assert.equal(concrete.specialty,'Hormigón');assert.equal(concrete.specialtyEvidence.value,null);
+ assert.equal(concrete.specialtyRule.id,'published-concrete-material');assert.equal(concrete.specialtyRule.original,'HORMIGÓN');assert.equal(concreteQuantity(concrete).value,3);
+ const rebar=native('Revit Structural Rebar',[property('Diameter',12,'mm')]);assert.equal(rebar.specialty,'Enfierradura');assert.equal(rebar.specialtyRule.id,'published-revit-rebar');assert.equal(rebarQuantity(rebar,settings()).weight.value,null);
+ const confirmed=native('Revit Muros',[property('Material','H.A.')]);assert.equal(confirmed.specialty,'Hormigón');assert.equal(confirmed.specialtyRule.id,'user-confirmed-ha-material');assert.equal(confirmed.text.material.value,'H.A.');
+ for(const props of [[],[property('Type','Hormigón')],[property('Material','TEST_UNKNOWN')],[property('Material','Hormigón'),property('Material','Madera')],[property('Material','Hormigón'),property('Especialidad','Otra')],[property('Material','Hormigón'),property('Especialidad','Hormigón'),property('Specialty','Otra')]])assert.equal(native('Walls',props).specialty,null);
+ assert.equal(native('Doors',[property('Material','Hormigón')]).specialty,null);
+});
+
+test('unclassified model elements remain filterable by category and published level without entering technical sums',()=>{
+ const raw=(dbId,category,level,extra=[])=>element(dbId,category,[property('Level',level),property('Volume',99,'m³'),...extra],undefined,'');
+ const records=[raw(1,'Walls','2',[property('Material','HORMIGON')]),raw(2,'Floors','2'),raw(3,'Revit Doors','02'),raw(4,'Walls','3')];
+ const data=calculateQuantities(records,binding,settings()),blank={specialty:'',category:'',floor:''};
+ assert.equal(calculationSchema.safeParse(data).success,true);
+ const all=presentQuantities(data,blank);assert.deepEqual(all.records.map(r=>r.dbId),[1,2,3,4]);assert.equal(all.coverage.concrete.total,99);assert.equal(all.coverage.concrete.eligible,1);
+ const options=quantityFacets(data.records,blank);assert.ok(options.specialties.includes(UNCLASSIFIED));assert.deepEqual(new Set(options.categories),new Set(['Walls','Floors','Revit Doors']));assert.deepEqual(new Set(options.floors),new Set(['Nivel Revit: 2','Nivel Revit: 02','Nivel Revit: 3']));
+ const level={...blank,floor:'Nivel Revit: 2'};assert.deepEqual(presentQuantities(data,level).records.map(r=>r.dbId),[1,2]);assert.deepEqual(new Set(quantityFacets(data.records,level).categories),new Set(['Walls','Floors']));
+ const unknown={...blank,specialty:UNCLASSIFIED,category:'Walls'};assert.deepEqual(presentQuantities(data,unknown).records.map(r=>r.dbId),[4]);assert.equal(presentQuantities(data,unknown).coverage.concrete.total,null);
+ assert.equal(data.records[0].floor.resolvedBuildingLevel,'Piso no resuelto');assert.equal(data.records[0].floor.floor_assignment_method,null);assert.equal(data.records[0].floor.status,'REQUIRES_REVIEW');
+ const resolved={...data.records[0],floor:{...data.records[0].floor,resolvedBuildingLevel:'Piso confirmado',floor_assignment_method:'MANUAL'}};
+ assert.deepEqual(quantityFacets([resolved],blank).floors,['Piso confirmado']);
 });

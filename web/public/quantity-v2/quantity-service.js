@@ -2,7 +2,9 @@ import { geometryFallback } from './geometry.js';
 import { extractElement, sum } from './properties.js';
 import { concreteQuantity, formworkQuantity, rebarQuantity, metricCoverage } from './services.js';
 import { slabCandidates, buildIntervals, resolveLevel, UNRESOLVED } from './levels.js';
-export const ENGINE='view-quantities-v2.0';
+export const ENGINE='view-quantities-v2.1';
+// Yield between batches without the nested-timer delay of an inactive tab.
+function yieldRead(){return new Promise(resolve=>{const channel=new MessageChannel();channel.port1.onmessage=()=>{channel.port1.close();channel.port2.close();resolve();};channel.port2.postMessage(null);});}
 export function defaultSettings(){return {version:1,levelToleranceM:.002,levelBinding:null,levelReferences:[],manualFloors:[],slabRoles:[],foundationFaces:[],rebarWeightTable:[]};}
 export function validateSettings(s){
  if(!s||s.version!==1||!Number.isFinite(s.levelToleranceM)||s.levelToleranceM<.0001||s.levelToleranceM>.05)throw Error('Tolerancia de elevación no válida (0,1 a 50 mm)');
@@ -19,7 +21,7 @@ export function validateSettings(s){
 export async function inspectElements(elements,binding,geometry,progress=()=>{}){
  if(!elements.length||new Set(elements.map(e=>e.dbId)).size!==elements.length)throw Error('Lectura vacía o elementos duplicados');
  const records=[];
- for(const e of elements){const record=extractElement(e,binding);record.geometry=record.specialty?await geometry(e.dbId):geometryFallback(null,'Geometría no analizada: elemento fuera de las especialidades de esta cubicación');records.push(record);if(records.length%25===0){progress(records.length,elements.length);await new Promise(resolve=>setTimeout(resolve,0));}}
+ for(const e of elements){const record=extractElement(e,binding);record.geometry=record.specialty?await geometry(e.dbId):geometryFallback(null,'Geometría no analizada: elemento fuera de las especialidades de esta cubicación');records.push(record);if(records.length%25===0){progress(records.length,elements.length);await yieldRead();}}
  return records;
 }
 export function calculateQuantities(inspected,binding,settings){
@@ -33,12 +35,16 @@ export function calculateQuantities(inspected,binding,settings){
  });
  return {binding,engine:ENGINE,calculatedAt:new Date().toISOString(),settings,records,slabs:slabCandidates(records,settings.levelToleranceM),resolver,coverage:{inspected:records.length,unclassified:records.filter(r=>!r.specialty).length,unknownCategory:records.filter(r=>r.specialty&&!r.category).length,geometryUnavailable:records.filter(r=>r.specialty&&!r.geometry?.closed).length,unresolvedFloors:records.filter(r=>r.specialty&&r.floor.resolvedBuildingLevel===UNRESOLVED).length}};
 }
-export function matchesFilter(e,filter){return Boolean(e.specialty)&&(!filter.specialty||e.specialty===filter.specialty)&&(!filter.category||(e.category??'Categoría no disponible')===filter.category)&&(!filter.floor||e.floor.resolvedBuildingLevel===filter.floor);}
-export function quantityFacets(records,filter){const unique=a=>[...new Set(a)].sort((a,b)=>a.localeCompare(b,'es',{numeric:true}));return {specialties:unique(records.filter(e=>matchesFilter(e,{...filter,specialty:''})).map(e=>e.specialty)),categories:unique(records.filter(e=>matchesFilter(e,{...filter,category:''})).map(e=>e.category??'Categoría no disponible')),floors:unique(records.filter(e=>matchesFilter(e,{...filter,floor:''})).map(e=>e.floor.resolvedBuildingLevel))};}
+export const UNCLASSIFIED='Sin especialidad de cubicación';
+// Browsing and visibility must not depend on eligibility for a quantity formula.
+// A published level remains filterable without claiming a spatial assignment.
+export function filterValues(e){return {specialty:e.specialty??UNCLASSIFIED,category:e.category??e.originalCategory??'Categoría no disponible',floor:e.floor.resolvedBuildingLevel!==UNRESOLVED?e.floor.resolvedBuildingLevel:e.floor.originalRevitLevel?`Nivel Revit: ${e.floor.originalRevitLevel}`:UNRESOLVED};}
+export function matchesFilter(e,filter){const values=filterValues(e);return ['specialty','category','floor'].every(key=>!filter[key]||filter[key]===values[key]);}
+export function quantityFacets(records,filter){const unique=a=>[...new Set(a)].sort((a,b)=>a.localeCompare(b,'es',{numeric:true}));return {specialties:unique(records.filter(e=>matchesFilter(e,{...filter,specialty:''})).map(e=>filterValues(e).specialty)),categories:unique(records.filter(e=>matchesFilter(e,{...filter,category:''})).map(e=>filterValues(e).category)),floors:unique(records.filter(e=>matchesFilter(e,{...filter,floor:''})).map(e=>filterValues(e).floor))};}
 export function presentQuantities(data,filter){
  const records=data.records.filter(e=>matchesFilter(e,filter)),coverage=Object.fromEntries(['concrete','formwork','rebar'].map(m=>[m,metricCoverage(records,m)]));
  const groups=new Map();
- for(const e of records){const diameter=e.rebar.diameterMm,key=JSON.stringify([e.specialty,e.category,e.floor.resolvedBuildingLevel,diameter]);const group=groups.get(key)??{id:key,specialty:e.specialty,category:e.category??'Categoría no disponible',floor:e.floor.resolvedBuildingLevel,diameterMm:diameter,elements:[]};group.elements.push(e);groups.set(key,group);}
+ for(const e of records){const values=filterValues(e),diameter=e.rebar.diameterMm,key=JSON.stringify([e.specialty,values.category,values.floor,diameter]);const group=groups.get(key)??{id:key,specialty:e.specialty,category:values.category,floor:values.floor,diameterMm:diameter,elements:[]};group.elements.push(e);groups.set(key,group);}
  const rows=[...groups.values()].map(g=>{const steel=g.elements.filter(e=>e.specialty==='Enfierradura'),length=steel.length&&steel.every(e=>e.rebar.totalLengthM!==null)?sum(steel.map(e=>e.rebar.totalLengthM)):null,weights=[...new Set(steel.map(e=>e.rebar.unitWeightKgM))];return {...g,dbIds:g.elements.map(e=>e.dbId),count:g.elements.length,quantities:Object.fromEntries(['concrete','formwork','rebar'].map(m=>[m,metricCoverage(g.elements,m)])),totalLengthM:length,unitWeightKgM:weights.length===1?weights[0]:null};});
  return {records,coverage,rows};
 }

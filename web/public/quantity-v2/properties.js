@@ -14,6 +14,12 @@ export const parameterNames={
  level:['Level','Nivel','Reference Level','Nivel de referencia','Schedule Level'],baseLevel:['Base Level','Nivel base','Base Constraint','Restricción de base'],topLevel:['Top Level','Nivel superior','Top Constraint','Restricción superior'],elevation:['Elevation','Elevación'],
  diameter:['Bar Diameter','Diámetro de barra','Diámetro de la barra','Diameter','Diámetro'],barLength:['Bar Length','Longitud de barra','Longitud de la barra'],count:['Quantity','Cantidad','Bar Quantity','Número de barras'],totalLength:['Total Bar Length','Longitud total de barra','Longitud total de las barras'],host:['Host','Anfitrión','Host Id','ID de anfitrión'],hostCategory:['Host Category','Categoría de anfitrión'],elementId:['ElementId','Element ID','Id de elemento'],
 };
+// H.A. = Hormigón explicitly confirmed by the user on 2026-09-25 after
+// inspecting the published material in Distrito Verde. Not inferred from type names.
+const concreteMaterials=new Map([
+ ['hormigon','published-concrete-material'],['concrete','published-concrete-material'],['concreto','published-concrete-material'],
+ ['h.a.','user-confirmed-ha-material'],
+]);
 const unitRules={
  m:[['m','meters','meter',1],['mm','millimeters','millimeter',.001],['cm','centimeters','centimeter',.01],['ft','feet','foot',.3048],['in','inches','inch',.0254]],
  m2:[['m²','squareMeters','m2',1],['mm²','squareMillimeters','mm2',1e-6],['cm²','squareCentimeters','cm2',.0001],['ft²','squareFeet','ft2',.09290304]],
@@ -51,6 +57,16 @@ export function extractElement(element,binding){
  const concreteGroups=['Emplantillado','Muros','Losas','Fundaciones','Vigas de Fundación','Vigas','Pilares','Hormigón'];
  if(!resolvedSpecialty&&legacy.status==='read'&&legacy.specialties.includes('Hormigón')&&concreteGroups.includes(associated.group)&&['Structural Foundations','Structural Columns','Structural Framing','Walls','Floors'].includes(category.value)){
    resolvedSpecialty='Hormigón';specialtyRule={id:classificationRule.id,version:classificationRule.version,basis:'Asociación de Sub Especialidad definida por el usuario',original:text.subspecialty.value,group:associated.group};
+ }
+ // A custom specialty parameter is not required by Revit. Use unambiguous
+ // published evidence, never the file/view/type name or a generic wall category.
+ const specialtyMissing=specialty.inputs.every(input=>!input.rawValue.trim());
+ if(!resolvedSpecialty&&specialtyMissing&&category.value==='Structural Rebar'){
+   resolvedSpecialty='Enfierradura';specialtyRule={id:'published-revit-rebar',version:'1',basis:'Categoría Revit de armadura estructural publicada',original:category.original};
+ }
+ const materialRule=concreteMaterials.get(normalize(text.material.value));
+ if(!resolvedSpecialty&&specialtyMissing&&['Structural Foundations','Structural Columns','Structural Framing','Walls','Floors'].includes(category.value)&&materialRule){
+   resolvedSpecialty='Hormigón';specialtyRule={id:materialRule,version:'1',basis:materialRule==='user-confirmed-ha-material'?'Material H.A. confirmado como Hormigón por el usuario (25-09-2026)':'Material de hormigón publicado en categoría estructural compatible',original:text.material.value};
  }
  if(legacy.specialties.includes('Cubierta')){resolvedSpecialty=null;specialtyRule=null;}
  return {dbId:element.dbId,externalId:element.externalId??null,name:element.name??'',elementId:text.elementId.value,category:category.value,originalCategory:category.original,specialty:resolvedSpecialty,specialtyRule,specialtyEvidence:specialty,categoryEvidence:category,text,measures,source:binding};

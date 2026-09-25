@@ -1,4 +1,4 @@
-# Cubicaciones de la vista activa — motor 2.0
+# Cubicaciones de la vista activa — motor 2.1
 
 Implementa la especificación del usuario del 24 de septiembre de 2026. Sustituye la mesa de Cálculo por Especialidad → Categoría Revit → Piso resuelto. Los módulos restantes y los resultados históricos del motor anterior conservan su comportamiento.
 
@@ -9,6 +9,14 @@ Cada lectura se vincula a proyecto, archivo, versión, derivado y GUID de vista 
 Todos los parámetros conservan nombre, categoría, valor y unidad originales. La extracción geométrica detallada se limita a las especialidades del alcance; los demás elementos conservan sus parámetros y se identifican como no analizados geométricamente. Las lecturas se reutilizan dentro de la vista y no se repiten al filtrar. Las unidades se convierten a metros, m², m³ mediante factores dimensionales explícitos. Parámetros ambiguos o sin unidades no producen cantidades. ElementId, familia, tipo, material, dimensiones, niveles, host y datos de barra ausentes se mantienen como no disponibles. Los identificadores externos repetidos no se suman.
 
 Los servicios independientes están en `web/public/quantity-v2/`: propiedades, geometría, hormigón/moldaje/enfierradura, resolución de pisos, agregación y protocolo del visor. Los adaptadores de versiones y autorización existentes continúan en `web/lib/quantities/autodesk.ts` y `viewer.ts`. React no contiene fórmulas técnicas.
+
+### Corrección de filtros (25 de septiembre de 2026)
+
+Los filtros incluyen todos los elementos leídos: la ausencia del parámetro personalizado Especialidad no elimina sus categorías ni niveles publicados. Los elementos sin clasificación para el cálculo aparecen bajo «Sin especialidad de cubicación», se pueden aislar/ocultar/atenuar y sus valores no se suman como Hormigón o Enfierradura.
+
+Cuando falta Especialidad, la categoría nativa Structural Rebar identifica Enfierradura. Un material publicado inequívoco Hormigón/Concrete/Concreto en una de las cinco categorías de hormigón identifica Hormigón. Se incorpora la equivalencia de material **H.A. → Hormigón**, confirmada explícitamente por el usuario en esta conversación al revisar Distrito Verde el 25-09-2026. Cada elemento conserva el material original y el identificador de la regla; no se clasifica por el nombre del archivo, vista o tipo. Materiales ambiguos, especialidades contradictorias y materiales sin equivalencia confirmada permanecen sin clasificar.
+
+Mientras el piso espacial esté sin resolver, el filtro y la tabla muestran «Nivel Revit: valor original» si el parámetro existe. No se mezclan nombres distintos ni se modifica el estado de la asignación espacial. Una asignación espacial/manual resuelta tiene prioridad. El visor, las opciones dependientes y las filas usan la misma función de filtro; las fórmulas y la elegibilidad para sumar se verifican por separado.
 
 ## Fórmulas
 
