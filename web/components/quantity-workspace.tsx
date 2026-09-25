@@ -10,6 +10,7 @@ import { QuantitySourcePicker } from "./quantity-source-picker";
 import { QuantityResults } from "./quantity-results";
 import { liveCalculationSchema, presentLiveCalculation, type ClassificationInventory, type CalculationEvent, type LiveCalculation } from "@/lib/quantities/live";
 import { QuantityLiveEvidence } from "./quantity-live-evidence";
+import { QuantityHeaderContext } from './quantity-header';
 import { QuantityModelDesk } from './quantity-model-desk';
 import { QuantityViewer } from "./quantity-viewer";
 import { quantitySpecialties, specialtyName } from "@/lib/quantities/catalog";
@@ -21,6 +22,7 @@ import type { ModelVersion, ModelView, QuantityComparison, QuantityConfiguration
 
 const stateLabels = { NOT_CONFIGURED: "Sin configurar", READY: "Configurada · sin procesar", PROCESSING: "Procesando", CURRENT: "Actualizada", STALE: "Nueva versión disponible", ERROR: "Por verificar" };
 export function QuantityWorkspace() {
+  const [headerSlot,setHeaderSlot]=useState<HTMLElement|null>(null);
   const [hubs, setHubs] = useState<Entry[]>([]), [hubId, setHubId] = useState("");
   const [projects, setProjects] = useState<Entry[]>([]), [projectId, setProjectId] = useState("");
   const [nextPage, setNextPage] = useState<number | null>(null);
@@ -54,11 +56,11 @@ export function QuantityWorkspace() {
   }
   const project = projects.find(p => p.id === projectId);
   const projectScope = useMemo<QuantityProject>(() => ({ kind: "project", hubId, projectId }), [hubId, projectId]);
-  return <div className="page-content quantity-page">
-    <header className="quantity-app-topbar"><Link href="/" className="quantity-brand"><Box size={26}/><span><strong>BIM + IA</strong><small>Cubicaciones</small></span></Link><div className="quantity-project-bar"><label>Cuenta Autodesk<select value={hubId} disabled={busy} onChange={e => { setHubId(e.target.value); setProjectId(""); setProjects([]); setNextPage(null); }}><option value="">Seleccionar cuenta</option>{hubs.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}</select></label><label>Proyecto<select value={projectId} disabled={!hubId || busy} onChange={e => setProjectId(e.target.value)}><option value="">Seleccionar proyecto</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>{nextPage !== null && <button className="quantity-secondary" disabled={busy} onClick={() => void moreProjects()}>Más proyectos</button>}<button className="quantity-icon-button" aria-label="Volver a consultar proyectos de Autodesk" disabled={busy} onClick={() => setRetry(n => n + 1)}><RefreshCw size={17}/></button>{busy && <span role="status">Consultando Autodesk…</span>}</div><button className="quantity-icon-button" aria-label="Buscar proyecto" onClick={()=>document.querySelector<HTMLSelectElement>('.quantity-project-bar label:nth-child(2) select')?.focus()}><Search size={18}/></button><button className="quantity-icon-button" disabled title="Notificaciones no disponibles" aria-label="Notificaciones no disponibles"><Bell size={18}/></button><AutodeskConnection/></header>
+  return <QuantityHeaderContext.Provider value={headerSlot}><div className="page-content quantity-page">
+    <header className="quantity-app-topbar"><Link href="/" className="quantity-brand"><Box size={26}/><span><strong>BIM + IA</strong><small>Cubicaciones</small></span></Link><div className="quantity-project-bar"><label>Cuenta Autodesk<select value={hubId} disabled={busy} onChange={e => { setHubId(e.target.value); setProjectId(""); setProjects([]); setNextPage(null); }}><option value="">Seleccionar cuenta</option>{hubs.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}</select></label><label>Proyecto<select value={projectId} disabled={!hubId || busy} onChange={e => setProjectId(e.target.value)}><option value="">Seleccionar proyecto</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>{nextPage !== null && <button className="quantity-secondary" disabled={busy} onClick={() => void moreProjects()}>Más proyectos</button>}<button className="quantity-icon-button" aria-label="Volver a consultar proyectos de Autodesk" disabled={busy} onClick={() => setRetry(n => n + 1)}><RefreshCw size={17}/></button>{busy && <span role="status">Consultando Autodesk…</span>}</div><div className="quantity-header-slot" ref={setHeaderSlot}/><button className="quantity-icon-button" aria-label="Buscar proyecto" onClick={()=>document.querySelector<HTMLSelectElement>('.quantity-project-bar label:nth-child(2) select')?.focus()}><Search size={18}/></button><button className="quantity-icon-button" disabled title="Notificaciones no disponibles" aria-label="Notificaciones no disponibles"><Bell size={18}/></button><AutodeskConnection/></header>
     {error && <p role="alert" className="quantity-error">{error}</p>}
     {project ? <ProjectQuantities key={`${hubId}:${projectId}`} project={projectScope} name={project.name}/> : <section className="quantity-welcome quantity-panel"><div className="quantity-welcome-icon"><Boxes size={32}/></div><h2>Configuración de Cubicaciones</h2><p>Selecciona un proyecto de Autodesk para agregar sus especialidades y configurar las fuentes BIM.</p><div className="quantity-flow"><span>Especialidad</span><ArrowRight/><span>Plantilla</span><ArrowRight/><span>RVT + versión + vista</span><ArrowRight/><span>Cubicación</span></div><p className="quantity-help">Se mostrarán únicamente los proyectos y archivos accesibles para tu cuenta.</p></section>}
-  </div>;
+  </div></QuantityHeaderContext.Provider>;
 }
 
 function ProjectQuantities({ project, name }: { project: QuantityProject; name: string }) {

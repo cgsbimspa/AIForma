@@ -164,3 +164,14 @@ test('unclassified model elements remain filterable by category and published le
  const resolved={...data.records[0],floor:{...data.records[0].floor,resolvedBuildingLevel:'Piso confirmado',floor_assignment_method:'MANUAL'}};
  assert.deepEqual(quantityFacets([resolved],blank).floors,['Piso confirmado']);
 });
+
+test('multiple values use OR within a facet and AND across facets; exact model selection controls totals, options and rows',()=>{
+ const records=[element(1,'Walls',[property('Level','N1'),property('Volume',2,'m³')]),element(2,'Floors',[property('Level','N2'),property('Volume',3,'m³')]),element(3,'Walls',[property('Level','N3'),property('Volume',5,'m³')]),element(4,'Floors',[property('Level','N1'),property('Volume',7,'m³')])];
+ const data=calculateQuantities(records,binding,settings());
+ const f={specialty:['Hormigón'],category:['Walls','Floors'],floor:['Nivel publicado: N1','Nivel publicado: N2'],selection:null};
+ const result=presentQuantities(data,f);assert.deepEqual(result.records.map(e=>e.dbId),[1,2,4]);assert.equal(result.coverage.concrete.total,12);assert.equal(result.rows.reduce((n,r)=>n+r.count,0),3);
+ const selected={...f,selection:[1,3,1]};const exact=presentQuantities(data,selected);assert.deepEqual(exact.records.map(e=>e.dbId),[1]);assert.equal(exact.coverage.concrete.total,2);
+ const facets=quantityFacets(data.records,selected);assert.deepEqual(facets.categories,['Walls']);assert.deepEqual(facets.floors,['Nivel publicado: N1','Nivel publicado: N3']);
+ const empty=presentQuantities(data,{...f,selection:[]});assert.equal(empty.records.length,0);assert.equal(empty.coverage.concrete.total,null);
+ assert.equal(presentQuantities(data,{specialty:[],category:[],floor:[],selection:null}).coverage.concrete.total,17);
+});

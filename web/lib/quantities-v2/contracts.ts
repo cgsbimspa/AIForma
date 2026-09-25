@@ -19,5 +19,6 @@ export const calculationSchema=z.object({binding:bindingSchema,engine:z.literal(
  if(data.coverage.inspected!==data.records.length||new Set(data.records.map(r=>r.dbId)).size!==data.records.length||data.records.some(r=>r.source.urn!==data.binding.urn||r.source.viewId!==data.binding.viewId||r.source.versionId!==data.binding.versionId))ctx.addIssue({code:'custom',message:'Inconsistent model provenance'});
 });
 export type ViewCalculation=z.infer<typeof calculationSchema>;
-export type ViewFilters={specialty:string;category:string;floor:string};
-export const blankFilters:ViewFilters={specialty:'',category:'',floor:''};
+export type ViewFilters={specialty:string[];category:string[];floor:string[];selection:number[]|null};
+export type FilterField='specialty'|'category'|'floor';
+export const blankFilters:ViewFilters={specialty:[],category:[],floor:[],selection:null};
