@@ -114,7 +114,7 @@ export async function readViewClassification(model, progress = () => {}, timeout
     const batch = ordered.slice(offset, offset + 400);
     const results = await call((ok, fail) => model.getBulkProperties2(batch, { ignoreHidden: false, needsExternalId: true }, ok, fail));
     if (!Array.isArray(results) || results.length !== batch.length || new Set(results.map(r => r.dbId)).size !== batch.length || results.some(r => !batch.includes(r.dbId) || !Array.isArray(r.properties))) throw new Error('incomplete_classification');
-    for (const result of results) elements.push({ dbId: result.dbId, externalId: result.externalId ?? null, properties: result.properties, ...classifyProperties(result.properties, result.name) });
+    for (const result of results) elements.push({ dbId: result.dbId, name: result.name ?? '', externalId: result.externalId ?? null, properties: result.properties, ...classifyProperties(result.properties, result.name) });
     progress(elements.length, ordered.length);
   }
   return elements;

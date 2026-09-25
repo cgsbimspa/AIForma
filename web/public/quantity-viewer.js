@@ -1,13 +1,14 @@
 /* global Autodesk */
 import { installPropertyInspector } from "./quantity-properties.js";
 import { buildViewCalculation } from "./quantity-calculation.js";
+import { installBimChat } from "./bim-chat-viewer.js";
 import { readViewClassification, classificationInventory, matchesClassification, classificationRule } from "./quantity-classification.js";
 // Real Autodesk SDK viewer. Never fall back to the model's default geometry:
 // the server-verified geometry GUID must be present in this exact version.
 (() => {
   const status = document.getElementById("status");
   const input = JSON.parse(document.getElementById("viewer-data").textContent);
-  let viewer;
+  let viewer, disposeBimChat;
   let externalMap, reverseMap, applyingSelection = false, selectionRevision = 0;
   let classification, visibilityFilterKey;
   const classified = () => classification ??= readViewClassification(viewer.model).catch(error => { classification = undefined; throw error; });
@@ -95,6 +96,7 @@ import { readViewClassification, classificationInventory, matchesClassification,
         viewer.addEventListener(Autodesk.Viewing.GEOMETRY_LOADED_EVENT, () => {
           clearTimeout(timeout);
           if (!done) {
+            disposeBimChat = installBimChat(viewer, input, classified);
             viewer.fitToView(); report("ready", "Vista seleccionada cargada"); done = true;
             void classified().then(elements=>window.parent.postMessage({type:'aiforma-viewer',state:'inventory',elements:classificationInventory(elements),viewId:input.viewId,urn:input.urn},window.location.origin)).catch(()=>classificationReport('error','No se pudieron cargar las opciones de filtros de esta vista.'));
 
@@ -108,5 +110,5 @@ import { readViewClassification, classificationInventory, matchesClassification,
     });
   } catch { clearTimeout(timeout); fail("No se pudo iniciar Autodesk Viewer."); }
   const resize = new ResizeObserver(() => viewer?.resize()); resize.observe(document.body);
-  window.addEventListener("pagehide", () => { done = true; clearTimeout(timeout); resize.disconnect(); window.removeEventListener("message",selectionMessage); viewer?.finish(); }, { once: true });
+  window.addEventListener("pagehide", () => { done = true; clearTimeout(timeout); resize.disconnect(); disposeBimChat?.(); window.removeEventListener("message",selectionMessage); viewer?.finish(); }, { once: true });
 })();

@@ -1,8 +1,9 @@
-import { BrainCircuit, ScanSearch, Boxes, ShieldCheck, FileCheck2, FolderClosed, Flag, ChartNoAxesCombined, Settings2 } from "lucide-react";
+import { BrainCircuit, MessageSquare, ScanSearch, Boxes, ShieldCheck, FileCheck2, FolderClosed, Flag, ChartNoAxesCombined, Settings2 } from "lucide-react";
 
 // Planned capabilities from the supplied roadmap, not live results.
 export const modules = [
   { slug: "asistente", name: "Asistente IA", phase: "Fase 1", period: "Octubre 2026", icon: BrainCircuit, description: "Consultas del proyecto basadas en información verificable." },
+  { slug: "chat-bim", name: "Chat BIM IA", phase: "Fase 1", period: "Octubre 2026", icon: MessageSquare, description: "Conversa con tu modelo y selecciona, aísla o colorea sus elementos reales." },
   { slug: "auditoria-bim", name: "Auditoría BIM", phase: "Fase 2", period: "Noviembre 2026", icon: ScanSearch, description: "Calidad del modelo, parámetros y detección de inconsistencias." },
   { slug: "cubicaciones", name: "Cubicaciones", phase: "Fase 3", period: "Diciembre 2026", icon: Boxes, description: "Cantidades y volúmenes del modelo, organizados por partidas." },
   { slug: "coordinacion-normativa", name: "Coordinación Normativa", phase: "Fase 4", period: "Enero 2027", icon: ShieldCheck, description: "Revisión de cumplimiento mediante reglas de fuentes controladas." },

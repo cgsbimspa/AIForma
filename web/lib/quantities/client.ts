@@ -18,6 +18,10 @@ const errors: Record<string, string> = {
   viewer_derivative_unavailable: "La versión seleccionada no tiene geometría publicada disponible para el visor.",
   viewer_expired: "La sesión del visor venció. Vuelve a cargar el modelo.",
   viewer_resource_unavailable: "Autodesk no pudo entregar los archivos de visualización de este modelo.",
+  ai_not_configured: "La conexión con OpenAI no está configurada. Las acciones directas del visor siguen disponibles.",
+  ai_unavailable: "OpenAI no pudo interpretar la consulta. Intenta nuevamente o usa los botones de selección.",
+  ai_rate_limited: "OpenAI está limitando las consultas. Espera unos momentos y vuelve a intentarlo.",
+  ai_invalid_response: "No pude convertir la petición en una acción verificable. No apliqué cambios; indica un parámetro o elemento más concreto.",
 };
 export async function quantityResponse<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await autodeskFetch(url, { cache: "no-store", ...init });
