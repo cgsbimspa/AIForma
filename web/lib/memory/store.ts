@@ -48,7 +48,9 @@ export function createMemoryStore(tx: Transaction, key: Buffer) {
           FROM memory_conversation c LEFT JOIN LATERAL (
             SELECT id,content FROM memory_message WHERE conversation_id=c.id AND role='user' AND expires_at>now() ORDER BY position LIMIT 1
           ) m ON true WHERE c.expires_at>now() ORDER BY c.created_at DESC LIMIT 50`);
-        return rows.map(row=>({id:row.id,scope:row.scope,created_at:row.created_at,expires_at:row.expires_at,
+        // postgres.js may return legacy JSONB values encoded as JSON strings.
+        // Normalize the stored shape before sending it back to the strict API schema.
+        return rows.map(row=>({id:row.id,scope:typeof row.scope==="string"?JSON.parse(row.scope):row.scope,created_at:row.created_at,expires_at:row.expires_at,
           title:row.content?String(decryptHistory(String(row.content),key,binding(actor,String(row.message_id)))).slice(0,160):"Consulta sin pregunta registrada"}));
       });
     },

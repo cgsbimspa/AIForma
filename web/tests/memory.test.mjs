@@ -85,6 +85,8 @@ test('project history finds other folders while restoring only their original sc
   const list=await store.listProject(actor);
   assert.equal(list.length,2);assert.equal(list.find(row=>row.id===second.conversationId).title,'TEST pregunta archivo');
   assert.deepEqual(list.find(row=>row.id===second.conversationId).scope,file);
+  await db.query('UPDATE memory_conversation SET scope=to_jsonb(scope::text) WHERE id=$1',[second.conversationId]);
+  assert.deepEqual((await store.listProject(actor)).find(row=>row.id===second.conversationId).scope,file);
   assert.equal((await store.messages(actor,file,second.conversationId)).messages.length,2);
   await assert.rejects(store.messages(actor,folder,second.conversationId));
   for(const other of [{...actor,userId:'TEST_OTHER'},{...actor,projectId:'TEST_OTHER'},{...actor,organizationId:'TEST_OTHER'}])assert.equal((await store.listProject(other)).length,0);
