@@ -21,7 +21,7 @@ test('Cubicaciones filters without selection and manual visibility targets all m
   f.viewer.select([3]);
   f.controller.applyVisibility('isolate','filter',key(base));assert.deepEqual(f.calls.findLast(c=>c[0]==='isolate')[1],[1,2]);assert.deepEqual(f.viewer.getSelection(),[]);
   f.controller.applyVisibility('attenuate','filter',key(base));assert.deepEqual(f.calls.findLast(c=>c[0]==='setGhosting'),['setGhosting',true]);
-  f.controller.applyVisibility('hide','filter',key(base));assert.deepEqual(f.calls.findLast(c=>c[0]==='hide')[1],[1,2]);
+  f.controller.applyVisibility('hide','filter',key(base));assert.deepEqual(f.calls.findLast(c=>c[0]==='hide')[1],[1,2]);assert.equal(f.calls.at(-2)[0],'showAll','switching from isolation to hidden restores the other elements');
   f.controller.applyVisibility('filter','filter',key(base));assert.equal(f.messages.findLast(m=>m.state==='filter').mode,'filter');assert.equal(f.messages.findLast(m=>m.state==='filter').count,2);
 });
 test('empty, pending, failed and outdated filters cannot act on previous matches or native selection',async()=>{

@@ -54,7 +54,7 @@ export function createQuantityFilter(viewer,{mapping,classified,report,send}) {
     if(action==='showAll'||action==='filter'){restore();nativeSelect([]);}
     else if(action==='isolate'||action==='attenuate'){
       nativeSelect([]);restore();viewer.setGhosting(action==='attenuate');viewer.isolate(matches);viewer.fitToView(matches);
-    }else if(action==='hide'){nativeSelect([]);viewer.setGhosting(false);viewer.hide(matches);}
+    }else if(action==='hide'){nativeSelect([]);restore();viewer.hide(matches);}
     mode=['showAll','filter'].includes(action)?'filter':action;publish();send({state:'selection-count',count:viewer.getSelection().length});
   }
   return {update,applyVisibility,isApplyingSelection:()=>applying,dispose:()=>{revision++;}};
