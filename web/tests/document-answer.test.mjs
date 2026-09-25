@@ -138,3 +138,12 @@ test('folder limits and truncated text report partial coverage instead of claimi
   const limited=await collectDocumentEvidence('TEST_TOKEN',file,Date.now()+60000,undefined,{fetcher:fixture,parser,maxCharacters:20});
   assert.equal(limited.partial,true);assert.equal(limited.sources[0].status,'context_limit');assert.equal(limited.passages[0].text.length,20);
 });
+
+test('summary keeps only independently supported sections and excludes low-confidence OCR before generation',async()=>{
+ let calls=0;
+ const result=await answerDocuments(evidence,'Resumen general','summary',config,async()=>++calls===1?output({status:'answered',blocks:[draft.blocks[0],{...draft.blocks[0],text:'La profundidad está aprobada.'}]}):output({allowedTask:true,supported:[true,false]}));
+ assert.equal(result.status,'answered');assert.equal(result.blocks.length,1);assert.equal(result.blocks[0].text,draft.blocks[0].text);assert.equal(result.partial,true);assert.ok(result.warnings.some(w=>w.includes('omitieron')));
+ const low={...evidence,passages:[{...evidence.passages[0],method:'ocr',confidence:50}]};
+ const unavailable=await answerDocuments(low,'Resumen general','summary',config,()=>assert.fail('Low confidence text must not generate a summary'));
+ assert.equal(unavailable.status,'not_available');assert.equal(unavailable.partial,true);
+});

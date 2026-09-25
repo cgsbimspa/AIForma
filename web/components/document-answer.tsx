@@ -3,7 +3,7 @@ import { searchStatus } from "./search-results";
 import type { DocumentAnswer as Answer } from "@/lib/assistant/document-contracts";
 
 const statuses: Record<string, string> = {
-  read: "Texto leído", partial_text: "Lectura parcial: hay contenido sin revisar", context_limit: "Texto leído parcialmente por límite de contexto",
+  read: "Texto leído", reading_pages: "Lectura por lotes: quedan páginas pendientes", partial_text: "Lectura parcial: hay contenido sin revisar", context_limit: "Texto leído parcialmente por límite de contexto",
   unsupported_document: "Formato no compatible", ocr_required: "Requiere OCR", no_text: "Sin texto extraíble",
   document_too_large: "Supera 25 MB", forbidden: "Sin permiso", not_found: "No disponible",
   parse_failed: "No se pudo extraer texto", parse_timeout: "Se agotó el tiempo de extracción", expired: "Sesión vencida",
@@ -17,7 +17,7 @@ export function DocumentAnswer({ answer }: { answer: Answer }) {
   const literal = answer.mode === "extract";
   return <div className="document-answer">
     {answer.mode !== "ask" && <strong className="document-answer-title"><FileText size={16}/>{literal ? "Datos extraídos del documento" : answer.partial ? "Resumen del contenido leído · Lectura parcial" : answer.sources.length === 1 ? "Resumen general del documento" : "Resumen general de la selección"}</strong>}
-    {answer.mode === "summary" && <p className="document-answer-note">{answer.partial ? "Este resumen sólo cubre el contenido que se pudo leer; quedan partes sin revisar. Consulta la cobertura al final." : "Síntesis del contenido leído. Cada apartado incluye su fuente y ubicación para que puedas verificarlo."}</p>}
+    {answer.mode === "summary" && <p className="document-answer-note">{answer.partial ? "Este resumen sólo cubre el contenido con respaldo suficiente; hay contenido pendiente o no incluido. Consulta la cobertura al final." : "Síntesis del contenido leído. Cada apartado incluye su fuente y ubicación para que puedas verificarlo."}</p>}
     {answer.mode === "summary" && answer.status !== "answered" && <p className="message-body"><strong>{answer.status === "unsupported" ? messages.unsupported : answer.status === "unverified" ? "No pude verificar un resumen suficientemente respaldado. Puedes reintentar o seleccionar una parte más concreta del documento." : "No hay suficiente contenido legible y verificable para entregar el resumen solicitado."}</strong></p>}
     {answer.mode !== "summary" && answer.status !== "answered" && <p className="message-body"><strong>{answer.status === "not_available" && answer.sources.length > 0 && answer.sources.every(s => !["read", "partial_text", "context_limit", "reading_pages"].includes(s.status)) ? "No pude leer el contenido de los archivos seleccionados. Esto no significa que el dato no esté en el documento. Abre el detalle de cobertura para ver el motivo." : messages[answer.status]}</strong></p>}
     {answer.blocks.map((block, index) => <section className="document-answer-block" key={index}>
@@ -33,7 +33,7 @@ export function DocumentAnswer({ answer }: { answer: Answer }) {
     </section>)}
     {!answer.partial && answer.warnings.map(w => <p className="search-coverage" key={w}>{w}</p>)}
     {answer.partial && <div className="document-coverage-warning" role="status"><strong>Lectura parcial de la selección</strong><p>La respuesta sólo cubre el texto que se pudo leer. No equivale a una revisión completa.</p>{answer.warnings.map(w => <p key={w}>{w}</p>)}{answer.pending > 0 && <p>{answer.pending} tareas pendientes. Selecciona una ubicación más pequeña para continuar con esos documentos.</p>}</div>}
-    <details className="document-coverage"><summary>Documentos y cobertura · {answer.sources.filter(s => ["read", "partial_text", "context_limit"].includes(s.status)).length} con texto leído de {answer.sources.length} procesados</summary>
+    <details className="document-coverage"><summary>Documentos y cobertura · {answer.sources.filter(s => ["read", "partial_text", "context_limit", "reading_pages"].includes(s.status)).length} con texto leído de {answer.sources.length} procesados</summary>
       <p>Alcance: {answer.scopePath}</p>
       {answer.sources.map(source => <div className="document-source" key={source.id}><strong>{source.id} · {source.name}</strong><span>{statuses[source.status] ?? searchStatus[source.status] ?? "Lectura no disponible (" + source.status + ")"}</span><small>{source.path}</small>{source.totalPages !== undefined && <small>Páginas procesadas: {source.throughPage ?? 0} de {source.totalPages}{source.nextPage ? ` · Pendiente desde la página ${source.nextPage}` : ""}</small>}{source.warnings?.map(w => <small key={w}>{searchStatus[w] ?? "Hay contenido que no se pudo revisar"}</small>)}{source.version && <span>Versión {source.version}</span>}<time dateTime={source.fetchedAt}>{new Date(source.fetchedAt).toLocaleString("es-CL")}</time><code>{source.endpoint}</code>{source.webUrl && <a href={source.webUrl} target="_blank" rel="noopener noreferrer">Abrir documento en Autodesk</a>}</div>)}
     </details>
