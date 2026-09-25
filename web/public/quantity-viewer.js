@@ -2,6 +2,7 @@
 import { installPropertyInspector } from "./quantity-properties.js";
 import { buildViewCalculation } from "./quantity-calculation.js";
 import { createQuantityFilter } from "./quantity-filter.js";
+import { installQuantityV2 } from './quantity-v2/viewer.js';
 import { installBimChat } from "./bim-chat-viewer.js";
 import { readViewClassification, classificationInventory, classificationRule } from "./quantity-classification.js";
 // Real Autodesk SDK viewer. Never fall back to the model's default geometry:
@@ -9,7 +10,7 @@ import { readViewClassification, classificationInventory, classificationRule } f
 (() => {
   const status = document.getElementById("status");
   const input = JSON.parse(document.getElementById("viewer-data").textContent);
-  let viewer, disposeBimChat, quantityFilter;
+  let viewer, disposeBimChat, quantityFilter, disposeQuantityV2;
   let externalMap, reverseMap;
   let classification;
   const classified = () => classification ??= readViewClassification(viewer.model).catch(error => { classification = undefined; throw error; });
@@ -63,6 +64,7 @@ import { readViewClassification, classificationInventory, classificationRule } f
           if (!done) {
             quantityFilter = createQuantityFilter(viewer,{mapping,classified,report:classificationReport,send:payload=>window.parent.postMessage({type:'aiforma-viewer',viewId:input.viewId,urn:input.urn,...payload},window.location.origin)});
             disposeBimChat = installBimChat(viewer, input, classified);
+            disposeQuantityV2 = installQuantityV2(viewer, input, classified);
             viewer.fitToView(); report("ready", "Vista seleccionada cargada"); done = true;
             void classified().then(elements=>window.parent.postMessage({type:'aiforma-viewer',state:'inventory',elements:classificationInventory(elements),viewId:input.viewId,urn:input.urn},window.location.origin)).catch(()=>classificationReport('error','No se pudieron cargar las opciones de filtros de esta vista.'));
 
@@ -76,5 +78,5 @@ import { readViewClassification, classificationInventory, classificationRule } f
     });
   } catch { clearTimeout(timeout); fail("No se pudo iniciar Autodesk Viewer."); }
   const resize = new ResizeObserver(() => viewer?.resize()); resize.observe(document.body);
-  window.addEventListener("pagehide", () => { done = true; clearTimeout(timeout); resize.disconnect(); disposeBimChat?.(); quantityFilter?.dispose(); window.removeEventListener("message",selectionMessage); viewer?.finish(); }, { once: true });
+  window.addEventListener("pagehide", () => { done = true; clearTimeout(timeout); resize.disconnect(); disposeBimChat?.(); quantityFilter?.dispose(); disposeQuantityV2?.(); window.removeEventListener("message",selectionMessage); viewer?.finish(); }, { once: true });
 })();

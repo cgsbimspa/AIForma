@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { scopeSchema } from "../autodesk/data.ts";
 import { quantitySpecialties } from "./catalog.ts";
+import { settingsSchema } from '../quantities-v2/contracts.ts';
 
 const text = z.string().min(1).max(2000);
 const date = z.string().datetime({ offset: true });
@@ -32,6 +33,7 @@ export const templateVersionSchema = z.object({
 export type QuantityTemplateVersion = z.infer<typeof templateVersionSchema>;
 export type QuantityTemplate = { id: string; specialtyCode: string; name: string; currentVersion: number; active: boolean };
 export const configurationSchema = z.object({
+  calculationSettings: settingsSchema.optional(),
   id: z.string().uuid(), specialtyCode, source: sourceSchema.nullable(), templateVersionId: z.string().uuid().nullable(),
   revision: z.number().int().nonnegative(), createdAt: date, updatedAt: date, updatedBy: text,
 });

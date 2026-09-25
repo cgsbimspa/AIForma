@@ -11,6 +11,7 @@ import { createQuantityStore } from "@/lib/quantities/store";
 import { modelVersion, modelVersions, modelViews, verifiedSource } from "@/lib/quantities/autodesk";
 import { compareRuns, processingBlocker } from "@/lib/quantities/engine";
 import { manifestRoots, packViewerGrant, viewerOwner, resolveViewerGeometry } from "@/lib/quantities/viewer";
+import { settingsSchema } from '@/lib/quantities-v2/contracts';
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,7 +21,7 @@ const sourceInput = z.object({ scope: fileScope, versionId: z.string().min(1).ma
 const action = z.discriminatedUnion("action", [
   z.object({ action: z.literal("prepare-templates") }).strict(),
   z.object({ action: z.literal("add"), specialtyCode }).strict(),
-  z.object({ action: z.literal("save"), id: z.string().uuid(), revision: z.number().int().nonnegative(), source: sourceInput.nullable(), templateVersionId: z.string().uuid().nullable() }).strict(),
+  z.object({ action: z.literal("save"), id: z.string().uuid(), revision: z.number().int().nonnegative(), source: sourceInput.nullable(), templateVersionId: z.string().uuid().nullable(), calculationSettings:settingsSchema.optional() }).strict(),
   z.object({ action: z.literal("template"), configurationId: z.string().uuid(), name: z.string().trim().min(1).max(200), templateId: z.string().uuid().optional() }).strict(),
   z.object({ action: z.literal("versions"), file: fileScope, page: z.number().int().min(0).max(10000).default(0) }).strict(),
   z.object({ action: z.literal("views"), file: fileScope, versionId: z.string().min(1).max(2000) }).strict(),

@@ -4,6 +4,7 @@ import { decryptHistory, encryptHistory, type Actor } from "../memory/domain.ts"
 import type { Query, Transaction } from "../memory/database.ts";
 import { configurationSchema, runSchema, templateVersionSchema, type QuantityConfiguration, type QuantitySource, type QuantityWorkspace } from "./contracts.ts";
 import { structureTemplateDefinition } from "./template-defaults.ts";
+import type { CalculationSettings } from '../quantities-v2/contracts.ts';
 
 export function createQuantityStore(transaction: Transaction, key: Buffer) {
   const binding = (actor: Actor, id: string) => JSON.stringify(["quantities-v1", actor.organizationId, actor.projectId, id]);
@@ -64,7 +65,7 @@ export function createQuantityStore(transaction: Transaction, key: Buffer) {
         return assignTemplate(q, actor, value);
       });
     },
-    async save(actor: Actor, input: { id: string; revision: number; source: QuantitySource | null; templateVersionId: string | null }) {
+    async save(actor: Actor, input: { id: string; revision: number; source: QuantitySource | null; templateVersionId: string | null; calculationSettings?:CalculationSettings }) {
       return transaction(actor, async q => {
         const previous = await config(q, actor, input.id);
         if (previous.revision !== input.revision) throw new DataError("configuration_conflict", 409);
@@ -73,7 +74,8 @@ export function createQuantityStore(transaction: Transaction, key: Buffer) {
           const [row] = await q("SELECT * FROM quantity_template_version WHERE id=$1 AND specialty_code=$2", [input.templateVersionId, previous.specialtyCode]);
           if (!row) throw new DataError("invalid_template", 422);
         }
-        const value = configurationSchema.parse({ ...previous, source: input.source, templateVersionId: input.templateVersionId, revision: previous.revision + 1, updatedAt: new Date().toISOString(), updatedBy: actor.userId });
+        if(input.calculationSettings?.levelBinding&&(input.calculationSettings.levelBinding.urn!==input.source?.version.modelId||input.calculationSettings.levelBinding.viewId!==input.source?.view?.id))throw new DataError('out_of_scope',403);
+        const value = configurationSchema.parse({ ...previous, source: input.source, templateVersionId: input.templateVersionId, ...(input.calculationSettings?{calculationSettings:input.calculationSettings}:{}), revision: previous.revision + 1, updatedAt: new Date().toISOString(), updatedBy: actor.userId });
         await q("UPDATE quantity_configuration SET payload=$1,revision=$2,updated_at=now(),updated_by=$3 WHERE id=$4", [encode(actor, value.id, value), value.revision, actor.userId, value.id]);
         return value;
       });
