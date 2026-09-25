@@ -42,3 +42,11 @@ test('regional OCR recovers a rotated TEST street label with page, zone and its 
  assert.ok(hit,'A literal street label must be recovered without prompting the OCR with its name');
  assert.equal(hit.page,1);assert.equal(hit.method,'ocr');assert.match(hit.location,/fila \d+, columna \d+.*OCR/);
 });
+
+test('general summary intent routes content reading without confusing file-name searches',async()=>{
+ const {isGeneralSummaryRequest}=await import('../lib/assistant/intent.ts');
+ for(const text of ['Resume este documento','RESÚMEME el PDF','Resumen general','Dame un resumen del documento','Puedes preparar una búsqueda']) {
+  assert.equal(isGeneralSummaryRequest(text),text!=='Puedes preparar una búsqueda',text);
+ }
+ for(const text of ['busca el archivo resumen','¿Dónde está la carpeta Resumen?','No resumas este documento'])assert.equal(isGeneralSummaryRequest(text),false,text);
+});

@@ -78,6 +78,21 @@ test('missing data and unsupported calculations return no generated assertions',
   }
 });
 
+test('general summary preserves partial coverage and rejects unsupported claims or invented citations',async()=>{
+ const partial={...evidence,partial:true,pending:1,warnings:['TEST: páginas pendientes']};
+ let calls=0;
+ const result=await answerDocuments(partial,'Resume este documento','summary',config,async()=>++calls===1?output(draft):output({allowedTask:true,supported:[true]}));
+ assert.equal(result.status,'answered');assert.equal(result.partial,true);assert.equal(result.pending,1);
+ assert.equal(result.blocks[0].citations[0].source.itemId,'TEST_FILE');assert.equal(result.blocks[0].citations[0].location,'Línea 7');
+ calls=0;
+ const rejected=await answerDocuments(evidence,'Resumen general','summary',config,async()=>++calls===1?output({...draft,blocks:[{...draft.blocks[0],text:'La profundidad está aprobada.'}]}):output({allowedTask:true,supported:[false]}));
+ assert.equal(rejected.status,'unverified');assert.deepEqual(rejected.blocks,[]);
+ const fabricated=await answerDocuments(evidence,'Resumen general','summary',config,async()=>output({...draft,blocks:[{...draft.blocks[0],citations:[{segmentId:'OTHER_DOCUMENT',quote:sentence}]}]}));
+ assert.equal(fabricated.status,'unverified');assert.deepEqual(fabricated.blocks,[]);
+ const empty=await answerDocuments({...evidence,passages:[]},'Resumen general','summary',config,()=>assert.fail('Summary without document text must not invoke model'));
+ assert.equal(empty.status,'not_available');assert.deepEqual(empty.blocks,[]);
+});
+
 const folder={kind:'folder',hubId:'TEST_HUB',projectId:'TEST_PROJECT',folderIds:['TEST_ROOT','TEST_NESTED']};
 const file={...folder,kind:'file',itemId:'TEST_FILE'};
 const row=(type,id,name)=>({type,id,attributes:{name}});
