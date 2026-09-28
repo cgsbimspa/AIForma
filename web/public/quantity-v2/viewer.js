@@ -1,3 +1,4 @@
+import { readPublishedLevels } from './published-levels.js';
 import { createGeometryService } from './geometry-viewer.js';
 import { inspectElements, calculateQuantities, validateSettings, filterRecords } from './quantity-service.js';
 import { inspectMEPElements, calculateMEPQuantities } from './mep-service.js';
@@ -6,6 +7,7 @@ export function installQuantityV2(viewer,input,readElements){
  let inspected,inspectedMode,calculated,revision=0,filterRevision=0,activeIds=null,activeKey=null,visualMode='isolate';
  let applyingVisibility=false,selectionRevision=0,selectionPending=false,calculationId=null;
  const readGeometry=createGeometryService(viewer),seen=new Set();
+ const inventory=()=>[...calculated.records,...(calculated.mepContextRecords??[]),...(calculated.referenceRecords??[])];
  const send=(requestId,payload)=>window.parent.postMessage({type:'aiforma-quantity-v2-result',requestId,urn:input.urn,viewId:input.viewId,...payload},window.location.origin);
  const withoutSelectionEvents=fn=>{applyingVisibility=true;try{fn();}finally{applyingVisibility=false;}};
  const display=(ids,mode)=>withoutSelectionEvents(()=>{
@@ -16,7 +18,7 @@ export function installQuantityV2(viewer,input,readElements){
  });
  const selectionChanged=event=>{
   if(applyingVisibility||!calculated||event.model!==viewer.model||!Array.isArray(event.dbIdArray))return;
-  const known=new Set(calculated.records.map(e=>e.dbId)),ids=new Set(),tree=viewer.model.getInstanceTree();
+  const known=new Set(inventory().map(e=>e.dbId)),ids=new Set(),tree=viewer.model.getInstanceTree();
   for(const id of event.dbIdArray){if(!Number.isSafeInteger(id))continue;if(known.has(id))ids.add(id);tree?.enumNodeChildren(id,child=>{if(known.has(child))ids.add(child);},true);}
   selectionRevision++;selectionPending=true;activeKey=null;
   send(calculationId,{phase:'selection',selectionRevision,dbIds:event.dbIdArray.length?[...ids].sort((a,b)=>a-b):null});
@@ -34,9 +36,11 @@ export function installQuantityV2(viewer,input,readElements){
     const mep=d.template==='mep';if(inspectedMode!==mep){inspected=undefined;inspectedMode=mep;}
     if(d.binding?.urn!==input.urn||d.binding?.viewId!==input.viewId)throw Error('La fuente no coincide con el visor');
     send(d.requestId,{phase:'loading',message:'Leyendo parámetros y geometría de la vista…'});
+    const levelsPromise=mep?readPublishedLevels(viewer.model):Promise.resolve(null);
     inspected??=readElements().then(elements=>(mep?inspectMEPElements:inspectElements)(elements,d.binding,readGeometry,(done,total)=>{if(run===revision)send(d.requestId,{phase:'loading',message:`Geometría y propiedades: ${done} de ${total} elementos`});})).catch(error=>{inspected=undefined;throw error;});
     const elements=await inspected;if(run!==revision)return;
-    const result=(mep?calculateMEPQuantities:calculateQuantities)(elements,d.binding,d.settings);
+    const publishedLevels=await levelsPromise;if(run!==revision)return;
+    const result=(mep?calculateMEPQuantities:calculateQuantities)(elements,d.binding,d.settings,publishedLevels);
     calculated=mep?scopeMEPCalculation(result,d.specialtyTemplate??'mep'):result;
     calculationId=d.requestId;
     send(d.requestId,{phase:'complete',calculation:calculated});
@@ -44,11 +48,16 @@ export function installQuantityV2(viewer,input,readElements){
    return;
   }
   if(!calculated){send(d.requestId,{phase:'error',message:'Espera a que termine el cálculo de esta vista'});return;}
+  if(d.operation==='inspect'){
+   const known=new Set(inventory().map(e=>e.dbId));
+   if(!Array.isArray(d.dbIds)||!d.dbIds.length||d.dbIds.some(id=>!Number.isSafeInteger(id)||!known.has(id)))return;
+   display(d.dbIds,'isolate');send(d.requestId,{phase:'visibility',mode:'inspection',count:d.dbIds.length,key:activeKey});return;
+  }
   if(d.operation==='filter'){
    const f=d.filter;
    if(!f||!['specialty','category','floor'].every(k=>typeof f[k]==='string'||Array.isArray(f[k])&&f[k].every(v=>typeof v==='string')))return;
    if((d.selectionRevision??0)!==selectionRevision)return;
-   const known=new Set(calculated.records.map(e=>e.dbId));
+   const known=new Set(inventory().map(e=>e.dbId));
    if(f.selection!=null&&(!Array.isArray(f.selection)||f.selection.some(id=>!Number.isSafeInteger(id)||!known.has(id))))return;
    activeIds=filterRecords(calculated.records,f).map(e=>e.dbId);activeKey=JSON.stringify(f);filterRevision++;
    const hasFilter=Boolean(calculated.mepScope)||['specialty','category','floor'].some(k=>f[k].length>0)||f.selection!=null;

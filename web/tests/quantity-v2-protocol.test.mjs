@@ -22,7 +22,7 @@ const elements=[1,2,3].map(dbId=>({dbId,externalId:'TEST_'+dbId,properties:[{dis
 test('MEP viewer calculates actual length and filters the same IDs; template changes cannot reuse structural extraction',async()=>{
  const pipes=[1,2].map(dbId=>({dbId,externalId:'TEST_MEP_'+dbId,properties:[{displayName:'ElementId',displayValue:String(dbId)},{displayName:'Especialidad',displayValue:dbId===1?'APF':'APC'},{displayName:'Category',displayValue:'Pipes'},{displayName:'Length',displayValue:dbId*2,units:'m'}]}));
  const f=fixture(async()=>pipes);try{
-  await f.send({operation:'calculate',template:'mep',binding,settings:defaultSettings()});const data=f.messages.at(-1).calculation;assert.equal(data.engine,'mep-quantities-v1.0');assert.deepEqual(data.records.map(e=>e.mep.quantity.value),[2,4]);
+  await f.send({operation:'calculate',template:'mep',binding,settings:defaultSettings()});const data=f.messages.at(-1).calculation;assert.equal(data.engine,'mep-quantities-v1.1');assert.deepEqual(data.records.map(e=>e.mep.quantity.value),[2,4]);
   await f.send({operation:'filter',filter:{specialty:['APF'],category:[],floor:[],selection:null}});assert.equal(f.messages.at(-1).count,1);assert.deepEqual(f.calls.findLast(c=>c[0]==='isolate')[1],[1]);
   await f.send({operation:'calculate',binding,settings:defaultSettings()});assert.equal(f.messages.at(-1).calculation.engine,'view-quantities-v2.5');assert.ok(f.messages.at(-1).calculation.records.every(e=>!e.mep));
  }finally{f.close();}
@@ -35,7 +35,10 @@ test('clearing filters and picking outside a specialty never expands its MEP qua
   assert.deepEqual(f.messages.at(-1).calculation.records.map(e=>e.dbId),[1]);
   const blank={specialty:[],category:[],floor:[],selection:null};
   await f.send({operation:'filter',filter:blank});assert.equal(f.messages.at(-1).count,1);assert.deepEqual(f.calls.findLast(c=>c[0]==='isolate')[1],[1]);
-  f.pick([2]);assert.deepEqual(f.messages.at(-1).dbIds,[]);
+  f.pick([2]);assert.deepEqual(f.messages.at(-1).dbIds,[2]);
+  await f.send({operation:'filter',filter:{...blank,selection:[2]},selectionRevision:f.messages.at(-1).selectionRevision});assert.equal(f.messages.at(-1).count,0);assert.equal(f.messages.at(-1).mode,'selection');
+  await f.send({operation:'inspect',dbIds:[2]});assert.deepEqual(f.calls.findLast(c=>c[0]==='isolate')[1],[2]);
+  const before=f.calls.length;await f.send({operation:'inspect',dbIds:[999]});assert.equal(f.calls.length,before);
   f.pick([]);await f.send({operation:'filter',filter:blank,selectionRevision:f.messages.at(-1).selectionRevision});assert.equal(f.messages.at(-1).count,1);
   await f.send({operation:'calculate',template:'mep',specialtyTemplate:'hot-water',binding,settings:defaultSettings()});assert.deepEqual(f.messages.at(-1).calculation.records.map(e=>e.dbId),[2]);
   await f.send({operation:'calculate',template:'mep',specialtyTemplate:'TEST_INVALID',binding,settings:defaultSettings()});assert.equal(f.messages.at(-1).phase,'error');

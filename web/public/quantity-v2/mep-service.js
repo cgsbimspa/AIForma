@@ -1,8 +1,9 @@
+import { resolveAECFloor } from './published-levels.js';
 import { extractElement, normalize, propertiesNamed, readText, readMeasure, sum, unavailable } from './properties.js';
 import { buildIntervals, resolveLevel, slabCandidates, UNRESOLVED } from './levels.js';
 import { validateSettings, filterRecords } from './quantity-service.js';
 import { mepCategories, mepSpecialties, mepRule, systemClassifications, systemClassificationSource } from './mep-catalog.js';
-export const MEP_ENGINE='mep-quantities-v1.0';
+export const MEP_ENGINE='mep-quantities-v1.1';
 const textNames={
  systemType:['System Type','Tipo de sistema'],systemClassification:['System Classification','Clasificación de sistema'],systemName:['System Name','Nombre de sistema','System','Sistema'],
  referenceLevel:['Reference Level','Nivel de referencia'],scheduleLevel:['Schedule Level','Nivel de planificación'],size:['Size','Tamaño'],shape:['Shape','Forma','Section Shape','Forma de sección'],
@@ -49,7 +50,7 @@ export function resolveMEPSystem(element,settings){
 }
 export function extractMEPElement(raw,binding){
  const base=extractElement(raw,binding),category=mepCategory(base.originalCategory);
- if(!category)return base;
+ if(!category)return {...base,publishedProperties:raw.properties.map(p=>({name:p.displayName??'',category:p.displayCategory??'',rawValue:String(p.displayValue??''),unit:String(p.units??'')}))};
  const text={...base.text,...Object.fromEntries(Object.entries(textNames).map(([key,names])=>[key,named(raw.properties,names,key)]))};
  const measures={...base.measures,...Object.fromEntries(Object.entries(measureNames).map(([key,names])=>[key,named(raw.properties,names,key,key==='connectorCount'?'count':'m')]))};
  // Keep native and reference levels independently, avoiding synthetic equivalences.
@@ -62,12 +63,12 @@ export function extractMEPElement(raw,binding){
 export async function inspectMEPElements(elements,binding,geometry,progress=()=>{}){
  if(!elements.length||new Set(elements.map(e=>e.dbId)).size!==elements.length)throw Error('Lectura vacía o elementos duplicados');
  const records=[];let scanned=0;
- for(const raw of elements){const e=extractMEPElement(raw,binding);if(e.mep||e.category==='Floors'&&e.specialty==='Hormigón'){e.geometry=await geometry(e.dbId,e.mep?'bounds':'mesh');records.push(e);}if(++scanned%100===0){progress(scanned,elements.length);await new Promise(resolve=>{const channel=new MessageChannel();channel.port1.onmessage=()=>{channel.port1.close();channel.port2.close();resolve();};channel.port2.postMessage(null);});}}
+ for(const raw of elements){const e=extractMEPElement(raw,binding);{e.geometry=await geometry(e.dbId,!e.mep&&e.category==='Floors'&&e.specialty==='Hormigón'?'mesh':'bounds');records.push(e);}if(++scanned%100===0){progress(scanned,elements.length);await new Promise(resolve=>{const channel=new MessageChannel();channel.port1.onmessage=()=>{channel.port1.close();channel.port2.close();resolve();};channel.port2.postMessage(null);});}}
  return records;
 }
 export function pipeQuantity(e){return {...e.measures.length,unit:'ml',formula:'SUM(Length)',rule:mepRule};}
 export function electricalQuantity(e){return pipeQuantity(e);}
-export function equipmentQuantity(e){return e.elementId?{value:1,unit:'un',source:'ELEMENT_COUNT',issue:null,inputs:e.text.elementId.inputs,formula:'COUNT(DISTINCT ElementId)',rule:mepRule}: {...unavailable('ElementId no publicado; no se confirma el conteo'),unit:'un',rule:mepRule};}
+export function equipmentQuantity(e){return e.elementId?{value:1,unit:'un',source:'ELEMENT_COUNT',issue:null,inputs:e.externalId?[...e.text.elementId.inputs,{name:'Autodesk externalId',category:'Identity',rawValue:e.externalId,unit:''}]:e.text.elementId.inputs,formula:e.externalId?'COUNT(DISTINCT externalId) en versión y vista':'COUNT(DISTINCT ElementId) en versión y vista',rule:mepRule}: {...unavailable('ElementId no publicado; no se confirma el conteo'),unit:'un',rule:mepRule};}
 export function ductQuantity(e){
  const length=pipeQuantity(e),{width,height,diameter}=e.measures;
  let surface={...unavailable('Faltan largo y dimensiones verificables de la sección'),unit:'m²',rule:mepRule};
@@ -88,17 +89,17 @@ export function resolveMEPFloor(e,resolver,settings,binding){
  if(floor.multilevel)return {...floor,resolvedBuildingLevel:'MULTILEVEL',floor_assignment_method:'MULTILEVEL',issue:'Cruza varios pisos. Largo completo en MULTILEVEL; distribución por piso no calculada'};
  return floor;
 }
-export function calculateMEPQuantities(inspected,binding,settings){
+export function calculateMEPQuantities(inspected,binding,settings,publishedLevels=null){
  validateSettings(settings);
- const resolver=buildIntervals(inspected,settings,binding),candidates=slabCandidates(inspected,settings.levelToleranceM),counts=new Map();
- for(const e of inspected.filter(e=>e.mep))for(const id of [e.externalId&&'external:'+e.externalId,e.elementId&&'element:'+e.elementId].filter(Boolean))counts.set(id,(counts.get(id)??0)+1);
+ const slabResolver=buildIntervals(inspected,settings,binding),resolver=slabResolver.issue&&publishedLevels?{...publishedLevels,publishedLevels}: {...slabResolver,publishedLevels},candidates=slabCandidates(inspected,settings.levelToleranceM),counts=new Map();
+ for(const e of inspected.filter(e=>e.mep))for(const id of [e.externalId?'external:'+e.externalId:e.elementId?'element:'+e.elementId:null].filter(Boolean))counts.set(id,(counts.get(id)??0)+1);
  const records=inspected.filter(e=>e.mep).map(e=>{
   const system=resolveMEPSystem(e,settings),definition=mepCategory(e.category),duct=definition.service==='duct'?ductQuantity(e):null;
   let quantity=duct?.length??(definition.service==='pipe'?pipeQuantity(e):definition.service==='electrical'?electricalQuantity(e):equipmentQuantity(e));
   let surface=duct?.surface??{...unavailable('No aplica a esta categoría'),unit:'m²'};
-  if(counts.get('external:'+e.externalId)>1||counts.get('element:'+e.elementId)>1){quantity={...quantity,value:null,source:'NOT_AVAILABLE',issue:'Identificador repetido; requiere revisión'};surface={...surface,value:null,source:'NOT_AVAILABLE',issue:'Identificador repetido; requiere revisión'};}
+  if(counts.get(e.externalId?'external:'+e.externalId:'element:'+e.elementId)>1){quantity={...quantity,value:null,source:'NOT_AVAILABLE',issue:'Identificador repetido; requiere revisión'};surface={...surface,value:null,source:'NOT_AVAILABLE',issue:'Identificador repetido; requiere revisión'};}
   const unknown=unavailable('No aplica a la plantilla MEP');
-  return {...e,specialty:system.specialty,specialtyRule:system.specialty?{id:mepRule.id,version:mepRule.version,basis:system.source}:null,mep:{...e.mep,system,quantity,surface,isMultiLevel:false},quantities:{concrete:unknown,formwork:unknown,rebar:unknown},rebar:{diameterMm:null,barLengthM:null,count:null,totalLengthM:null,unitWeightKgM:null,weight:unknown,table:null},floor:resolveMEPFloor(e,resolver,settings,binding)};
+  return {...e,specialty:system.specialty,specialtyRule:system.specialty?{id:mepRule.id,version:mepRule.version,basis:system.source}:null,mep:{...e.mep,system,quantity,surface,isMultiLevel:false},quantities:{concrete:unknown,formwork:unknown,rebar:unknown},rebar:{diameterMm:null,barLengthM:null,count:null,totalLengthM:null,unitWeightKgM:null,weight:unknown,table:null},floor:(()=>{const base=resolveMEPFloor(e,slabResolver,settings,binding);return base.floor_assignment_method==='MANUAL'||!slabResolver.issue||!publishedLevels?base:resolveAECFloor(e,publishedLevels,settings.levelToleranceM,base);})()};
  }).map(e=>({...e,mep:{...e.mep,isMultiLevel:e.floor.multilevel}}));
  return {binding,engine:MEP_ENGINE,calculatedAt:new Date().toISOString(),settings,records,slabs:candidates,referenceRecords:inspected.filter(e=>!e.mep),resolver,coverage:{inspected:records.length,unclassified:records.filter(e=>!e.specialty).length,unknownCategory:0,geometryUnavailable:records.filter(e=>!e.geometry?.available).length,unresolvedFloors:records.filter(e=>e.floor.resolvedBuildingLevel===UNRESOLVED).length}};
 }

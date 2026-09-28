@@ -54,7 +54,7 @@ test('count uses unique ElementId, not published Quantity or geometry instances'
  const r=calculate([element(1,'Pipe Fittings',[p('Quantity',20)])]).records[0];assert.equal(r.mep.quantity.value,1);
  const rawElement=raw(2,'Pipe Fittings');rawElement.properties=rawElement.properties.filter(p=>p.displayName!=='ElementId');
  const missing=extractMEPElement(rawElement,binding);missing.geometry={available:false,issue:'TEST'};assert.equal(calculate([missing]).records[0].mep.quantity.value,null);
- const duplicate=element(2,'Pipe Fittings');duplicate.elementId='1';const data=calculate([element(1,'Pipe Fittings'),duplicate]);assert.ok(data.records.every(e=>e.mep.quantity.value===null));
+ const duplicate=element(2,'Pipe Fittings');duplicate.elementId='1';const data=calculate([element(1,'Pipe Fittings'),duplicate]);assert.ok(data.records.every(e=>e.mep.quantity.value===1),'different external IDs disambiguate repeated linked ElementIds');duplicate.externalId='TEST_UNIQUE_1';assert.ok(calculate([element(1,'Pipe Fittings'),duplicate]).records.every(e=>e.mep.quantity.value===null));
 });
 test('unknown and ambiguous units or measures stay pending; zero is retained only when published',()=>{
  const data=calculate([element(1,'Pipes',[p('Length',10)]),element(2,'Pipes',[p('Length',0,'m')]),element(3,'Pipes',[p('Length',2,'m'),p('Longitud',5,'m')]),element(4,'Pipes',[p('Length',-2,'m')])]);
@@ -88,11 +88,18 @@ test('multilevel pipe retains complete length in MULTILEVEL instead of a predomi
 });
 test('inspection retains actual reference slabs and MEP bounds, never a made-up length from bounding boxes',async()=>{
  const geometries=[];const read=await inspectMEPElements([raw(1,'Pipes'),raw(2,'Floors',[p('Material','H.A.')]),raw(3,'Walls')],binding,async(id,mode)=>{geometries.push([id,mode]);return {available:true,issue:null,bbox:{min:[0,0,0],max:[1,2,3]}};});
- assert.deepEqual(geometries,[[1,'bounds'],[2,'mesh']]);const data=calculate(read);assert.equal(data.records.length,1);assert.equal(data.referenceRecords.length,1);assert.equal(data.records[0].mep.quantity.value,null);assert.equal(calculationSchema.safeParse(data).success,true);
+ assert.deepEqual(geometries,[[1,'bounds'],[2,'mesh'],[3,'bounds']]);const data=calculate(read);assert.equal(data.records.length,1);assert.equal(data.referenceRecords.length,2);assert.equal(data.records[0].mep.quantity.value,null);assert.equal(calculationSchema.safeParse(data).success,true);
 });
 test('comparison rejects other models, separates metrics, and does not turn missing into zero',()=>{
  const a=calculate([element(1,'Pipes',[p('Length',2,'m')])]),b=calculate([element(1,'Pipes',[p('Length',5,'m')]),element(2,'Pipe Fittings')]);b.binding={...binding,versionId:'TEST_V2',versionNumber:2};
  assert.equal(compareMEP(a,b).metrics.find(m=>m.metric==='pipes').difference,3);assert.equal(compareMEP(a,b).metrics.find(m=>m.metric==='pipeFittings').difference,null);
  assert.throws(()=>compareMEP(a,{...b,binding:{...b.binding,itemId:'TEST_OTHER'}}));
  assert.equal(calculationSchema.safeParse({...a,records:a.records.map(e=>({...e,source:{...e.source,projectId:'TEST_FOREIGN'}}))}).success,false);
+});
+
+test('AEC floor resolution survives validation and never replaces a confirmed manual floor',()=>{
+ const e=element(1,'Pipes',[p('Especialidad','APF'),p('Length',2,'m')]);e.geometry={available:true,issue:null,bbox:{min:[0,0,1],max:[1,1,2]}};
+ const levels={source:'AEC_MODEL_DATA',issue:null,intervals:[{id:'TEST_LEVEL',label:'TEST_PISO',lowerZ:0,upperZ:3}]};
+ const data=calculateMEPQuantities([e],binding,defaultSettings(),levels);assert.equal(data.records[0].floor.resolvedBuildingLevel,'TEST_PISO');assert.equal(calculationSchema.safeParse(scopeMEPCalculation(data,'cold-water')).success,true);
+ const settings={...defaultSettings(),levelBinding:{urn:binding.urn,viewId:binding.viewId},manualFloors:[{dbId:1,label:'TEST_MANUAL'}]};assert.equal(calculateMEPQuantities([e],binding,settings,levels).records[0].floor.resolvedBuildingLevel,'TEST_MANUAL');
 });

@@ -14,7 +14,13 @@ export function createGeometryService(viewer){
   let bbox=null;
   try{
    const box=new THREE.Box3();
-   for(const id of ids){const part=new THREE.Box3();fragments.getOriginalWorldBounds(id,part);box.union(part);}
+   for(const id of ids){
+    // APS 7 getOriginalWorldBounds writes six numbers, not a THREE.Box3.
+    // Original bounds deliberately exclude explode/animation offsets.
+    const bounds=new Float64Array(6).fill(NaN);fragments.getOriginalWorldBounds(id,bounds);
+    if(!Array.from(bounds).every(Number.isFinite)||[0,1,2].some(i=>bounds[i]>bounds[i+3]))throw Error('Caja original incompleta para un fragmento');
+    box.union(new THREE.Box3(new THREE.Vector3(...bounds.slice(0,3)),new THREE.Vector3(...bounds.slice(3,6))));
+   }
    if(!box.isEmpty())bbox={min:[box.min.x,box.min.y,box.min.z].map(v=>v*scale),max:[box.max.x,box.max.y,box.max.z].map(v=>v*scale)};
    if(!zUp)throw Error('Eje vertical de la vista no compatible con el análisis Z');
    if(detail==='bounds'){
