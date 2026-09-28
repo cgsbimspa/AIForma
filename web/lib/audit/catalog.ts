@@ -1,5 +1,6 @@
 import type { AuditRule, AuditTolerance, AuditConfiguration, VerticalReferenceCatalog } from './contracts.ts';
 
+export const auditRuleSetVersion = '1.0.1';
 // Controlled source: user specification, 2026-09-27, docs/auditoria-especificacion.txt.
 export const chapterNames:Record<string,string>={G01:'Identificación',G02:'Coordenadas',G03:'Niveles',G04:'Grillas',G05:'Categorías',G06:'Familias y tipos',G07:'Geometría',G08:'Salud técnica'};
 const toleranceDefinitions = [
@@ -141,8 +142,12 @@ const methods:Record<string,string>={
  'G03-E01':'Agrupar referencias verticales publicadas por texto exacto','G03-E02':'Agrupar categorías por referencia publicada','G03-E03':'Agrupar familias por referencia publicada','G03-E04':'Agrupar tipos por referencia publicada',
  'G04-A01':'Identificadores de objetos Grids presentes en la vista','G04-A02':'Nombres publicados de objetos Grids presentes en la vista',
  'G04-B01':'Comparación exacta de nombres de grillas identificadas por objetos distintos en la vista',
+ 'G05-A01':'Inventario y conteo de categorías publicadas por propiedad o árbol de la vista',
+ 'G06-A01':'Inventario y conteo de nombres de familia publicados como propiedad, sin inferir familias ausentes',
+ 'G06-A03':'Inventario y conteo de tipos publicados en los objetos del alcance, conservando categoría y familia disponibles',
+ 'G08-A01':'Ficha de la fuente verificada y de la cobertura de lectura de la vista; no certifica salud técnica',
 };
 export const auditRules:AuditRule[]=definitions.trim().split('\n').map(line=>{
  const [ruleId,name,type,tolerance]=line.split('|'), chapter=ruleId.slice(0,3), controlType=({I:'INFORMATION',D:'DETERMINISTIC',C:'CALCULATED',S:'SEMANTIC_AI'} as const)[type as 'I'|'D'|'C'|'S'];
- return {ruleId,chapter,group:ruleId.split('-')[1].slice(0,1),name,description:name,specialty:ruleId.startsWith('G04-E')?'ESTRUCTURA':'Todas',category:ruleId.startsWith('G03-C')?'Según catálogo vertical':'Todas',controlType,scope:'VIEW',dataSource:'Autodesk Model Derivative · vista publicada',property:'Según evidencia de la ejecución',method:methods[ruleId]??'Por definir',tolerance:tolerance??null,possibleResults:controlType==='INFORMATION'?['INFORMATION','NOT EVALUATED']:controlType==='SEMANTIC_AI'?['WARNING','NOT EVALUATED','N/A']:['PASS','WARNING','FAIL','NOT EVALUATED','N/A'],severity:controlType==='INFORMATION'?'Informativa':'Por Configurar',evidenceRequired:'Fuente, versión, vista, propiedad, valor e identificadores afectados',goodPractice:'Por Configurar',catalog:'GLOBAL → COMPANY → PROJECT',configurationStatus:methods[ruleId]&&!tolerance?'Disponible':'Por Configurar',version:'1.0.0',active:true};
+ return {ruleId,chapter,group:ruleId.split('-')[1].slice(0,1),name,description:name,specialty:ruleId.startsWith('G04-E')?'ESTRUCTURA':'Todas',category:ruleId.startsWith('G03-C')?'Según catálogo vertical':'Todas',controlType,scope:'VIEW',dataSource:'Autodesk Model Derivative · vista publicada',property:'Según evidencia de la ejecución',method:methods[ruleId]??'Por definir',tolerance:tolerance??null,possibleResults:controlType==='INFORMATION'?['INFORMATION','NOT EVALUATED']:controlType==='SEMANTIC_AI'?['WARNING','NOT EVALUATED','N/A']:['PASS','WARNING','FAIL','NOT EVALUATED','N/A'],severity:controlType==='INFORMATION'?'Informativa':'Por Configurar',evidenceRequired:'Fuente, versión, vista, propiedad, valor e identificadores afectados',goodPractice:'Por Configurar',catalog:'GLOBAL → COMPANY → PROJECT',configurationStatus:methods[ruleId]&&!tolerance?'Disponible':'Por Configurar',version:auditRuleSetVersion,active:true};
 });

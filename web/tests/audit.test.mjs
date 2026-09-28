@@ -80,6 +80,15 @@ test('MEP element-grid rules are N/A and disabled rules do not execute',()=>{
  const run=execute(inventory([]),{configuration:{...configuration,discipline:'MEP',disabledRules:['G01-001']}});
  assert.ok(run.findings.filter(f=>f.ruleId.startsWith('G04-E')).every(f=>f.result==='N/A'));assert.ok(!run.findings.some(f=>f.ruleId==='G01-001'));
 });
+test('category, family and type inventories count verified values and retain unavailable groups without guessing',()=>{
+ const a=row(1,'TEST instance A','Floors',{Level:'TEST N1'}),b=row(2,'TEST instance B','Floors');
+ a.properties.Identity.Family='TEST family';a.properties.Identity['Type Name']='TEST type';
+ const run=execute(inventory([a,b]));
+ assert.equal(run.findings.find(f=>f.ruleId==='G05-A01'&&f.result==='INFORMATION').observedValue[0].count,2);
+ assert.equal(run.findings.find(f=>f.ruleId==='G06-A01'&&f.result==='INFORMATION').observedValue[0].value,'TEST family');
+ assert.equal(run.findings.find(f=>f.ruleId==='G06-A03'&&f.result==='NOT EVALUATED').affectedElements[0].dbId,2);
+ assert.equal(run.findings.find(f=>f.ruleId==='G08-A01').result,'INFORMATION');
+});
 test('provider handles 202 pending without interpreting it as an empty model',async()=>{
  await assert.rejects(readAuditView('TEST_TOKEN',source,undefined,async()=>new Response('{}',{status:202})),/audit_derivative_pending/);
  await assert.rejects(readAuditView('TEST_TOKEN',{...source,view:{...source.view,role:'2d'}},undefined,async()=>new Response('{}')),/audit_view_required/);

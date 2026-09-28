@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { auditRules, effectiveTolerances } from './catalog.ts';
+import { auditRules, auditRuleSetVersion, effectiveTolerances } from './catalog.ts';
 import { property } from './provider.ts';
 import type { AuditConfiguration, AuditElement, AuditFinding, AuditInventory, AuditResult, AuditRun, CompanyAuditCatalog, ProjectAuditCatalog } from './contracts.ts';
 
@@ -87,8 +87,20 @@ export function executeAudit(input:{configuration:AuditConfiguration;inventory:A
    add(r,available.length?'INFORMATION':'NOT EVALUATED','Distribución según referencias publicadas exactas; no se equiparan nombres parecidos ni se asignan pisos por inferencia.',[],[...byLevel].map(([level,es])=>({level,count:es.length,values:r==='G03-E02'?[...new Set(es.map(e=>e.category))]:r==='G03-E03'?[...new Set(es.map(e=>e.family))]:r==='G03-E04'?[...new Set(es.map(e=>e.type))]:es.map(e=>e.elementId)})));continue;
   }
   if(['G04-A01','G04-A02'].includes(r)){add(r,inventory.grids.length?'INFORMATION':'NOT EVALUATED',inventory.grids.length?'Objetos de grilla publicados en la vista.':'No se recuperaron objetos de grilla identificables de esta vista; no se afirma que el RVT carezca de ejes.',inventory.grids,inventory.grids.map(e=>({id:e.elementId,uniqueId:e.uniqueId,name:e.name})));continue;}
+  if(['G05-A01','G06-A01','G06-A03'].includes(r)){
+   const key=r==='G05-A01'?'category':r==='G06-A01'?'family':'type';
+   const known=elements.filter(e=>e[key]!==null),missing=elements.filter(e=>e[key]===null);
+   const groups=new Map<string,{category:string|null;family:string|null;value:string;count:number}>();
+   for(const e of known){const groupKey=JSON.stringify([e.category,key==='type'?e.family:null,e[key]]);const group=groups.get(groupKey)??{category:e.category,family:key==='type'?e.family:null,value:e[key]!,count:0};group.count++;groups.set(groupKey,group);}
+   if(known.length)add(r,'INFORMATION','Inventario de valores publicados en los elementos de esta vista, con conteo por grupo. No equivale a todo el RVT.',known,[...groups.values()],null,key);
+   if(missing.length||!known.length)add(r,'NOT EVALUATED','No se obtuvo este dato para los elementos indicados; no se completa a partir de nombres parecidos.',missing,{unavailable:missing.length},null,key);
+   continue;
+  }
+  if(r==='G08-A01'){
+   add(r,'INFORMATION','Ficha de la fuente y de la lectura de esta ejecución. El total corresponde sólo al alcance de la vista.',[],{file:source.fileName,version:source.version.id,view:source.view.id,objectsRead:elements.length,propertiesUnavailable:inventory.missing,readAt:inventory.fetchedAt,population:inventory.population});continue;
+  }
   if(r.startsWith('G04-E')&&configuration.discipline==='MEP'){add(r,'N/A','Relación elemento / grilla no aplicable inicialmente a MEP según el alcance definido.');continue;}
   add(r,'NOT EVALUATED',rule.tolerance?`${rule.tolerance}: ${tolerances.find(t=>t.id===rule.tolerance)?.status??'Por Configurar'}. Método, geometría o criterios adicionales pendientes de definición/verificación.`:rule.method==='Por definir'?'Método o criterio: Por definir. No se ha emitido una conclusión técnica.':'La fuente no entrega evidencia suficiente para esta comprobación.');
  }
- return {id,projectId:source.scope.projectId,modelId:source.scope.itemId,versionId:source.version.id,viewId:source.view.id,discipline:configuration.discipline,ruleSetId:configuration.ruleSetId,ruleSetVersion:'1.0.0',companyCatalogId:`${companyCatalog.companyId}:v${companyCatalog.version}`,projectCatalogId:`${projectCatalog.projectId}:v${projectCatalog.version}`,startedAt:input.startedAt,completedAt,status:findings.some(f=>f.result==='NOT EVALUATED')?'PARTIAL':'COMPLETED',createdBy:input.createdBy,source,configuration,rules,companyCatalog,projectCatalog,tolerances,engineVersion:'audit-engine-1.0.1',findings,inventory:{...inventory,elements},scope:{id:randomUUID(),auditRunId:id,scopeType:'VIEW',viewId:source.view.id,modelId:source.scope.itemId,elementCount:elements.length,status:inventory.missing?'PARTIAL':'VERIFIED',population:inventory.population,unavailableCount:inventory.missing}};
+ return {id,projectId:source.scope.projectId,modelId:source.scope.itemId,versionId:source.version.id,viewId:source.view.id,discipline:configuration.discipline,ruleSetId:configuration.ruleSetId,ruleSetVersion:auditRuleSetVersion,companyCatalogId:`${companyCatalog.companyId}:v${companyCatalog.version}`,projectCatalogId:`${projectCatalog.projectId}:v${projectCatalog.version}`,startedAt:input.startedAt,completedAt,status:findings.some(f=>f.result==='NOT EVALUATED')?'PARTIAL':'COMPLETED',createdBy:input.createdBy,source,configuration,rules,companyCatalog,projectCatalog,tolerances,engineVersion:'audit-engine-1.0.2',findings,inventory:{...inventory,elements},scope:{id:randomUUID(),auditRunId:id,scopeType:'VIEW',viewId:source.view.id,modelId:source.scope.itemId,elementCount:elements.length,status:inventory.missing?'PARTIAL':'VERIFIED',population:inventory.population,unavailableCount:inventory.missing}};
 }
