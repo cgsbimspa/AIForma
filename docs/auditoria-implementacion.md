@@ -35,3 +35,5 @@ Hallazgo no equivale a incidencia: el botón guarda una solicitud explícita tra
 ## Verificación
 
 Fixtures exclusivamente TEST: límites de vista, nodos agrupadores, propiedades directas/anidadas, ambigüedad, ausencia de datos, tolerancias y unidades, mapeo base/superior, puntuación, N/A de MEP, API pendiente, cifrado, aislamiento entre proyectos/organizaciones, herencia y revisiones inmutables. Compilación TypeScript/Next y lint de los archivos afectados.
+
+La categoría también puede proceder del árbol publicado, con etiqueta exacta del catálogo y una sola coincidencia en sus ancestros. Se conserva la ruta y el endpoint del árbol como evidencia; un nombre de instancia o una ruta ambigua no clasifica el elemento. Referencia del proveedor: https://www.autodesk.com/support/technical/article/caas/tsarticles/ts/7mkuSf30eQ0mX8fJZAlUOg.html

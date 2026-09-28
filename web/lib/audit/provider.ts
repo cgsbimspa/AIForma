@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { DataError } from '../autodesk/data.ts';
 import type { QuantitySource } from '../quantities/contracts.ts';
 import type { AuditElement, AuditInventory } from './contracts.ts';
+import { verticalReferences } from './catalog.ts';
 
 // Published APS API: https://aps.autodesk.com/blog/advanced-query-model-derivative-api
 const propertiesSchema=z.object({data:z.object({collection:z.array(z.object({objectid:z.number().int().nonnegative(),externalId:z.string().optional(),name:z.string(),properties:z.record(z.unknown())})).max(150000)})});
@@ -40,8 +41,15 @@ export function parseInventory(tree:unknown,properties:unknown,source:QuantitySo
   const el:AuditElement={elementId:'',dbId:row.objectid,uniqueId:row.externalId??null,name:row.name,category:null,family:null,type:null,level:null,properties:row.properties};
   el.category=scalar(el,['Category','Categoría']);el.family=scalar(el,['Family','Familia']);el.type=scalar(el,['Type Name','Nombre de tipo','Type','Tipo']);
   const nativeId=scalar(el,['ElementId','Element ID','Id de elemento']);if(nativeId)el.elementId=nativeId;
-  // Category nodes are explicit object-tree labels, not a classification inferred from an element name.
-  if(!el.category){const known=(ancestors.get(row.objectid)??[]).filter(n=>['Levels','Niveles','Grids','Rejillas','Ejes'].includes(n));if(known.length===1)el.category=known[0];}
+  // Revit Model Tree publishes Category → Family → Type. Preserve the path and
+  // accept only unambiguous, exact category labels from the defined catalog.
+  // Never classify using words in the instance name or a similar family name.
+  el.treePath=ancestors.get(row.objectid)??[];el.categorySource=el.category?'property':null;
+  if(!el.category){
+   const categories=new Set([...verticalReferences.map(m=>m.category),'Levels','Niveles','Grids','Rejillas','Ejes']);
+   const known=el.treePath.filter(n=>categories.has(n));
+   if(known.length===1){el.category=known[0];el.categorySource='tree';}
+  }
   elements.push(el);
  }
  return {elements,levels:elements.filter(e=>['Levels','Niveles'].includes(e.category??'')),grids:elements.filter(e=>['Grids','Rejillas','Ejes'].includes(e.category??'')),endpoint,treeEndpoint,fetchedAt:new Date().toISOString(),missing:[...leaves].filter(id=>!seen.has(id)).length,excluded,population:'Objetos hoja del árbol de la vista publicada con propiedades recuperadas. Los nodos agrupadores se excluyen; no representa todo el archivo RVT.'};

@@ -36,6 +36,17 @@ test('APS direct child and nested properties are both supported; conflicting val
  assert.equal(inv.elements[0].category,'Floors');const run=execute(inv);
  assert.equal(run.inventory.elements[0].level,'TEST N1');assert.equal(run.inventory.elements[1].level,null);
 });
+test('published category ancestors enable exact vertical mappings, retaining source paths and rejecting ambiguity',()=>{
+ const properties={data:{collection:[{objectid:1,name:'TEST object',externalId:'TEST_UID_1',properties:{Constraints:{'Base Constraint':'TEST N1','Top Constraint':'TEST N2'}}}]}};
+ const tree={data:{objects:[{objectid:900,name:'TEST model',objects:[{objectid:901,name:'Walls',objects:[{objectid:902,name:'TEST family',objects:[{objectid:1}]}]}]}]}};
+ const inv=parseInventory(tree,properties,source,'TEST_PROPERTIES','TEST_TREE');
+ assert.equal(inv.elements[0].category,'Walls');assert.equal(inv.elements[0].categorySource,'tree');
+ const finding=execute(inv).findings.find(f=>f.ruleId==='G03-C01'&&f.result==='PASS');
+ assert.ok(finding);assert.equal(finding.affectedElements[0].level,'TEST N1');
+ assert.equal(finding.evidence[1].source,'TEST_TREE');assert.deepEqual(finding.evidence[1].observedValue[0].path,['TEST model','Walls','TEST family']);
+ tree.data.objects[0].objects[0].objects[0].name='Floors';
+ assert.equal(parseInventory(tree,properties,source,'TEST_PROPERTIES','TEST_TREE').elements[0].category,null);
+});
 test('unavailable levels are not declared nonexistent; incomplete data is not PASS or FAIL',()=>{
  const run=execute(inventory([row(1,'TEST slab','Floors',{Level:'N2'})],[2]));
  assert.equal(run.scope.status,'PARTIAL');assert.equal(run.findings.find(f=>f.ruleId==='G03-B01').result,'NOT EVALUATED');
