@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { sourceSchema } from '../quantities/contracts.ts';
+import type { AuditAecInventory } from './grids.ts';
 
 export const auditResults = ['PASS','WARNING','FAIL','NOT EVALUATED','N/A','INFORMATION'] as const;
 export type AuditResult = typeof auditResults[number];
@@ -7,7 +8,7 @@ export const toleranceSchema = z.object({ id:z.string().min(1).max(80), area:z.s
 export type AuditTolerance = z.infer<typeof toleranceSchema>;
 export type AuditRule = {
  ruleId:string; chapter:string; group:string; name:string; description:string; specialty:string; category:string;
- controlType:'INFORMATION'|'DETERMINISTIC'|'CALCULATED'|'SEMANTIC_AI'; scope:'VIEW'; dataSource:string;
+ controlType:'INFORMATION'|'DETERMINISTIC'|'CALCULATED'|'SEMANTIC_AI'; scope:'VIEW'|'VIEW_AND_MODEL_DATUM'; dataSource:string;
  property:string; method:string; tolerance:string|null; possibleResults:AuditResult[]; severity:string;
  evidenceRequired:string; goodPractice:string; catalog:string; configurationStatus:string; version:string; active:boolean;
 };
@@ -26,7 +27,7 @@ export type AuditEvidence = { source:string; property:string; observedValue:unkn
 export type AffectedElement = Omit<AuditElement,'properties'> & { findingId:string; modelId:string };
 export type AuditFinding = { id:string; auditRunId:string; ruleId:string; result:AuditResult; severity:string; title:string; description:string; observedValue:unknown; expectedValue:unknown; toleranceId:string|null; evidence:AuditEvidence[]; affectedElements:AffectedElement[]; createdAt:string };
 export type AuditScope = { id:string; auditRunId:string; scopeType:'VIEW'|'MODEL'|'FILTERED_MODEL'; viewId:string; modelId:string; elementCount:number|null; status:'VERIFIED'|'PARTIAL'|'Por Configurar'; population:string; unavailableCount:number };
-export type AuditInventory = { elements:AuditElement[]; levels:AuditElement[]; grids:AuditElement[]; endpoint:string; treeEndpoint:string; fetchedAt:string; missing:number; excluded:number; population:string };
+export type AuditInventory = { elements:AuditElement[]; levels:AuditElement[]; grids:AuditElement[]; aec?:AuditAecInventory; endpoint:string; treeEndpoint:string; fetchedAt:string; missing:number; excluded:number; population:string };
 export type AuditRun = {
  id:string; projectId:string; modelId:string; versionId:string; viewId:string; discipline:string; ruleSetId:string; ruleSetVersion:string;
  companyCatalogId:string; projectCatalogId:string; startedAt:string; completedAt:string; status:'COMPLETED'|'PARTIAL'; createdBy:string;

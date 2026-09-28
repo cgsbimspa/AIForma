@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { auditRules, auditRuleSetVersion, effectiveTolerances } from './catalog.ts';
 import { property } from './provider.ts';
+import { gridChordAngle,repeatedGridLabels } from './grids.ts';
 import type { AuditConfiguration, AuditElement, AuditFinding, AuditInventory, AuditResult, AuditRun, CompanyAuditCatalog, ProjectAuditCatalog } from './contracts.ts';
 
 // Do not interpret unitless values, display strings containing unknown units or ambiguous properties.
@@ -50,7 +51,7 @@ export function executeAudit(input:{configuration:AuditConfiguration;inventory:A
   const r=rule.ruleId;
   if(r in metadata){const v=metadata[r];add(r,v===null||r==='G01-008'?'NOT EVALUATED':'INFORMATION',r==='G01-004'?'Especialidad declarada por el usuario; no inferida del contenido.':r==='G01-008'?'Autodesk devuelve createTime, fecha de creación de esta versión. No confirma por separado la fecha de publicación de la vista en Revit.':'Dato de la fuente Autodesk verificada.',[],v);continue;}
   if(r==='G03-A01'){add(r,inventory.levels.length?'INFORMATION':'NOT EVALUATED',inventory.levels.length?'Niveles recuperados en la vista; elevaciones sin unidad explícita permanecen no disponibles.':'La vista no publica objetos de nivel identificables. Las referencias de los elementos se muestran por separado.',inventory.levels,inventory.levels.map(e=>({id:e.elementId,uniqueId:e.uniqueId,name:e.name,elevation:property(e,['Elevation','Elevación'])?.value??null})));continue;}
-  if(r==='G03-B01'||r==='G04-B01'){duplicates(r,r==='G03-B01'?inventory.levels:inventory.grids);continue;}
+  if(r==='G03-B01'){duplicates(r,inventory.levels);continue;}
   if(r==='G03-B03'||r==='G03-B04'){
    const t=tolerances.find(t=>t.id===rule.tolerance);
    if(t?.status!=='Confirmada'||t.unit!=='mm'){add(r,'NOT EVALUATED',`${rule.tolerance}: Por Configurar. Cero no equivale a una tolerancia confirmada.`);continue;}
@@ -86,7 +87,26 @@ export function executeAudit(input:{configuration:AuditConfiguration;inventory:A
    const available=elements.filter(e=>e.level!==null);const byLevel=new Map<string,AuditElement[]>();for(const e of available)byLevel.set(e.level!,[...(byLevel.get(e.level!)??[]),e]);
    add(r,available.length?'INFORMATION':'NOT EVALUATED','Distribución según referencias publicadas exactas; no se equiparan nombres parecidos ni se asignan pisos por inferencia.',[],[...byLevel].map(([level,es])=>({level,count:es.length,values:r==='G03-E02'?[...new Set(es.map(e=>e.category))]:r==='G03-E03'?[...new Set(es.map(e=>e.family))]:r==='G03-E04'?[...new Set(es.map(e=>e.type))]:es.map(e=>e.elementId)})));continue;
   }
-  if(['G04-A01','G04-A02'].includes(r)){add(r,inventory.grids.length?'INFORMATION':'NOT EVALUATED',inventory.grids.length?'Objetos de grilla publicados en la vista.':'No se recuperaron objetos de grilla identificables de esta vista; no se afirma que el RVT carezca de ejes.',inventory.grids,inventory.grids.map(e=>({id:e.elementId,uniqueId:e.uniqueId,name:e.name})));continue;}
+  if(['G04-A01','G04-A02','G04-A03','G04-A04','G04-A05','G04-B01'].includes(r)){
+   let available=false;
+   if(['G04-A01','G04-A02'].includes(r)&&inventory.grids.length){available=true;add(r,'INFORMATION','Ejes identificados en nodos del árbol de la vista. Los registros AEC se muestran por separado; no se suman como elementos únicos.',inventory.grids,inventory.grids.map(e=>({id:e.elementId||null,uniqueId:e.uniqueId,name:e.name,path:e.treePath})));}
+   for(const file of inventory.aec?.files??[]){
+    const rows=file.grids;if(!rows.length)continue;
+    const values=r==='G04-B01'?repeatedGridLabels(file).map(group=>({document:group[0].document,label:group[0].label,records:group.map(g=>({id:g.id,record:g.key}))})):rows.map(g=>({id:g.id,name:g.label,document:g.document,record:g.key,...(['G04-A03','G04-A04','G04-A05'].includes(r)?{segments:g.segments.map(s=>r==='G04-A03'?{id:s.guid,publishedType:s.type}:r==='G04-A04'?{id:s.guid,chordAngleXYDegrees:gridChordAngle(s)}:{id:s.guid,start:s.start,end:s.end}),geometryComplete:g.geometryComplete}:{})}));
+    const hasData=r==='G04-A03'?rows.some(g=>g.segments.some(s=>s.type!==null)):r==='G04-A04'?rows.some(g=>g.segments.some(s=>gridChordAngle(s)!==null)):r==='G04-A05'?rows.some(g=>g.segments.some(s=>s.start&&s.end)):true;
+    const description=r==='G04-B01'?(values.length?'Nombres repetidos dentro del mismo documento publicado. Son candidatos para revisar: AEC no confirma por sí solo la instancia del vínculo. Nombres iguales en documentos diferentes no se consideran duplicados.':'Sin nombres repetidos dentro de cada documento identificado en este archivo AEC. La identidad de instancias y la cobertura de todos los vínculos no están certificadas.'):r==='G04-A03'?'Código de tipo geométrico tal como lo publica Autodesk. No se interpreta un código desconocido como recta o curva.':r==='G04-A04'?'Ángulo XY entre los extremos publicados, módulo 180°, calculado de forma determinística. En una curva es la dirección de la cuerda, no la tangente. No evalúa alineación entre modelos.':r==='G04-A05'?'Coordenadas originales de los extremos AEC. Unidad y transformación entre documentos no verificadas: no se convierten a mm ni se comparan posiciones de vínculos.':'Referencias AEC de esta versión, con el documento de origen publicado; pueden existir aunque no haya objetos Grids visibles en la vista.';
+    add(r,hasData?'INFORMATION':'NOT EVALUATED',description,[],values);
+    const finding=findings.at(-1)!;
+    finding.evidence=[{...finding.evidence[0],source:file.endpoint,property:r==='G04-B01'?'grids.document + grids.label':r==='G04-A04'?'grids.segments.points → atan2(dy,dx)':'grids',unit:r==='G04-A04'?'grados':null,geometryReference:r==='G04-A05'?'AEC: coordenadas originales; unidad y marco entre vínculos no verificados':null,fetchedAt:inventory.aec!.fetchedAt}];
+    if(hasData)available=true;
+   }
+   if(r==='G04-B01'&&inventory.grids.length&&!inventory.aec?.files.some(f=>f.grids.length)){
+    add(r,'NOT EVALUATED','La vista entrega ejes, pero no se confirmó su documento e instancia de origen. No se marcan nombres repetidos entre vínculos como errores.',inventory.grids,inventory.grids.map(g=>({id:g.uniqueId,name:g.name,path:g.treePath})));available=true;
+   }
+   if(!available)add(r,'NOT EVALUATED',inventory.aec?.status==='AVAILABLE'?'No se recuperaron datos suficientes para este control de grillas en las fuentes consultadas. No demuestra ausencia de ejes en el RVT.':inventory.aec?.message??'Esta auditoría anterior sólo consultó la vista. Ejecuta una nueva auditoría para ampliar la búsqueda a los datos AEC.',[],{viewGridRecords:inventory.grids.length,aecStatus:inventory.aec?.status??'NOT_QUERIED'});
+   else if(inventory.aec&&inventory.aec.status!=='AVAILABLE')add(r,'NOT EVALUATED',inventory.aec.message,[],{aecStatus:inventory.aec.status,attempts:inventory.aec.attempts});
+   continue;
+  }
   if(['G05-A01','G06-A01','G06-A03'].includes(r)){
    const key=r==='G05-A01'?'category':r==='G06-A01'?'family':'type';
    const known=elements.filter(e=>e[key]!==null),missing=elements.filter(e=>e[key]===null);
@@ -102,5 +122,5 @@ export function executeAudit(input:{configuration:AuditConfiguration;inventory:A
   if(r.startsWith('G04-E')&&configuration.discipline==='MEP'){add(r,'N/A','Relación elemento / grilla no aplicable inicialmente a MEP según el alcance definido.');continue;}
   add(r,'NOT EVALUATED',rule.tolerance?`${rule.tolerance}: ${tolerances.find(t=>t.id===rule.tolerance)?.status??'Por Configurar'}. Método, geometría o criterios adicionales pendientes de definición/verificación.`:rule.method==='Por definir'?'Método o criterio: Por definir. No se ha emitido una conclusión técnica.':'La fuente no entrega evidencia suficiente para esta comprobación.');
  }
- return {id,projectId:source.scope.projectId,modelId:source.scope.itemId,versionId:source.version.id,viewId:source.view.id,discipline:configuration.discipline,ruleSetId:configuration.ruleSetId,ruleSetVersion:auditRuleSetVersion,companyCatalogId:`${companyCatalog.companyId}:v${companyCatalog.version}`,projectCatalogId:`${projectCatalog.projectId}:v${projectCatalog.version}`,startedAt:input.startedAt,completedAt,status:findings.some(f=>f.result==='NOT EVALUATED')?'PARTIAL':'COMPLETED',createdBy:input.createdBy,source,configuration,rules,companyCatalog,projectCatalog,tolerances,engineVersion:'audit-engine-1.0.2',findings,inventory:{...inventory,elements},scope:{id:randomUUID(),auditRunId:id,scopeType:'VIEW',viewId:source.view.id,modelId:source.scope.itemId,elementCount:elements.length,status:inventory.missing?'PARTIAL':'VERIFIED',population:inventory.population,unavailableCount:inventory.missing}};
+ return {id,projectId:source.scope.projectId,modelId:source.scope.itemId,versionId:source.version.id,viewId:source.view.id,discipline:configuration.discipline,ruleSetId:configuration.ruleSetId,ruleSetVersion:auditRuleSetVersion,companyCatalogId:`${companyCatalog.companyId}:v${companyCatalog.version}`,projectCatalogId:`${projectCatalog.projectId}:v${projectCatalog.version}`,startedAt:input.startedAt,completedAt,status:findings.some(f=>f.result==='NOT EVALUATED')?'PARTIAL':'COMPLETED',createdBy:input.createdBy,source,configuration,rules,companyCatalog,projectCatalog,tolerances,engineVersion:'audit-engine-1.1.0',findings,inventory:{...inventory,elements},scope:{id:randomUUID(),auditRunId:id,scopeType:'VIEW',viewId:source.view.id,modelId:source.scope.itemId,elementCount:elements.length,status:inventory.missing?'PARTIAL':'VERIFIED',population:inventory.population,unavailableCount:inventory.missing}};
 }
