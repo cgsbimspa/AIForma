@@ -10,7 +10,7 @@ import { QuantitySourcePicker } from "./quantity-source-picker";
 import { QuantityResults } from "./quantity-results";
 import { liveCalculationSchema, presentLiveCalculation, type ClassificationInventory, type CalculationEvent, type LiveCalculation } from "@/lib/quantities/live";
 import { QuantityLiveEvidence } from "./quantity-live-evidence";
-import { QuantityHeaderContext } from './quantity-header';
+import { QuantityHeaderContext, QuantityFilterSlotContext } from './quantity-header';
 import { QuantityModelDesk } from './quantity-model-desk';
 import { QuantityViewer } from "./quantity-viewer";
 import { isMEPTemplate } from '@/public/quantity-v2/mep-templates.js';
@@ -65,6 +65,7 @@ export function QuantityWorkspace() {
 }
 
 function ProjectQuantities({ project, name }: { project: QuantityProject; name: string }) {
+  const [filterSlot,setFilterSlot]=useState<HTMLElement|null>(null);
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [selected, setSelected] = useState<string | null>(null), [specialty, setSpecialty] = useState("");
   const [openConfiguration, setOpenConfiguration] = useState(false);
@@ -101,8 +102,8 @@ function ProjectQuantities({ project, name }: { project: QuantityProject; name: 
     catch(e){setError((e as Error).message);}finally{setBusy(false);}
   }
   const configuration = workspace?.configurations.find(c => c.id === selected);
-  return <div className={`quantity-project-stage${configuration ? " has-desk" : ""}`}>
-    <div className="quantity-section-title"><div>{configuration ? <button className="quantity-text-button" onClick={() => setSelected(null)}><ArrowLeft size={15}/>Volver a especialidades</button> : <h2>Configuración de Cubicaciones</h2>}<p>{configuration ? `${specialtyName(configuration.specialtyCode)} · Mesa de trabajo` : name}</p></div><div className="quantity-inline-actions"><button className="quantity-secondary" disabled={busy} onClick={() => { setSelected(null); setLatest({}); setRetry(n => n + 1); }}><RefreshCw size={15}/>Recargar configuración</button>{!configuration && <button className="quantity-primary" disabled={!workspace || busy} onClick={() => setAdding(v => !v)}><Plus size={16}/>Agregar especialidad</button>}</div></div>
+  return <QuantityFilterSlotContext.Provider value={filterSlot}><div className={`quantity-project-stage${configuration ? " has-desk" : ""}${configuration&&isMEPTemplate(configuration.specialtyCode)?" has-mep-desk":""}`}>
+    <div className="quantity-section-title"><div>{configuration ? <button className="quantity-text-button" onClick={() => setSelected(null)}><ArrowLeft size={15}/>Volver a especialidades</button> : <h2>Configuración de Cubicaciones</h2>}<p>{configuration ? `${specialtyName(configuration.specialtyCode)} · Mesa de trabajo` : name}</p></div>{configuration&&isMEPTemplate(configuration.specialtyCode)&&<div className="quantity-filter-slot" ref={setFilterSlot}/>}<div className="quantity-inline-actions"><button className="quantity-secondary" disabled={busy} onClick={() => { setSelected(null); setLatest({}); setRetry(n => n + 1); }}><RefreshCw size={15}/>Recargar configuración</button>{!configuration && <button className="quantity-primary" disabled={!workspace || busy} onClick={() => setAdding(v => !v)}><Plus size={16}/>Agregar especialidad</button>}</div></div>
     {error && <p className="quantity-error" role="alert">{error}</p>}{busy && <p role="status">Cargando configuración…</p>}
     {!configuration&&workspace&&<div className="quantity-inline-actions"><button className="quantity-secondary" disabled={busy} onClick={()=>setMepSetup(true)}><Plus size={15}/>Crear plantillas por especialidad MEP</button><p className="quantity-help">Cada especialidad tiene su propia plantilla, archivo y vista.</p></div>}
     <Dialog open={mepSetup} onOpenChange={setMepSetup}><DialogContent className="quantity-page quantity-modal"><DialogTitle>Plantillas por especialidad MEP</DialogTitle><DialogDescription>Crear las especialidades MEP faltantes. Las configuraciones existentes se conservan.</DialogDescription><p>Agua fría, agua caliente, alcantarillado, electricidad, ventilación, gas, incendio, HVAC, telecomunicaciones y las tres especialidades exteriores.</p><label>Fuente inicial<select aria-label="Fuente inicial para plantillas MEP" value={mepSource} disabled={busy} onChange={e=>setMepSource(e.target.value)}><option value="">Configurar el archivo y vista de cada especialidad después</option>{workspace?.configurations.filter(c=>isMEPTemplate(c.specialtyCode)&&c.source?.view).map(c=><option key={c.id} value={c.id}>{specialtyName(c.specialtyCode)} · {c.source!.fileName} · V{c.source!.version.number} · {c.source!.view!.name}</option>)}</select></label><p className="quantity-help">Si eliges una fuente, se verifica en Autodesk y se copian su vista y criterios confirmados sólo a las nuevas especialidades. Después puedes cambiar cada archivo y vista por separado. No se asignan elementos por el nombre de la plantilla.</p><button className="quantity-primary" disabled={busy} onClick={()=>void prepareMEP()}>{busy?'Creando plantillas…':'Crear plantillas MEP'}</button></DialogContent></Dialog>
@@ -114,7 +115,7 @@ function ProjectQuantities({ project, name }: { project: QuantityProject; name: 
         return <article className="quantity-specialty-card quantity-panel" key={c.id}><div className="quantity-card-heading"><span className="quantity-card-icon"><Boxes size={22}/></span><h3>{specialtyName(c.specialtyCode)}</h3></div><span className={`quantity-status state-${status.state.toLowerCase()}`}>{stateLabels[status.state]}</span><dl><dt>Plantilla</dt><dd>{template ? `${template.name} · v${template.version}` : "Sin configurar"}</dd><dt>Archivo RVT</dt><dd>{c.source?.fileName ?? "Fuente BIM no configurada"}</dd><dt>Vista específica</dt><dd>{c.source?.view?.name ?? "No seleccionada"}</dd><dt>Versión seleccionada</dt><dd>{c.source ? `V${c.source.version.number}` : "No seleccionada"}</dd><dt>Versión cubicada</dt><dd>{run ? `V${run.source.version.number}` : "No procesada"}</dd><dt>Última publicación</dt><dd>{latest[c.id] ? `V${latest[c.id]!.number}` : "Por verificar"}</dd></dl><p className="quantity-help">{isMEPTemplate(c.specialtyCode)?'MEP: largos, cantidades y superficies de ductos con procedencia.':c.specialtyCode==='structure'?(c.source?.view?'Abre la vista para calcular Hormigón, Moldaje y Enfierradura con sus fuentes.':'Selecciona archivo RVT, versión y vista.'):status.reason}</p>{versionErrors[c.id] && <p className="quantity-error">{versionErrors[c.id]}</p>}<div className="quantity-inline-actions"><button className="quantity-primary" onClick={() => { setOpenConfiguration(true); setSelected(c.id); }}><Settings2 size={15}/>Configurar archivo y vista</button><button className="quantity-secondary" onClick={() => { setOpenConfiguration(false); setSelected(c.id); }}>Abrir mesa de trabajo<ArrowRight size={14}/></button>{c.source && <button className="quantity-icon-button" aria-label={`Verificar última versión de ${specialtyName(c.specialtyCode)}`} onClick={() => void checkVersion(c.id)}><RefreshCw size={15}/></button>}</div></article>;
       })}</div>}
     </>}
-  </div>;
+  </div></QuantityFilterSlotContext.Provider>;
 }
 
 function QuantityDesk(props:Parameters<typeof LegacyQuantityDesk>[0]) {
