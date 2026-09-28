@@ -3,7 +3,7 @@ import { extractElement, normalize, propertiesNamed, readText, readMeasure, sum,
 import { buildIntervals, resolveLevel, slabCandidates, UNRESOLVED } from './levels.js';
 import { validateSettings, filterRecords } from './quantity-service.js';
 import { mepCategories, mepSpecialties, mepRule, systemClassifications, systemClassificationSource } from './mep-catalog.js';
-export const MEP_ENGINE='mep-quantities-v1.1';
+export const MEP_ENGINE='mep-quantities-v1.2';
 const textNames={
  systemType:['System Type','Tipo de sistema'],systemClassification:['System Classification','Clasificación de sistema'],systemName:['System Name','Nombre de sistema','System','Sistema'],
  referenceLevel:['Reference Level','Nivel de referencia'],scheduleLevel:['Schedule Level','Nivel de planificación'],size:['Size','Tamaño'],shape:['Shape','Forma','Section Shape','Forma de sección'],
@@ -99,7 +99,7 @@ export function calculateMEPQuantities(inspected,binding,settings,publishedLevel
   let surface=duct?.surface??{...unavailable('No aplica a esta categoría'),unit:'m²'};
   if(counts.get(e.externalId?'external:'+e.externalId:'element:'+e.elementId)>1){quantity={...quantity,value:null,source:'NOT_AVAILABLE',issue:'Identificador repetido; requiere revisión'};surface={...surface,value:null,source:'NOT_AVAILABLE',issue:'Identificador repetido; requiere revisión'};}
   const unknown=unavailable('No aplica a la plantilla MEP');
-  return {...e,specialty:system.specialty,specialtyRule:system.specialty?{id:mepRule.id,version:mepRule.version,basis:system.source}:null,mep:{...e.mep,system,quantity,surface,isMultiLevel:false},quantities:{concrete:unknown,formwork:unknown,rebar:unknown},rebar:{diameterMm:null,barLengthM:null,count:null,totalLengthM:null,unitWeightKgM:null,weight:unknown,table:null},floor:(()=>{const base=resolveMEPFloor(e,slabResolver,settings,binding);return base.floor_assignment_method==='MANUAL'||!slabResolver.issue||!publishedLevels?base:resolveAECFloor(e,publishedLevels,settings.levelToleranceM,base);})()};
+  return {...e,specialty:system.specialty,specialtyRule:system.specialty?{id:mepRule.id,version:mepRule.version,basis:system.source}:null,mep:{...e.mep,system,quantity,surface,isMultiLevel:false},quantities:{concrete:unknown,formwork:unknown,rebar:unknown},rebar:{diameterMm:null,barLengthM:null,count:null,totalLengthM:null,unitWeightKgM:null,weight:unknown,table:null},floor:(()=>{const base=resolveMEPFloor(e,slabResolver,settings,binding);if(base.floor_assignment_method==='MANUAL'){const autoSettings={...settings,manualFloors:[]},autoBase=resolveMEPFloor(e,slabResolver,autoSettings,binding),automatic=!slabResolver.issue||!publishedLevels?autoBase:resolveAECFloor(e,publishedLevels,settings.levelToleranceM,autoBase);return {...base,evidence:{source:'USER_CONFIGURATION',dbId:e.dbId,binding,assignedFloor:base.resolvedBuildingLevel,quantityAssignment:'COMPLETE_ELEMENT_NO_SPLIT',automaticAssignment:automatic}};}return !slabResolver.issue||!publishedLevels?base:resolveAECFloor(e,publishedLevels,settings.levelToleranceM,base);})()};
  }).map(e=>({...e,mep:{...e.mep,isMultiLevel:e.floor.multilevel}}));
  return {binding,engine:MEP_ENGINE,calculatedAt:new Date().toISOString(),settings,records,slabs:candidates,referenceRecords:inspected.filter(e=>!e.mep),resolver,coverage:{inspected:records.length,unclassified:records.filter(e=>!e.specialty).length,unknownCategory:0,geometryUnavailable:records.filter(e=>!e.geometry?.available).length,unresolvedFloors:records.filter(e=>e.floor.resolvedBuildingLevel===UNRESOLVED).length}};
 }

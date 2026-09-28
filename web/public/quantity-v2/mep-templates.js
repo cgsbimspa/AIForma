@@ -20,7 +20,7 @@ export const isMEPTemplate = key => key==='mep'||Boolean(mepTemplateFor(key));
 export function scopeMEPCalculation(data,key='mep') {
  if(key==='mep')return data;
  const template=mepTemplateFor(key);
- if(!template||data.engine!=='mep-quantities-v1.1'||data.mepScope)throw Error('Alcance de plantilla MEP no válido');
+ if(!template||data.engine!=='mep-quantities-v1.2'||data.mepScope)throw Error('Alcance de plantilla MEP no válido');
  const records=data.records.filter(e=>e.specialty===template.code);
  const contextRecords=data.records.filter(e=>e.specialty!==template.code);
  return {...data,records,mepContextRecords:contextRecords,

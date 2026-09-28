@@ -22,7 +22,7 @@ const elements=[1,2,3].map(dbId=>({dbId,externalId:'TEST_'+dbId,properties:[{dis
 test('MEP viewer calculates actual length and filters the same IDs; template changes cannot reuse structural extraction',async()=>{
  const pipes=[1,2].map(dbId=>({dbId,externalId:'TEST_MEP_'+dbId,properties:[{displayName:'ElementId',displayValue:String(dbId)},{displayName:'Especialidad',displayValue:dbId===1?'APF':'APC'},{displayName:'Category',displayValue:'Pipes'},{displayName:'Length',displayValue:dbId*2,units:'m'}]}));
  const f=fixture(async()=>pipes);try{
-  await f.send({operation:'calculate',template:'mep',binding,settings:defaultSettings()});const data=f.messages.at(-1).calculation;assert.equal(data.engine,'mep-quantities-v1.1');assert.deepEqual(data.records.map(e=>e.mep.quantity.value),[2,4]);
+  await f.send({operation:'calculate',template:'mep',binding,settings:defaultSettings()});const data=f.messages.at(-1).calculation;assert.equal(data.engine,'mep-quantities-v1.2');assert.deepEqual(data.records.map(e=>e.mep.quantity.value),[2,4]);
   await f.send({operation:'filter',filter:{specialty:['APF'],category:[],floor:[],selection:null}});assert.equal(f.messages.at(-1).count,1);assert.deepEqual(f.calls.findLast(c=>c[0]==='isolate')[1],[1]);
   await f.send({operation:'calculate',binding,settings:defaultSettings()});assert.equal(f.messages.at(-1).calculation.engine,'view-quantities-v2.5');assert.ok(f.messages.at(-1).calculation.records.every(e=>!e.mep));
  }finally{f.close();}

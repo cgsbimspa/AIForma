@@ -35,3 +35,11 @@ test('original bounds API receives six coordinates, combines all fragments and i
   incomplete=true;const missing=await createGeometryService({model})(1,'bounds');assert.equal(missing.available,false);assert.equal(missing.bbox,null);
  }finally{globalThis.THREE=old;}
 });
+
+test('user rule assigns fully below published level 1 to -1 without inventing basement elevations',()=>{
+ const levels=aecIntervals({levels:aec.levels.map((l,i)=>({...l,name:i===0?'N.1°Piso':l.name}))},null,1);
+ const below=resolveAECFloor(record(-2,-.01),levels,.002,base);assert.equal(below.resolvedBuildingLevel,'-1');assert.equal(below.floor_assignment_method,'BELOW_LEVEL_ONE');assert.equal(below.evidence.reference.label,'N.1°Piso');
+ assert.equal(resolveAECFloor(record(-1,1),levels,.002,base).resolvedBuildingLevel,'Piso no resuelto');
+ assert.equal(resolveAECFloor(record(-1,-.001),levels,.002,base).resolvedBuildingLevel,'Piso no resuelto');
+ const basement=aecIntervals({levels:aec.levels.map((l,i)=>({...l,name:i===0?'Subterráneo -2':l.name}))},null,1);assert.equal(resolveAECFloor(record(-2,-1),basement,.002,base).resolvedBuildingLevel,'Piso no resuelto');
+});

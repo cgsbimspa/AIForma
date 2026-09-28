@@ -1,5 +1,5 @@
 /* global Autodesk */
-import { unitFactor } from './properties.js';
+import { unitFactor, normalize } from './properties.js';
 // AECModelData elevations are in Revit feet. Original fragment boxes use the
 // loaded placementWithOffset, excluding subsequent viewer animations.
 export function aecIntervals(aec,placement,scale){
@@ -41,6 +41,12 @@ export function resolveAECFloor(record,resolver,tolerance,base){
  const spans=bands.filter(l=>Math.min(max,l.upperZ)-Math.max(min,l.lowerZ)>tolerance);
  const one=bands.filter(l=>min>=l.lowerZ-tolerance&&max<=l.upperZ+tolerance);
  const evidence={source:'AEC_MODEL_DATA',bbox:b,placement:resolver.placement,modelScaleToM:resolver.modelScaleToM,toleranceM:tolerance};
+ // User rule: below level 1 belongs to -1. Only apply when the lowest
+ // published boundary explicitly identifies level 1; do not invent basements
+ // below a model whose first published level is already a basement or floor 2.
+ const first=bands[0],firstName=normalize(first?.label).replace(/[.°º\s_-]/g,'');
+ if(first&&['n1piso','nivel1','level1','piso1','1piso','n1','1'].includes(firstName)&&max<first.lowerZ-tolerance)
+  return {...base,resolvedBuildingLevel:'-1',floor_assignment_method:'BELOW_LEVEL_ONE',floor_confidence:1,multilevel:false,status:'RESOLVED',issue:null,intervals:[],evidence:{...evidence,reference:first,rule:{id:'user-below-level-one',version:'1',basis:'Criterio del usuario: elementos completamente bajo el nivel 1 se agrupan en -1; no representa un nivel Revit publicado'}}};
  if(one.length===1)return {...base,resolvedBuildingLevel:one[0].label,floor_assignment_method:'AEC_LEVEL_INTERVAL',floor_confidence:1,multilevel:false,status:'RESOLVED',issue:null,intervals:[{id:one[0].id,label:one[0].label,overlapM:Math.max(0,max-min)}],evidence:{...evidence,reference:one[0]}};
  const covered=spans.reduce((s,l)=>s+Math.max(0,Math.min(max,l.upperZ)-Math.max(min,l.lowerZ)),0);
  if(spans.length>1&&covered>=max-min-tolerance)return {...base,resolvedBuildingLevel:'MULTILEVEL',floor_assignment_method:'MULTILEVEL',floor_confidence:1,multilevel:true,status:'RESOLVED',issue:'Cruza niveles AEC. Largo completo en MULTILEVEL; no se divide por piso',intervals:spans.map(l=>({id:l.id,label:l.label,overlapM:Math.min(max,l.upperZ)-Math.max(min,l.lowerZ)})),evidence};

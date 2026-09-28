@@ -103,3 +103,15 @@ test('AEC floor resolution survives validation and never replaces a confirmed ma
  const data=calculateMEPQuantities([e],binding,defaultSettings(),levels);assert.equal(data.records[0].floor.resolvedBuildingLevel,'TEST_PISO');assert.equal(calculationSchema.safeParse(scopeMEPCalculation(data,'cold-water')).success,true);
  const settings={...defaultSettings(),levelBinding:{urn:binding.urn,viewId:binding.viewId},manualFloors:[{dbId:1,label:'TEST_MANUAL'}]};assert.equal(calculateMEPQuantities([e],binding,settings,levels).records[0].floor.resolvedBuildingLevel,'TEST_MANUAL');
 });
+
+test('batch manual floors assign complete quantities, remain view-bound and restore automatic results',async()=>{
+ const {assignFloors}=await import('../public/quantity-v2/floor-assignment.js');
+ const es=[element(1,'Pipes',[p('Especialidad','APF'),p('Length',12,'m')]),element(2,'Pipes',[p('Especialidad','APF'),p('Length',3,'m')])];
+ es[0].geometry={available:true,issue:null,bbox:{min:[0,0,1],max:[1,1,5]}};es[1].geometry={available:true,issue:null,bbox:{min:[0,0,-2],max:[1,1,-1]}};
+ const levels={source:'AEC_MODEL_DATA',issue:null,intervals:[{id:'TEST_L1',label:'Nivel 1',lowerZ:0,upperZ:3},{id:'TEST_L2',label:'TEST_LEVEL_2',lowerZ:3,upperZ:6}]};
+ const original=calculateMEPQuantities(es,binding,defaultSettings(),levels);assert.equal(original.records[0].floor.resolvedBuildingLevel,'MULTILEVEL');assert.equal(original.records[1].floor.resolvedBuildingLevel,'-1');
+ const saved=assignFloors(defaultSettings(),binding,original.records,[1,1,2],'TEST_CONFIRMED');assert.equal(saved.manualFloors.length,2);assert.equal(settingsSchema.safeParse(saved).success,true);
+ const assigned=calculateMEPQuantities(es,binding,saved,levels);assert.ok(assigned.records.every(e=>e.floor.resolvedBuildingLevel==='TEST_CONFIRMED'));assert.deepEqual(assigned.records.map(e=>e.mep.quantity.value),[12,3]);assert.equal(assigned.records[0].floor.evidence.automaticAssignment.resolvedBuildingLevel,'MULTILEVEL');assert.equal(calculationSchema.safeParse(assigned).success,true);
+ const restore=assignFloors(saved,binding,original.records,[1],null);assert.equal(restore.manualFloors.length,1);assert.equal(calculateMEPQuantities(es,binding,restore,levels).records[0].floor.resolvedBuildingLevel,'MULTILEVEL');
+ assert.throws(()=>assignFloors(saved,{...binding,urn:'TEST_OTHER'},original.records,[1],'TEST_CONFIRMED'));assert.throws(()=>assignFloors(saved,binding,original.records,[999],'TEST_CONFIRMED'));assert.throws(()=>assignFloors(saved,binding,original.records,[1],'MULTILEVEL'));
+});
