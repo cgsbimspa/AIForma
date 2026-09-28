@@ -36,8 +36,8 @@ export function installQuantityV2(viewer,input,readElements){
     send(d.requestId,{phase:'loading',message:'Leyendo parámetros y geometría de la vista…'});
     inspected??=readElements().then(elements=>(mep?inspectMEPElements:inspectElements)(elements,d.binding,readGeometry,(done,total)=>{if(run===revision)send(d.requestId,{phase:'loading',message:`Geometría y propiedades: ${done} de ${total} elementos`});})).catch(error=>{inspected=undefined;throw error;});
     const elements=await inspected;if(run!==revision)return;
-    calculated=(mep?calculateMEPQuantities:calculateQuantities)(elements,d.binding,d.settings);
-    if(mep)calculated=scopeMEPCalculation(calculated,d.specialtyTemplate??'mep');
+    const result=(mep?calculateMEPQuantities:calculateQuantities)(elements,d.binding,d.settings);
+    calculated=mep?scopeMEPCalculation(result,d.specialtyTemplate??'mep'):result;
     calculationId=d.requestId;
     send(d.requestId,{phase:'complete',calculation:calculated});
    }catch(e){if(run===revision)send(d.requestId,{phase:'error',message:e.message||'Lectura no disponible'});}

@@ -38,6 +38,8 @@ test('clearing filters and picking outside a specialty never expands its MEP qua
   f.pick([2]);assert.deepEqual(f.messages.at(-1).dbIds,[]);
   f.pick([]);await f.send({operation:'filter',filter:blank,selectionRevision:f.messages.at(-1).selectionRevision});assert.equal(f.messages.at(-1).count,1);
   await f.send({operation:'calculate',template:'mep',specialtyTemplate:'hot-water',binding,settings:defaultSettings()});assert.deepEqual(f.messages.at(-1).calculation.records.map(e=>e.dbId),[2]);
+  await f.send({operation:'calculate',template:'mep',specialtyTemplate:'TEST_INVALID',binding,settings:defaultSettings()});assert.equal(f.messages.at(-1).phase,'error');
+  await f.send({operation:'filter',filter:blank});assert.equal(f.messages.at(-1).phase,'error','invalid scope must not retain an unscoped calculation');
  }finally{f.close();}
 });
 
