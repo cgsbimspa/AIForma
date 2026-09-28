@@ -35,7 +35,7 @@ export function executeAudit(input:{configuration:AuditConfiguration;inventory:A
   const rule=rules.find(r=>r.ruleId===ruleId)!;const fid=randomUUID();
   findings.push({id:fid,auditRunId:id,ruleId,result,severity:result==='INFORMATION'?'Informativa':result==='WARNING'?'Revisión':result==='FAIL'?'Incumplimiento comprobado':'No evaluativa',title:rule.name,description,observedValue,expectedValue,toleranceId:rule.tolerance,createdAt:completedAt,
    affectedElements:affected.map(raw=>{const e=byId.get(raw.dbId)??raw;return {findingId:fid,modelId:source!.scope.itemId,elementId:e.elementId,dbId:e.dbId,uniqueId:e.uniqueId,name:e.name,category:e.category,family:e.family,type:e.type,level:e.level};}),
-   evidence:[{source:ruleId.startsWith('G01')?source!.version.endpoint:inventory.endpoint,property:prop||rule.property,observedValue,expectedValue,unit:null,geometryReference:null,viewerReference:{urn:source!.version.modelId!,viewId:source!.view!.id,dbIds:affected.map(e=>e.dbId)},fetchedAt:inventory.fetchedAt}]});
+   evidence:[{source:ruleId==='G01-004'?'Configuración declarada por el usuario; snapshot de esta ejecución':['G01-001','G01-006'].includes(ruleId)?`https://developer.api.autodesk.com/project/v1/hubs/${encodeURIComponent(source!.scope.hubId)}/projects/${encodeURIComponent(source!.scope.projectId)}`:ruleId.startsWith('G01')?source!.version.endpoint:inventory.endpoint,property:prop||rule.property,observedValue,expectedValue,unit:null,geometryReference:null,viewerReference:{urn:source!.version.modelId!,viewId:source!.view!.id,dbIds:affected.map(e=>e.dbId)},fetchedAt:inventory.fetchedAt}]});
  }
  function duplicates(ruleId:string,rows:AuditElement[]) {
   if(!rows.length){add(ruleId,'NOT EVALUATED','No se recuperaron objetos de esta categoría desde la vista. No demuestra su ausencia en el RVT.');return;}
@@ -47,7 +47,7 @@ export function executeAudit(input:{configuration:AuditConfiguration;inventory:A
  const metadata:Record<string,unknown>={'G01-001':source.projectName,'G01-003':source.fileName,'G01-004':configuration.discipline,'G01-006':source.scope.hubId,'G01-007':`V${source.version.number}`,'G01-008':source.version.createdAt};
  for(const rule of rules.filter(r=>r.active)){
   const r=rule.ruleId;
-  if(r in metadata){const v=metadata[r];add(r,v===null?'NOT EVALUATED':'INFORMATION',r==='G01-004'?'Especialidad declarada por el usuario; no inferida del contenido.':'Dato de la fuente Autodesk verificada.',[],v);continue;}
+  if(r in metadata){const v=metadata[r];add(r,v===null||r==='G01-008'?'NOT EVALUATED':'INFORMATION',r==='G01-004'?'Especialidad declarada por el usuario; no inferida del contenido.':r==='G01-008'?'Autodesk devuelve createTime, fecha de creación de esta versión. No confirma por separado la fecha de publicación de la vista en Revit.':'Dato de la fuente Autodesk verificada.',[],v);continue;}
   if(r==='G03-A01'){add(r,inventory.levels.length?'INFORMATION':'NOT EVALUATED',inventory.levels.length?'Niveles recuperados en la vista; elevaciones sin unidad explícita permanecen no disponibles.':'La vista no publica objetos de nivel identificables. Las referencias de los elementos se muestran por separado.',inventory.levels,inventory.levels.map(e=>({id:e.elementId,uniqueId:e.uniqueId,name:e.name,elevation:property(e,['Elevation','Elevación'])?.value??null})));continue;}
   if(r==='G03-B01'||r==='G04-B01'){duplicates(r,r==='G03-B01'?inventory.levels:inventory.grids);continue;}
   if(r==='G03-B03'||r==='G03-B04'){
