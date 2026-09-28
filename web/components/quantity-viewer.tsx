@@ -70,12 +70,12 @@ export function QuantityViewer({ project, source, highlightedElementIds=[], filt
   },[highlightedElementIds,filteredElementIds,source?.view?.id,source?.version.modelId,status,classificationFilter,auditAction]);
   const canLoad = Boolean(source?.view && source.version.modelId);
   useEffect(()=>{
-    if(status!=='Vista seleccionada cargada'||!auditAction)return;
+    if(status!=='Vista seleccionada cargada'||!auditAction?.id)return;
     frame.current?.contentWindow?.postMessage({type:'aiforma-audit-action',...auditAction,viewId:source?.view?.id,urn:source?.version.modelId},window.location.origin);
   },[auditAction,status,source?.view?.id,source?.version.modelId]);
   const filterReady=filterState?.key===filterKey&&filterState.phase==='ready';
   useEffect(()=>{
-    if(status!=='Vista seleccionada cargada'||!coordinationColors)return;
+    if(status!=='Vista seleccionada cargada'||!coordinationColors?.id)return;
     frame.current?.contentWindow?.postMessage({type:'aiforma-coordination-colors',groups:coordinationColors.groups,viewId:source?.view?.id,urn:source?.version.modelId},window.location.origin);
   },[coordinationColors,status,source?.view?.id,source?.version.modelId]);
   const filterActive=filterReady&&filterState.active;
