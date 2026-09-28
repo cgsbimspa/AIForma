@@ -9,3 +9,8 @@
 @media(min-width:1650px){.coord-board{height:calc(100dvh - 400px);min-height:410px}}@media(max-width:1100px){.coord-board{grid-template-columns:1fr;height:auto}.coord-model{height:520px}.coord-results{height:650px}.coord-settings{grid-template-columns:1fr}.coord-context .autodesk-connection{max-width:210px}.coord-title{flex-wrap:wrap}}@media(max-width:650px){.coord-page{padding:10px}.coord-brand{width:100%}.coord-context label{max-width:none}.coord-modelbar{gap:9px}.coord-tabs{overflow-x:auto;white-space:nowrap}.coord-tabs a{padding:9px}.coord-form-grid{grid-template-columns:1fr}.coord-result-filters{grid-template-columns:1fr 1fr}.coord-intro{align-items:flex-start;flex-wrap:wrap}.coord-counts{grid-template-columns:repeat(3,1fr)}}
 
 .coord-state.preliminary{color:#2563a8}
+/* Keep all six states and the filters visible; only the findings table scrolls. */
+.coord-board{min-height:650px}
+.coord-results>header,.coord-counts,.coord-results>.coord-help,.coord-result-filters,.coord-pagination{flex-shrink:0}
+.coord-results{overflow:auto}
+@media(max-width:650px){.coord-results{height:760px}}
