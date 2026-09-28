@@ -28,6 +28,19 @@ test('MEP viewer calculates actual length and filters the same IDs; template cha
  }finally{f.close();}
 });
 // TEST viewer and window only. No Autodesk model is mutated.
+test('clearing filters and picking outside a specialty never expands its MEP quantities',async()=>{
+ const pipes=[1,2].map(dbId=>({dbId,externalId:'TEST_MEP_'+dbId,properties:[{displayName:'ElementId',displayValue:String(dbId)},{displayName:'Especialidad',displayValue:dbId===1?'APF':'APC'},{displayName:'Category',displayValue:'Pipes'},{displayName:'Length',displayValue:dbId*2,units:'m'}]}));
+ const f=fixture(async()=>pipes);try{
+  await f.send({operation:'calculate',template:'mep',specialtyTemplate:'cold-water',binding,settings:defaultSettings()});
+  assert.deepEqual(f.messages.at(-1).calculation.records.map(e=>e.dbId),[1]);
+  const blank={specialty:[],category:[],floor:[],selection:null};
+  await f.send({operation:'filter',filter:blank});assert.equal(f.messages.at(-1).count,1);assert.deepEqual(f.calls.findLast(c=>c[0]==='isolate')[1],[1]);
+  f.pick([2]);assert.deepEqual(f.messages.at(-1).dbIds,[]);
+  f.pick([]);await f.send({operation:'filter',filter:blank,selectionRevision:f.messages.at(-1).selectionRevision});assert.equal(f.messages.at(-1).count,1);
+  await f.send({operation:'calculate',template:'mep',specialtyTemplate:'hot-water',binding,settings:defaultSettings()});assert.deepEqual(f.messages.at(-1).calculation.records.map(e=>e.dbId),[2]);
+ }finally{f.close();}
+});
+
 function fixture(read=async()=>elements){
  const calls=[],messages=[],listeners=new Map(),selectionListeners=new Map(),parent={postMessage:m=>messages.push(m)},old=globalThis.window,oldSdk=globalThis.Autodesk;
  globalThis.window={location:{origin:'https://test.invalid'},parent,addEventListener:(name,fn)=>listeners.set(name,fn),removeEventListener:(name)=>listeners.delete(name)};

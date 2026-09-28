@@ -1,6 +1,7 @@
 import { createGeometryService } from './geometry-viewer.js';
 import { inspectElements, calculateQuantities, validateSettings, filterRecords } from './quantity-service.js';
 import { inspectMEPElements, calculateMEPQuantities } from './mep-service.js';
+import { scopeMEPCalculation } from './mep-templates.js';
 export function installQuantityV2(viewer,input,readElements){
  let inspected,inspectedMode,calculated,revision=0,filterRevision=0,activeIds=null,activeKey=null,visualMode='isolate';
  let applyingVisibility=false,selectionRevision=0,selectionPending=false,calculationId=null;
@@ -35,7 +36,9 @@ export function installQuantityV2(viewer,input,readElements){
     send(d.requestId,{phase:'loading',message:'Leyendo parámetros y geometría de la vista…'});
     inspected??=readElements().then(elements=>(mep?inspectMEPElements:inspectElements)(elements,d.binding,readGeometry,(done,total)=>{if(run===revision)send(d.requestId,{phase:'loading',message:`Geometría y propiedades: ${done} de ${total} elementos`});})).catch(error=>{inspected=undefined;throw error;});
     const elements=await inspected;if(run!==revision)return;
-    calculated=(mep?calculateMEPQuantities:calculateQuantities)(elements,d.binding,d.settings);calculationId=d.requestId;
+    calculated=(mep?calculateMEPQuantities:calculateQuantities)(elements,d.binding,d.settings);
+    if(mep)calculated=scopeMEPCalculation(calculated,d.specialtyTemplate??'mep');
+    calculationId=d.requestId;
     send(d.requestId,{phase:'complete',calculation:calculated});
    }catch(e){if(run===revision)send(d.requestId,{phase:'error',message:e.message||'Lectura no disponible'});}
    return;
@@ -48,7 +51,7 @@ export function installQuantityV2(viewer,input,readElements){
    const known=new Set(calculated.records.map(e=>e.dbId));
    if(f.selection!=null&&(!Array.isArray(f.selection)||f.selection.some(id=>!Number.isSafeInteger(id)||!known.has(id))))return;
    activeIds=filterRecords(calculated.records,f).map(e=>e.dbId);activeKey=JSON.stringify(f);filterRevision++;
-   const hasFilter=['specialty','category','floor'].some(k=>f[k].length>0)||f.selection!=null;
+   const hasFilter=Boolean(calculated.mepScope)||['specialty','category','floor'].some(k=>f[k].length>0)||f.selection!=null;
    // A manual pick narrows the data but keeps the camera and geometry available
    // for Ctrl-click additions. Later facet changes still update the viewer.
    const preserveSelection=selectionPending&&f.selection!=null;

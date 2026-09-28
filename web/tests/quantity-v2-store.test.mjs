@@ -21,5 +21,18 @@ test('v2 criteria persist encrypted and remain bound to project/version/view wit
  await assert.rejects(store.save(actor,{id:config.id,revision:config.revision,source,templateVersionId:config.templateVersionId,calculationSettings:settings}),/configuration_conflict/);
  await assert.rejects(store.save(actor,{id:config.id,revision:saved.revision,source:{...source,version:{...source.version,modelId:'TEST_OTHER_DERIVATIVE'}},templateVersionId:config.templateVersionId,calculationSettings:settings}),/out_of_scope/);
  await assert.rejects(store.save(actor,{id:config.id,revision:saved.revision,source,templateVersionId:config.templateVersionId,calculationSettings:{...settings,rebarWeightTable:[{diameter:12,unit_weight_kg_m:2,source:'',version:''}]}}));
+ const mep=await store.add(actor,'mep'),mepSettings={...defaultSettings(),mepSystemRules:[{field:'specialty',value:'TEST Agua Fria',specialty:'APF'}]};
+ const origin=await store.save(actor,{id:mep.id,revision:mep.revision,source,templateVersionId:mep.templateVersionId,calculationSettings:mepSettings});
+ const single=await store.add(actor,'cold-water');
+ assert.deepEqual(single.calculationSettings.mepSystemRules,mepSettings.mepSystemRules);assert.equal(single.source,null);
+ await store.prepareMEPSpecialties(actor,origin.id,source);
+ const after=await store.workspace(actor),hot=after.configurations.find(c=>c.specialtyCode==='hot-water');
+ assert.deepEqual(hot.source,source);assert.deepEqual(hot.calculationSettings,mepSettings);
+ assert.equal(after.configurations.find(c=>c.id===single.id).source,null,'existing individual configurations are not overwritten');
+ const alteredSource={...source,view:{...source.view,id:'TEST_SECOND_VIEW'}};
+ await store.save(actor,{id:hot.id,revision:hot.revision,source:alteredSource,templateVersionId:hot.templateVersionId,calculationSettings:mepSettings});
+ assert.deepEqual((await store.workspace(actor)).configurations.find(c=>c.id===origin.id).source,source,'sources are independent');
+ await assert.rejects(()=>store.prepareMEPSpecialties(actor,origin.id,alteredSource),/configuration_conflict/);
+ await assert.rejects(()=>store.prepareMEPSpecialties({...actor,projectId:'TEST_OTHER'},origin.id,source),/configuration_conflict/);
  }finally{await db.close();}
 });

@@ -19,6 +19,7 @@ export const maxDuration = 60;
 const fileScope = scopeSchema.options[3];
 const sourceInput = z.object({ scope: fileScope, versionId: z.string().min(1).max(2000), viewId: z.string().min(1).max(2000).nullable() }).strict();
 const action = z.discriminatedUnion("action", [
+  z.object({action:z.literal('prepare-mep-specialties'),sourceConfigurationId:z.string().uuid().nullable()}).strict(),
   z.object({ action: z.literal("prepare-templates") }).strict(),
   z.object({ action: z.literal("add"), specialtyCode }).strict(),
   z.object({ action: z.literal("save"), id: z.string().uuid(), revision: z.number().int().nonnegative(), source: sourceInput.nullable(), templateVersionId: z.string().uuid().nullable(), calculationSettings:settingsSchema.optional() }).strict(),
@@ -75,6 +76,16 @@ export async function POST(request: NextRequest) {
     // token themselves. Resolve storage identity only for stored workspace actions.
     const actor = await memoryActor(request, scope);
     const db = store();
+    if(command.action==='prepare-mep-specialties'){
+      let source=null;
+      if(command.sourceConfigurationId){
+        const origin=(await db.workspace(actor)).configurations.find(c=>c.id===command.sourceConfigurationId);
+        if(!origin?.source?.view)throw new DataError('source_not_configured',422);
+        source=await verifiedSource(token,origin.source.scope,origin.source.version.id,origin.source.view.id,request.signal);
+      }
+      await db.prepareMEPSpecialties(actor,command.sourceConfigurationId,source);
+      return response(await db.workspace(actor));
+    }
     if (command.action === "prepare-templates") {
       await db.prepareTemplates(actor);
       return response(await db.workspace(actor));

@@ -5,6 +5,9 @@ export const mepSpecialties = [
  {code:'ALC',name:'Alcantarillado'}, {code:'GAS',name:'Gas'},
  {code:'PCI',name:'Protección Contra Incendio'}, {code:'VNT',name:'Ventilación / Climatización'},
  {code:'ELE',name:'Electricidad'},
+ {code:'HVAC',name:'HVAC'}, {code:'TEL',name:'Telecomunicaciones'},
+ {code:'AP_EXT',name:'Agua Potable Exterior'}, {code:'ALC_EXT',name:'Alcantarillado Exterior'},
+ {code:'ELE_EXT',name:'Electricidad Exterior'},
 ];
 export const mepCategories = [
  {category:'Pipes',aliases:['Tuberías','OST_PipeCurves'],service:'pipe',metric:'pipes',label:'Tuberías',unit:'ml'},

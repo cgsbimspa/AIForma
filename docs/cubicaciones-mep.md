@@ -4,6 +4,16 @@ Fuente funcional: especificación «IMPLEMENTAR / GENERAR PLANTILLA DE CUBICACIO
 
 Se agrega **MEP · Instalaciones** al catálogo de Cubicaciones. Al agregarla al proyecto se asigna su plantilla base una sola vez. Se conserva el aislamiento de organización/proyecto y la fuente RVT, versión y vista configurada. La mesa reutiliza el encabezado, control de versiones, lectura Autodesk, filtros múltiples, protocolo de selección y motor espacial de estructura.
 
+## Plantillas por especialidad (27-09-2026)
+
+Cada especialidad dispone de plantilla automática y mesa MEP independiente: Agua Potable Fría (APF), Agua Potable Caliente (APC), Alcantarillado (ALC), Gas (GAS), Protección Contra Incendio (PCI), Ventilación (VNT), Electricidad (ELE), HVAC, Telecomunicaciones (TEL), Agua Potable Exterior (AP_EXT), Alcantarillado Exterior (ALC_EXT) y Electricidad Exterior (ELE_EXT). El catálogo de perfiles está en `mep-templates.js`.
+
+«Crear plantillas por especialidad MEP» agrega las faltantes sin sobrescribir configuraciones existentes. Permite copiar una fuente MEP del mismo proyecto, verificada nuevamente en Autodesk, y sus criterios. Cada configuración conserva por separado archivo, versión y vista. Las asociaciones ya confirmadas de MEP general se reutilizan sólo dentro del mismo proyecto; no se transfieren entre proyectos ni organizaciones.
+
+El motor calcula primero con parámetros publicados y después restringe las partidas, sumas, opciones de filtros y selección del visor a la clasificación exacta de la plantilla. Limpiar filtros no elimina ese alcance. Las comparaciones entre especialidades diferentes se rechazan. Las referencias de losas se conservan para resolver pisos y los elementos excluidos permanecen en `mepContextRecords` para revisar asociaciones; nunca entran en los totales de la plantilla.
+
+HVAC/ventilación y las especialidades exteriores requieren una clasificación explícita o una asociación confirmada. Un nombre de archivo, una categoría genérica o elegir una plantilla no demuestran ubicación exterior. Una plantilla sin elementos clasificados muestra «No se encontraron elementos» y el número de instalaciones todavía sin clasificar; no presenta cero como una cantidad verificada.
+
 ## Cálculo y cobertura
 
 Motor: `mep-quantities-v1.0`; regla: `cgs-mep-quantities`, versión 1. Servicios independientes de React en `web/public/quantity-v2/mep-service.js` y catálogo extensible en `mep-catalog.js`.

@@ -124,6 +124,7 @@ export function presentMEP(data,filter){
  return {records,rows,cards:[...cards.values()].map(c=>({...c,coverage:mepCoverage(c.elements),dbIds:c.elements.map(e=>e.dbId)})),multilevel:records.filter(e=>e.floor.multilevel).length};
 }
 export function compareMEP(previous,current){
+ if(previous.mepScope?.key!==current.mepScope?.key)throw Error('Plantillas MEP de especialidades diferentes');
  if(previous.binding.projectId!==current.binding.projectId||previous.binding.itemId!==current.binding.itemId||previous.engine!==MEP_ENGINE||current.engine!==MEP_ENGINE)throw Error('Fuentes MEP no comparables');
  const keys=[...new Set([...previous.records,...current.records].map(e=>e.mep.metric))];
  return {previous:previous.binding,current:current.binding,rulesChanged:JSON.stringify(previous.settings)!==JSON.stringify(current.settings),metrics:keys.map(metric=>{const definition=mepCategories.find(d=>d.metric===metric),a=mepCoverage(previous.records.filter(e=>e.mep.metric===metric)),b=mepCoverage(current.records.filter(e=>e.mep.metric===metric));return {metric,label:definition.label,unit:definition.unit,previous:a,current:b,difference:a.total!==null&&b.total!==null?b.total-a.total:null};})};

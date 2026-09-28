@@ -4,6 +4,8 @@ export const quantitySpecialties = [
   { code: "architecture", name: "Arquitectura" },
   { code: "structure", name: "Cálculo" },
   { code: "mep", name: "MEP · Instalaciones" },
+  { code: "gas", name: "Gas" },
+  { code: "fire-protection", name: "Protección Contra Incendio" },
   { code: "sewer", name: "Alcantarillado" },
   { code: "cold-water", name: "Agua Potable Fría" },
   { code: "hot-water", name: "Agua Potable Caliente" },

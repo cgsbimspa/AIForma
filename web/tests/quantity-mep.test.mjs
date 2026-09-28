@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { extractMEPElement, calculateMEPQuantities, inspectMEPElements, presentMEP, resolveMEPSystem, compareMEP, resolveMEPFloor } from '../public/quantity-v2/mep-service.js';
 import { mepCategories } from '../public/quantity-v2/mep-catalog.js';
+import {mepTemplates,scopeMEPCalculation} from '../public/quantity-v2/mep-templates.js';
 import { defaultSettings, filterRecords, quantityFacets } from '../public/quantity-v2/quantity-service.js';
 import { calculationSchema, settingsSchema } from '../lib/quantities-v2/contracts.ts';
 // Synthetic TEST fixtures only; never used by the app or sent to Autodesk.
@@ -12,6 +13,25 @@ function raw(id,category,properties=[]){return {dbId:id,externalId:'TEST_UNIQUE_
 function element(id,category,properties=[]){return {...extractMEPElement(raw(id,category,properties),binding),geometry:{available:false,issue:'TEST_NO_GEOMETRY'}};}
 const calculate=(records,settings=defaultSettings())=>calculateMEPQuantities(records,binding,settings);
 const near=(actual,expected)=>assert.ok(Math.abs(actual-expected)<1e-9,`${actual} != ${expected}`);
+
+test('each specialty template limits totals, facets, evidence and comparisons to its confirmed classification',()=>{
+ const settings={...defaultSettings(),mepSystemRules:mepTemplates.map(t=>({field:'specialty',value:'TEST_'+t.code,specialty:t.code}))};
+ const data=calculate([...mepTemplates.map((t,i)=>element(i+1,'Pipes',[p('Especialidad','TEST_'+t.code),p('Length',i+1,'m')])),element(100,'Pipes',[p('Especialidad','TEST_UNKNOWN'),p('Length',99,'m')])],settings);
+ for(const [i,t] of mepTemplates.entries()){
+  const scoped=scopeMEPCalculation(data,t.key),result=presentMEP(scoped,blank);
+  assert.equal(scoped.records.length,1);assert.equal(scoped.records[0].specialty,t.code);
+  assert.equal(result.cards[0].coverage.total,i+1);assert.equal(scoped.mepScope.unclassified,1);
+  assert.equal(scoped.mepContextRecords.length,mepTemplates.length);assert.equal(calculationSchema.safeParse(scoped).success,true);
+  assert.deepEqual(filterRecords(scoped.records,{...blank,selection:[100]}),[]);
+ }
+ assert.equal(scopeMEPCalculation(data),data,'legacy combined MEP remains available');
+ assert.throws(()=>compareMEP(scopeMEPCalculation(data,'cold-water'),scopeMEPCalculation(data,'hot-water')),/especialidades diferentes/);
+ assert.throws(()=>scopeMEPCalculation(data,'TEST_UNKNOWN_TEMPLATE'));
+ const onlyCold=calculate([element(1,'Pipes',[p('Especialidad','APF'),p('Length',2,'m')])]);
+ assert.equal(scopeMEPCalculation(onlyCold,'external-water').records.length,0,'an interior service cannot become exterior because its template was selected');
+ assert.equal(scopeMEPCalculation(onlyCold,'hvac').records.length,0);
+ assert.equal(calculationSchema.safeParse({...scopeMEPCalculation(data,'cold-water'),records:data.records}).success,false);
+});
 test('MEP does not classify Pipes from category, file names, or approximate system text',()=>{
  for(const props of [[],[p('System Type','TEST_APF_Anything')],[p('System Classification','OtherPipe')]]){
   const r=calculate([element(1,'Pipes',props)]).records[0];assert.equal(r.specialty,null);assert.ok(r.mep.system.issue);assert.equal(r.mep.quantity.value,null);

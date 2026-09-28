@@ -3,7 +3,9 @@ import { DataError } from "../autodesk/data.ts";
 import { decryptHistory, encryptHistory, type Actor } from "../memory/domain.ts";
 import type { Query, Transaction } from "../memory/database.ts";
 import { configurationSchema, runSchema, templateVersionSchema, type QuantityConfiguration, type QuantitySource, type QuantityWorkspace } from "./contracts.ts";
-import { structureTemplateDefinition, mepTemplateDefinition } from "./template-defaults.ts";
+import { defaultQuantityTemplate } from "./template-defaults.ts";
+import { mepTemplates, isMEPTemplate } from '../../public/quantity-v2/mep-templates.js';
+import { defaultSettings } from '../../public/quantity-v2/quantity-service.js';
 import type { CalculationSettings } from '../quantities-v2/contracts.ts';
 
 export function createQuantityStore(transaction: Transaction, key: Buffer) {
@@ -17,7 +19,8 @@ export function createQuantityStore(transaction: Transaction, key: Buffer) {
   }
   async function assignTemplate(q: Query, actor: Actor, previous: QuantityConfiguration) {
     // A saved version is a deliberate choice. Never replace it with a newer one.
-    if (previous.templateVersionId || !["structure", "mep"].includes(previous.specialtyCode)) return previous;
+    const defaultTemplate=defaultQuantityTemplate(previous.specialtyCode);
+    if (previous.templateVersionId || !defaultTemplate) return previous;
     const rows = await q("SELECT * FROM quantity_template_version WHERE specialty_code=$1 ORDER BY version DESC", [previous.specialtyCode]);
     const families = new Map<string, ReturnType<typeof templateVersionSchema.parse>>();
     for (const row of rows) {
@@ -30,8 +33,7 @@ export function createQuantityStore(transaction: Transaction, key: Buffer) {
     if (!template) {
       template = templateVersionSchema.parse({
         id: randomUUID(), templateId: randomUUID(), specialtyCode: previous.specialtyCode,
-        name: previous.specialtyCode === "mep" ? "MEP · Instalaciones" : "Cálculo base", version: 1, configuration: null,
-        baseDefinition: previous.specialtyCode === "mep" ? mepTemplateDefinition : structureTemplateDefinition,
+        ...defaultTemplate, version: 1, configuration: null,
         createdAt: new Date().toISOString(), createdBy: actor.userId,
       });
       await q("INSERT INTO quantity_template_version(id,organization_id,project_id,specialty_code,template_id,version,payload,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8)", [template.id, actor.organizationId, actor.projectId, template.specialtyCode, template.templateId, template.version, encode(actor, template.id, template), actor.userId]);
@@ -41,6 +43,24 @@ export function createQuantityStore(transaction: Transaction, key: Buffer) {
     return value;
   }
   return {
+    async prepareMEPSpecialties(actor: Actor, sourceConfigurationId: string | null = null, verifiedSource: QuantitySource | null = null) {
+      return transaction(actor, async q => {
+        const rows=await q('SELECT * FROM quantity_configuration ORDER BY id FOR UPDATE');
+        const existing=rows.map(row=>configurationSchema.parse(decode(actor,row)));
+        const origin=sourceConfigurationId?existing.find(c=>c.id===sourceConfigurationId):null;
+        const projectRules=existing.find(c=>c.specialtyCode==='mep')?.calculationSettings?.mepSystemRules;
+        if(sourceConfigurationId&&(!origin||!isMEPTemplate(origin.specialtyCode)||!verifiedSource?.view||origin.source?.scope.itemId!==verifiedSource.scope.itemId||origin.source?.version.id!==verifiedSource.version.id||origin.source?.view?.id!==verifiedSource.view.id))throw new DataError('configuration_conflict',409);
+        if(verifiedSource&&(verifiedSource.scope.hubId!==actor.organizationId||verifiedSource.scope.projectId!==actor.projectId))throw new DataError('out_of_scope',403);
+        for(const profile of mepTemplates){
+          const previous=existing.find(c=>c.specialtyCode===profile.key);
+          if(previous){await assignTemplate(q,actor,previous);continue;}
+          const id=randomUUID(),now=new Date().toISOString();
+          const value=configurationSchema.parse({id,specialtyCode:profile.key,source:verifiedSource,templateVersionId:null,revision:0,createdAt:now,updatedAt:now,updatedBy:actor.userId,...(origin?.calculationSettings?{calculationSettings:origin.calculationSettings}:projectRules?{calculationSettings:{...defaultSettings(),mepSystemRules:projectRules}}:{})});
+          const inserted=await q('INSERT INTO quantity_configuration(id,organization_id,project_id,specialty_code,payload,updated_by) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(organization_id,project_id,specialty_code) DO NOTHING RETURNING id',[id,actor.organizationId,actor.projectId,profile.key,encode(actor,id,value),actor.userId]);
+          if(inserted.length)await assignTemplate(q,actor,value);
+        }
+      });
+    },
     async prepareTemplates(actor: Actor) {
       return transaction(actor, async q => {
         // Lock project configurations so simultaneous openings do not duplicate defaults.
@@ -60,6 +80,11 @@ export function createQuantityStore(transaction: Transaction, key: Buffer) {
       return transaction(actor, async q => {
         const id = randomUUID(), now = new Date().toISOString();
         const value: QuantityConfiguration = { id, specialtyCode, source: null, templateVersionId: null, revision: 0, createdAt: now, updatedAt: now, updatedBy: actor.userId };
+        if(isMEPTemplate(specialtyCode)&&specialtyCode!=='mep'){
+          const [general]=await q('SELECT * FROM quantity_configuration WHERE specialty_code=$1',['mep']);
+          const rules=general?configurationSchema.parse(decode(actor,general)).calculationSettings?.mepSystemRules:null;
+          if(rules)value.calculationSettings=configurationSchema.parse({...value,calculationSettings:{...defaultSettings(),mepSystemRules:rules}}).calculationSettings;
+        }
         const inserted = await q("INSERT INTO quantity_configuration(id,organization_id,project_id,specialty_code,payload,updated_by) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(organization_id,project_id,specialty_code) DO NOTHING RETURNING id", [id, actor.organizationId, actor.projectId, specialtyCode, encode(actor, id, value), actor.userId]);
         if (!inserted.length) throw new DataError("duplicate_specialty", 409);
         return assignTemplate(q, actor, value);

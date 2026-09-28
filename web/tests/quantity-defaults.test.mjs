@@ -6,6 +6,7 @@ import {PGlite} from '@electric-sql/pglite';
 import {createQuantityStore} from '../lib/quantities/store.ts';
 import {encryptHistory} from '../lib/memory/domain.ts';
 import {processingBlocker} from '../lib/quantities/engine.ts';
+import {mepTemplates} from '../public/quantity-v2/mep-templates.js';
 
 // TEST actors and fixtures only. No model quantities are generated.
 test('Cálculo defaults persist once, preserve selections, isolate projects and repair legacy configurations',async()=>{
@@ -58,5 +59,16 @@ test('Cálculo defaults persist once, preserve selections, isolate projects and 
   assert.deepEqual(mepTemplate.baseDefinition.metrics.map(m=>m.unit),['ml','un','m²']);
   await store.prepareTemplates(actor);assert.equal((await store.workspace(actor)).templates.filter(t=>t.specialtyCode==='mep').length,1);
   assert.equal((await store.workspace({...actor,projectId:'TEST_MEP_OTHER'})).templates.length,0);
+  await store.prepareMEPSpecialties(actor);
+  const perSpecialty=await store.workspace(actor);
+  for(const profile of mepTemplates){
+    const c=perSpecialty.configurations.find(c=>c.specialtyCode===profile.key),t=perSpecialty.templates.find(t=>t.id===c.templateVersionId);
+    assert.deepEqual(t.baseDefinition.specialtyScope,[profile.code]);
+    assert.equal(t.name,`MEP · ${profile.name}`);assert.equal(c.source,null);
+  }
+  await store.prepareMEPSpecialties(actor);
+  assert.deepEqual((await store.workspace(actor)).configurations,perSpecialty.configurations,'bulk creation is idempotent and preserves existing configurations');
+  assert.equal((await store.workspace({...actor,projectId:'TEST_MEP_OTHER'})).templates.length,0);
+  await assert.rejects(()=>store.prepareMEPSpecialties(actor,randomUUID()),/configuration_conflict/);
  }finally{await db.close();}
 });

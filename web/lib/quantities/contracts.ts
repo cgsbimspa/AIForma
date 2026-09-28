@@ -27,6 +27,7 @@ export const templateVersionSchema = z.object({
     code: z.enum(["structure-base", "mep-base"]), version: z.literal(1),
     metrics: z.array(z.object({ key: text, name: text, unit: text })),
     groupings: z.array(text),
+    specialtyScope: z.array(text).min(1).optional(),
   }).optional(),
   createdAt: date, createdBy: text,
 });
