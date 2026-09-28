@@ -5,13 +5,14 @@ import { quantityResponse } from "@/lib/quantities/client";
 import type { QuantityProject, QuantitySource } from "@/lib/quantities/contracts";
 import { inventorySchema, type ClassificationInventory, liveCalculationSchema, type CalculationEvent } from "@/lib/quantities/live";
 
-export function QuantityViewer({ project, source, highlightedElementIds=[], filteredElementIds=null, onSelectElements, classificationFilter, calculationRequest=0, onCalculation, onInventory }: { project: QuantityProject; source: QuantitySource | null; highlightedElementIds?:string[]; filteredElementIds?:string[]|null; onSelectElements?:(ids:string[])=>void; classificationFilter?: {specialty:string; subspecialty:string; floor:string}; onInventory?:(data:ClassificationInventory)=>void; calculationRequest?:number; onCalculation?:(event:CalculationEvent)=>void }) {
+export function QuantityViewer({ project, source, highlightedElementIds=[], filteredElementIds=null, onSelectElements, classificationFilter, calculationRequest=0, onCalculation, onInventory, auditAction }: { project: QuantityProject; source: QuantitySource | null; highlightedElementIds?:string[]; filteredElementIds?:string[]|null; onSelectElements?:(ids:string[])=>void; classificationFilter?: {specialty:string; subspecialty:string; floor:string}; onInventory?:(data:ClassificationInventory)=>void; calculationRequest?:number; onCalculation?:(event:CalculationEvent)=>void; auditAction?:{id:number;action:'focus'|'isolate'|'select';ids:string[]} }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const [retry, setRetry] = useState(0);
   const [loaded, setLoaded] = useState<{ key: string; url: string } | null>(null);
   const [status, setStatus] = useState(""), [error, setError] = useState("");
   const [classification, setClassification] = useState<{selection:string; message:string; result:string}|null>(null);
   const [selectionCount,setSelectionCount]=useState(0);
+  const [auditMessage,setAuditMessage]=useState('');
   const [filterState,setFilterState]=useState<{key:string;active:boolean;count:number;phase:string;mode:string}|null>(null);
   const filterKey=JSON.stringify([filteredElementIds,classificationFilter??null]);
   const calculationTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
@@ -37,6 +38,7 @@ export function QuantityViewer({ project, source, highlightedElementIds=[], filt
     function receive(event: MessageEvent) {
       if (event.origin !== window.location.origin || event.source !== frame.current?.contentWindow || event.data?.type !== "aiforma-viewer" || event.data?.viewId !== source?.view?.id || event.data?.urn !== source?.version.modelId) return;
       if (event.data.state === "ready") { setStatus("Vista seleccionada cargada"); setError(""); }
+      else if(event.data.state==='audit-action'&&typeof event.data.message==='string')setAuditMessage(event.data.message);
       else if(event.data.state==='inventory'){const data=inventorySchema.safeParse(event.data.elements);if(data.success)onInventory?.(data.data);}
       else if(event.data.state==='filter'&&typeof event.data.key==='string'&&typeof event.data.active==='boolean'&&Number.isSafeInteger(event.data.count)&&event.data.count>=0&&['loading','ready','error'].includes(event.data.phase)&&['filter','isolate','attenuate','hide'].includes(event.data.mode))setFilterState({key:event.data.key,active:event.data.active,count:event.data.count,phase:event.data.phase,mode:event.data.mode});
       else if (event.data.state === "selection-count" && Number.isSafeInteger(event.data.count) && event.data.count >= 0) setSelectionCount(event.data.count);
@@ -67,6 +69,10 @@ export function QuantityViewer({ project, source, highlightedElementIds=[], filt
     frame.current?.contentWindow?.postMessage({type:"aiforma-viewer-selection",viewId:source?.view?.id,urn:source?.version.modelId,highlightedElementIds,filteredElementIds,classificationFilter},window.location.origin);
   },[highlightedElementIds,filteredElementIds,source?.view?.id,source?.version.modelId,status,classificationFilter]);
   const canLoad = Boolean(source?.view && source.version.modelId);
+  useEffect(()=>{
+    if(status!=='Vista seleccionada cargada'||!auditAction)return;
+    frame.current?.contentWindow?.postMessage({type:'aiforma-audit-action',...auditAction,viewId:source?.view?.id,urn:source?.version.modelId},window.location.origin);
+  },[auditAction,status,source?.view?.id,source?.version.modelId]);
   const filterReady=filterState?.key===filterKey&&filterState.phase==='ready';
   const filterActive=filterReady&&filterState.active;
   const actionCount=filterReady?(filterActive?filterState.count:selectionCount):0;
@@ -75,6 +81,7 @@ export function QuantityViewer({ project, source, highlightedElementIds=[], filt
     frame.current?.contentWindow?.postMessage({type:'aiforma-viewer-action',action,target:filterActive?'filter':'selection',filterKey,viewId:source?.view?.id,urn:source?.version.modelId},window.location.origin);
   }
   return <div className="quantity-live-viewer">
+    {auditMessage&&<p role="status" className="quantity-help">{auditMessage}</p>}
     {canLoad && loaded?.key === selection ? <iframe ref={frame} src={loaded.url} title={`Modelo ${source!.fileName} · V${source!.version.number} · ${source!.view!.name}`} allow="fullscreen" allowFullScreen/> : <div className="quantity-viewer-empty"><div><Box size={46} strokeWidth={1}/></div><h3>{canLoad ? "Cargando modelo BIM" : "Modelo BIM no cargado"}</h3><p>{!source ? "Selecciona un archivo RVT y su versión." : !source.view ? "Selecciona la vista publicada que quieres visualizar." : !source.version.modelId ? "Autodesk no tiene un modelo derivado disponible para esta versión." : status}</p></div>}
     <div className="quantity-viewer-controls">{error ? <p className="quantity-error" role="alert">{error}</p> : canLoad && <p className="quantity-help" role="status">{status}</p>}{classification?.selection===selection&&classification.message&&<p className={classification.result==="error"?"quantity-error":"quantity-help"} role="status">{classification.message}</p>}{status==='Vista seleccionada cargada'&&<><div className="quantity-inline-actions" aria-label="Visibilidad de elementos filtrados"><span>{filterReady?`${actionCount.toLocaleString('es-CL')} ${targetLabel}`:'Actualizando filtro…'}</span><button className="quantity-secondary" disabled={!filterReady} aria-pressed={filterState?.mode==='filter'} onClick={()=>visibility('filter')}>Solo filtrar</button><button className="quantity-secondary" disabled={!actionCount} aria-pressed={filterState?.mode==='attenuate'} onClick={()=>visibility('attenuate')}>Atenuar resto</button><button className="quantity-secondary" disabled={!actionCount} aria-pressed={filterState?.mode==='hide'} onClick={()=>visibility('hide')}>Ocultar {filterActive?'filtrados':'selección'}</button><button className="quantity-secondary" disabled={!actionCount} aria-pressed={filterState?.mode==='isolate'} onClick={()=>visibility('isolate')}>Aislar {filterActive?'filtrados':'selección'}</button></div>{filterReady&&<p className="quantity-help">{filterState.mode==='filter'?'Filtro listo. Elige cómo visualizar los elementos.':'Visibilidad aplicada. Las sumas mantienen los filtros de cubicación.'}</p>}</>}<div className="quantity-inline-actions">{canLoad && <button className="quantity-text-button" onClick={() => setRetry(n => n + 1)}><RefreshCw size={13}/>Volver a cargar modelo</button>}{source?.version.webUrl && <a className="quantity-text-button" href={source.version.webUrl} target="_blank" rel="noopener noreferrer">Abrir versión en Autodesk <ExternalLink size={13}/></a>}</div></div>
   </div>;

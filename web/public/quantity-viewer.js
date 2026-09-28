@@ -22,6 +22,14 @@ import { readViewClassification, classificationInventory, classificationRule } f
   const selectionMessage = async event => {
     const data=event.data;
     if(event.origin!==window.location.origin||event.source!==window.parent||data?.viewId!==input.viewId||data.urn!==input.urn||!viewer?.model)return;
+    if(data.type==='aiforma-audit-action'&&['focus','isolate','select'].includes(data.action)&&Array.isArray(data.ids)&&data.ids.length<=150000&&data.ids.every(id=>typeof id==='string')){
+      try{
+        const map=await mapping(),ids=[...new Set(data.ids.flatMap(id=>Number.isSafeInteger(map[id])?[map[id]]:[]))];
+        if(ids.length){viewer.showAll();if(data.action==='isolate')viewer.isolate(ids);else viewer.select(ids);viewer.fitToView(ids);}
+        window.parent.postMessage({type:'aiforma-viewer',state:'audit-action',viewId:input.viewId,urn:input.urn,message:`${ids.length} elementos localizados de ${data.ids.length} identificadores solicitados en esta vista.${ids.length<data.ids.length?' Algunos objetos no tienen geometría localizable.':''}`},window.location.origin);
+      }catch{window.parent.postMessage({type:'aiforma-viewer',state:'audit-action',viewId:input.viewId,urn:input.urn,message:'No se pudieron resolver los identificadores del hallazgo. No se aplicó una selección inferida.'},window.location.origin);}
+      return;
+    }
     if(data.type==='aiforma-viewer-action') {
       quantityFilter?.applyVisibility(data.action,data.target,data.filterKey);
       return;

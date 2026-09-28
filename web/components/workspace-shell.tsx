@@ -8,13 +8,14 @@ import { modules } from "@/lib/modules";
 import { Sidebar, SidebarProvider, SidebarContent, SidebarHeader, SidebarFooter, SidebarGroup, SidebarGroupLabel, SidebarMenu, SidebarMenuItem, SidebarMenuButton, useSidebar } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { HeaderStatusContext } from "./workspace-header";
+import { AuditSidebar } from './audit/audit-sidebar';
 
 function WorkspaceContent({children}: {children: React.ReactNode}) {
   const pathname = usePathname();
   const { setOpenMobile, toggleSidebar, openMobile, open, isMobile } = useSidebar();
   const mainRef = useRef<HTMLElement>(null);
   const previousPath = useRef(pathname);
-  const current = modules.find((module) => `/${module.slug}` === pathname);
+  const current = modules.find((module) => `/${module.slug}` === pathname || pathname.startsWith(`/${module.slug}/`));
   const isAssistant = pathname === "/asistente";
   const [headerStatus, setHeaderStatus] = useState<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -25,7 +26,7 @@ function WorkspaceContent({children}: {children: React.ReactNode}) {
     }
   }, [pathname, setOpenMobile]);
   function navigation(items: readonly typeof modules[number][]) {
-    return <SidebarMenu>{items.map((module) => <SidebarMenuItem key={module.slug}><SidebarMenuButton asChild isActive={pathname === `/${module.slug}`} className="nav-link"><Link href={`/${module.slug}`} aria-current={pathname === `/${module.slug}` ? "page" : undefined} onClick={() => setOpenMobile(false)}><module.icon aria-hidden="true"/><span>{module.name}</span></Link></SidebarMenuButton></SidebarMenuItem>)}</SidebarMenu>;
+    return <SidebarMenu>{items.map((module) => <SidebarMenuItem key={module.slug}><SidebarMenuButton asChild isActive={pathname === `/${module.slug}` || pathname.startsWith(`/${module.slug}/`)} className="nav-link"><Link href={`/${module.slug}`} aria-current={pathname === `/${module.slug}` ? "page" : undefined} onClick={() => setOpenMobile(false)}><module.icon aria-hidden="true"/><span>{module.name}</span></Link></SidebarMenuButton>{module.slug==='auditoria-bim'&&pathname.startsWith('/auditoria-bim')&&<AuditSidebar/>}</SidebarMenuItem>)}</SidebarMenu>;
   }
   if (pathname === "/cubicaciones") return <div className="quantity-shell"><a className="skip-link" href="#main-content">Saltar al contenido</a><main id="main-content" ref={mainRef} tabIndex={-1}>{children}</main></div>;
   return <>

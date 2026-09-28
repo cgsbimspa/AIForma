@@ -1,0 +1,1642 @@
+DESARROLLO — MÓDULO AUDITORÍA BIM
+
+Necesito desarrollar el Módulo Auditoría de la plataforma.
+
+IMPORTANTE:
+No utilizar nombres comerciales provisorios para la plataforma.
+El nombre visible del módulo será simplemente:
+
+AUDITORÍA
+
+La aplicación trabaja sobre modelos Autodesk Revit / Forma / ACC mediante la infraestructura Autodesk disponible en el proyecto.
+
+Este desarrollo debe integrarse a la arquitectura visual, componentes, autenticación, Autodesk Connector, Viewer, proyecto seleccionado y navegación ya existentes en la aplicación.
+
+No crear una aplicación paralela.
+
+========================================================
+1. OBJETIVO GENERAL
+========================================================
+
+El módulo AUDITORÍA debe revisar la calidad tridimensional, técnica y posteriormente la calidad de datos de modelos BIM.
+
+La lógica general será:
+
+MODELO / VISTA
+    ↓
+CONFIGURACIÓN DE AUDITORÍA
+    ↓
+AUDITORÍA TRIDIMENSIONAL Y TÉCNICA
+    ↓
+HALLAZGOS
+    ↓
+VISUALIZACIÓN / EVIDENCIA
+    ↓
+POSIBLE GENERACIÓN DE INCIDENCIA
+    ↓
+AUDITORÍA DE DATOS EN ETAPA POSTERIOR
+
+El módulo debe trabajar inicialmente sobre una auditoría independiente.
+
+Las comparaciones:
+
+- modelo vs modelo;
+- especialidad vs especialidad;
+- versión vs versión;
+
+serán procesos posteriores que consuman los resultados de auditorías individuales.
+
+========================================================
+2. REGLA PRINCIPAL — AUDITORÍA POR VISTA CONFIGURADA
+========================================================
+
+La unidad de auditoría será:
+
+Proyecto
++ Modelo / archivo RVT
++ Versión
++ Especialidad
++ Vista configurada
++ Rule Set
++ Catálogo de empresa/proyecto
+
+La VISTA será el alcance de auditoría.
+
+Por lo tanto:
+
+NO analizar automáticamente todo el archivo RVT si existe una vista configurada.
+
+La auditoría debe considerar únicamente los elementos pertenecientes al alcance configurado para esa vista.
+
+La pantalla de configuración debe mostrar:
+
+Proyecto
+Modelo
+Versión
+Especialidad
+Vista de Auditoría
+Rule Set
+Empresa
+Catálogo Proyecto
+Fecha de análisis
+Estado
+
+Ejemplo:
+
+Proyecto:
+Hospital Puerto Montt
+
+Modelo:
+EST_Hospital.rvt
+
+Versión:
+V24
+
+Especialidad:
+Estructura
+
+Vista:
+AUD_EST_ESTRUCTURA
+
+Rule Set:
+ESTRUCTURA_BASE_V01
+
+Empresa:
+Por Configurar
+
+Catálogo proyecto:
+Por Configurar
+
+Si técnicamente Autodesk no permite recuperar directamente la población exacta de una vista:
+
+implementar una capa de abstracción:
+
+AuditScope
+
+que permita en el futuro resolver:
+
+VIEW
+MODEL
+FILTERED_MODEL
+
+Por ahora utilizar:
+
+scopeType = VIEW
+
+Si la funcionalidad real de Autodesk todavía no está implementada:
+
+mostrar:
+
+Estado del alcance:
+Por Configurar
+
+No inventar comportamiento de API.
+
+========================================================
+3. PRINCIPIO DE DATOS NO DEFINIDOS
+========================================================
+
+En todo el módulo aplicar estas reglas:
+
+Si existe un dato requerido pero todavía no existe una configuración:
+
+mostrar:
+
+"Por Configurar"
+
+Si existe una regla o definición funcional que todavía no está decidida:
+
+mostrar:
+
+"Por definir"
+
+Si técnicamente no se pudo evaluar una regla:
+
+resultado:
+
+NOT EVALUATED
+
+Si la regla no aplica:
+
+resultado:
+
+N/A
+
+NO:
+
+- inventar tolerancias;
+- inferir estándares corporativos;
+- inventar parámetros;
+- inventar clasificaciones;
+- inventar correspondencias de categorías;
+- inventar equivalencias semánticas.
+
+========================================================
+4. ESTADOS DE RESULTADO
+========================================================
+
+Implementar exactamente los siguientes estados:
+
+PASS
+WARNING
+FAIL
+NOT EVALUATED
+N/A
+INFORMATION
+
+Interpretación:
+
+PASS
+Cumplimiento verificable.
+
+WARNING
+Anomalía, desviación o mala práctica que requiere revisión.
+
+FAIL
+Incumplimiento verificable respecto de una regla activa.
+
+NOT EVALUATED
+No existen antecedentes, datos o configuración suficiente para ejecutar la regla.
+
+N/A
+La regla no es aplicable a esa población.
+
+INFORMATION
+Dato contextual o inventario; no afecta indicadores de calidad.
+
+IMPORTANTE:
+
+INFORMATION, NOT EVALUATED y N/A
+no deben penalizar los porcentajes de conformidad.
+
+========================================================
+5. ARQUITECTURA DE CONOCIMIENTO
+========================================================
+
+Las reglas deben soportar tres niveles jerárquicos.
+
+NIVEL 1
+REGLAS MAESTRAS
+
+Reglas objetivas comunes de la plataforma.
+
+NIVEL 2
+BUENAS PRÁCTICAS
+
+Buenas prácticas generales y por especialidad:
+
+- estructura;
+- arquitectura;
+- MEP;
+- otras futuras.
+
+Normalmente generan PASS o WARNING.
+
+NIVEL 3
+CATÁLOGO EMPRESA / PROYECTO
+
+Permite almacenar reglas particulares:
+
+- nomenclaturas;
+- equivalencias;
+- parámetros;
+- familias;
+- tolerancias;
+- excepciones;
+- criterios internos;
+- clasificaciones.
+
+Jerarquía:
+
+GLOBAL
+    ↓
+EMPRESA
+    ↓
+PROYECTO
+
+Cuando algo específico de empresa o proyecto no exista:
+
+"Por Configurar"
+
+========================================================
+6. TABLA DE TOLERANCIAS CONFIGURABLES
+========================================================
+
+Crear una entidad independiente:
+
+AuditTolerance
+
+Todos los valores iniciales deben ser:
+
+0.00
+
+NO asignar valores técnicos supuestos.
+
+La interfaz debe permitir posteriormente cambiar cada tolerancia.
+
+Crear inicialmente esta matriz:
+
+ID | ÁREA | TOLERANCIA | UNIDAD | VALOR DEFAULT | CONFIGURABLE | ESTADO
+
+TOL-001 | Niveles | Diferencia de elevación entre niveles equivalentes | mm | 0.00 | Sí | Por Configurar
+TOL-002 | Niveles | Separación mínima entre niveles | mm | 0.00 | Sí | Por Configurar
+TOL-003 | Niveles | Offset vertical permitido | mm | 0.00 | Sí | Por Configurar
+TOL-004 | Grillas | Desviación angular | grados | 0.00 | Sí | Por Configurar
+TOL-005 | Grillas | Diferencia de posición entre ejes | mm | 0.00 | Sí | Por Configurar
+TOL-006 | Grillas | Separación mínima entre ejes casi coincidentes | mm | 0.00 | Sí | Por Configurar
+TOL-007 | Elemento-Grilla | Excentricidad permitida | mm | 0.00 | Sí | Por Configurar
+TOL-008 | Geometría | Gap entre elementos consecutivos | mm | 0.00 | Sí | Por Configurar
+TOL-009 | Geometría | Solape permitido | mm | 0.00 | Sí | Por Configurar
+TOL-010 | Geometría | Distancia para considerar elemento aislado | mm | 0.00 | Sí | Por Configurar
+TOL-011 | Geometría | Diferencia de alineación de caras | mm | 0.00 | Sí | Por Configurar
+TOL-012 | Geometría | Diferencia de alineación de ejes | mm | 0.00 | Sí | Por Configurar
+TOL-013 | Geometría | Variación dimensional entre elementos comparables | % | 0.00 | Sí | Por Configurar
+TOL-014 | Coordenadas | Diferencia X | mm | 0.00 | Sí | Por Configurar
+TOL-015 | Coordenadas | Diferencia Y | mm | 0.00 | Sí | Por Configurar
+TOL-016 | Coordenadas | Diferencia Z | mm | 0.00 | Sí | Por Configurar
+TOL-017 | Coordenadas | Diferencia de rotación | grados | 0.00 | Sí | Por Configurar
+TOL-018 | Familias | Similitud para candidato duplicado | % | 0.00 | Sí | Por Configurar
+TOL-019 | Datos | Diferencia dato vs geometría | % | 0.00 | Sí | Por Configurar
+TOL-020 | Otros | Tolerancia adicional | Por Configurar | 0.00 | Sí | Por Configurar
+
+La arquitectura debe permitir agregar nuevas tolerancias sin modificar el código base.
+
+Las tolerancias deben poder existir en:
+
+Global
+Empresa
+Proyecto
+
+Aplicar herencia:
+
+Proyecto
+sobrescribe Empresa.
+
+Empresa
+sobrescribe Global.
+
+Si no existe configuración:
+
+0.00
++
+Estado = Por Configurar
+
+========================================================
+7. MATRIZ MAESTRA DE AUDITORÍA
+========================================================
+
+Crear una entidad:
+
+AuditRule
+
+La auditoría NO debe programarse como condiciones dispersas dentro de componentes visuales.
+
+Todas las verificaciones deben depender de una matriz central de reglas.
+
+Cada regla debe tener al menos:
+
+Rule ID
+Capítulo
+Grupo
+Nombre
+Descripción
+Especialidad
+Categoría
+Tipo de control
+Alcance
+Fuente de datos
+Parámetro / propiedad
+Método
+Tolerancia
+Resultado posible
+Severidad
+Evidencia requerida
+Buena práctica relacionada
+Catálogo relacionado
+Estado de configuración
+Versión
+Activo
+
+Tipos de control:
+
+INFORMATION
+DETERMINISTIC
+CALCULATED
+SEMANTIC_AI
+
+========================================================
+8. MATRIZ INICIAL G01–G08
+========================================================
+
+Crear las siguientes reglas iniciales.
+
+Donde todavía no exista definición exacta:
+
+Método = "Por definir"
+
+o:
+
+Configuración = "Por Configurar"
+
+--------------------------------------------------------
+G01 — IDENTIFICACIÓN Y METADATOS
+--------------------------------------------------------
+
+G01 es INFORMATIVO.
+
+No afecta puntuación.
+
+G01-001
+Proyecto identificado
+
+G01-002
+Código de proyecto
+
+G01-003
+Nombre del archivo
+
+G01-004
+Especialidad declarada
+
+G01-005
+Autor
+
+G01-006
+Organización
+
+G01-007
+Versión
+
+G01-008
+Fecha de publicación
+
+G01-009
+Estado
+
+G01-010
+Unidades
+
+Para datos inexistentes:
+
+WARNING informativo
+o Por Configurar según corresponda.
+
+No generar FAIL de calidad tridimensional.
+
+--------------------------------------------------------
+G02 — COORDENADAS Y POSICIONAMIENTO
+--------------------------------------------------------
+
+G02 es principalmente INFORMATIVO en auditoría individual.
+
+Extraer:
+
+G02-001 Internal Origin
+G02-002 Project Base Point
+G02-003 Survey Point
+G02-004 Shared Coordinates
+G02-005 Project North
+G02-006 True North
+G02-007 Transformación
+G02-008 Extensión XYZ
+
+No concluir:
+
+"Modelo desalineado"
+
+utilizando un solo modelo.
+
+Guardar información para comparación futura.
+
+--------------------------------------------------------
+G03 — NIVELES Y ORGANIZACIÓN VERTICAL
+--------------------------------------------------------
+
+G03-A — INVENTARIO
+
+G03-A01
+Inventario de niveles
+
+Datos:
+
+ID
+UniqueId
+Nombre
+Elevación
+Orden vertical
+Separación anterior
+Separación siguiente
+Cantidad elementos
+
+G03-B — ESTRUCTURA
+
+G03-B01
+Nombres duplicados
+
+G03-B02
+Nomenclatura de niveles
+
+Catálogo:
+Por Configurar
+
+G03-B03
+Niveles coincidentes
+
+Tolerancia:
+TOL-001
+
+G03-B04
+Niveles próximos
+
+Tolerancia:
+TOL-002
+
+G03-B05
+Niveles potencialmente redundantes
+
+Método:
+Por definir
+
+G03-B06
+Niveles ajenos a la especialidad
+
+Criterio:
+Por definir
+
+G03-B07
+Niveles sin utilización
+
+Resultado inicial:
+WARNING
+
+G03-C — ASOCIACIÓN ELEMENTO / NIVEL
+
+Crear catálogo:
+
+VerticalReferenceCatalog
+
+Mapeo inicial:
+
+Structural Columns
+Base Level
+Top Level
+
+Structural Framing
+Reference Level
+
+Structural Foundations
+Level
+
+Floors
+Level
+
+Walls
+Base Constraint
+Top Constraint
+
+Structural Rebar
+Parámetro propio de nivel de clasificación
+
+Generic Models
+Nivel nativo si existe.
+Alternativa:
+Por Configurar
+
+Otras categorías:
+Por Configurar
+
+Reglas:
+
+G03-C01
+Elemento con referencia vertical disponible
+
+G03-C02
+Elemento con referencia vertical válida
+
+G03-C03
+Elemento referenciado a nivel inexistente
+
+G03-C04
+Categoría sin mapeo C1
+
+Resultado:
+NOT EVALUATED
+
+G03-C05
+Referencia vertical incoherente con posición geométrica
+
+Método:
+Por definir
+
+G03-D — RESTRICCIONES Y OFFSETS
+
+G03-D01
+Offset distinto de cero
+
+NO considerar automáticamente FAIL.
+
+G03-D02
+Offset potencialmente atípico
+
+Tolerancia:
+TOL-003
+
+G03-D03
+Elemento referenciado a nivel distante y compensado mediante offset
+
+Método:
+Por definir
+
+G03-E — DISTRIBUCIÓN
+
+G03-E01
+Elementos por nivel
+
+G03-E02
+Categorías por nivel
+
+G03-E03
+Familias por nivel
+
+G03-E04
+Tipos por nivel
+
+Todos inicialmente:
+INFORMATION
+
+--------------------------------------------------------
+G04 — GRILLAS Y EJES
+--------------------------------------------------------
+
+G04-A — INVENTARIO
+
+G04-A01
+Identificador
+
+G04-A02
+Nombre
+
+G04-A03
+Tipo geométrico:
+recta / curva
+
+G04-A04
+Orientación
+
+G04-A05
+Posición
+
+G04-B — NOMENCLATURA
+
+G04-B01
+Nombres duplicados
+
+G04-B02
+Secuencia
+
+G04-B03
+Nomenclatura corporativa
+
+Catálogo:
+Por Configurar
+
+G04-C — GEOMETRÍA
+
+G04-C01
+Paralelismo esperado
+
+Tolerancia:
+TOL-004
+
+G04-C02
+Ortogonalidad esperada
+
+Tolerancia:
+TOL-004
+
+IMPORTANTE:
+
+NO asumir que todos los ejes del proyecto deben ser ortogonales.
+
+Si el eje es curvo u oblicuo intencionalmente:
+
+no penalizar.
+
+Criterio para determinar intencionalidad:
+Por definir.
+
+G04-C03
+Pequeñas desviaciones angulares
+
+Tolerancia:
+TOL-004
+
+G04-C04
+Separaciones anómalas
+
+Tolerancia:
+TOL-006
+
+G04-D — REDUNDANCIA
+
+G04-D01
+Grillas coincidentes
+
+G04-D02
+Grillas casi coincidentes
+
+Tolerancia:
+TOL-006
+
+G04-D03
+Sistemas potencialmente superpuestos
+
+Método:
+Por definir
+
+G04-E — RELACIÓN ELEMENTO / GRILLA
+
+Aplicación inicial:
+
+ESTRUCTURA:
+Evaluativo
+
+ARQUITECTURA:
+Parcial / Por Configurar
+
+MEP:
+N/A inicialmente
+
+G04-E01
+Elemento estructural relevante sin relación razonable con eje
+
+Definición de elemento relevante:
+Por Configurar
+
+G04-E02
+Excentricidad elemento/eje
+
+Tolerancia:
+TOL-007
+
+G04-E03
+Eje respecto de centro geométrico del elemento
+
+Método:
+Por definir
+
+G04-E04
+Eje respecto de cara de referencia
+
+Método:
+Por definir
+
+--------------------------------------------------------
+G05 — COMPOSICIÓN Y CATEGORÍAS BIM
+--------------------------------------------------------
+
+G05-A01
+Inventario de categorías
+
+G05-A02
+Inventario de elementos constructivos
+
+G05-A03
+Inventario de elementos auxiliares
+
+G05-C01
+Uso de categoría nativa para elementos principales
+
+Aplicar inicialmente a:
+
+Structural Columns
+Structural Framing
+Structural Foundations
+Floors
+Walls
+Structural Rebar
+
+G05-C02
+Generic Models utilizados en componentes especiales
+
+No penalizar sólo por existir Generic Models.
+
+G05-C03
+Posible categoría incorrecta
+
+Tipo:
+SEMANTIC_AI
+
+Resultado automático máximo:
+WARNING
+
+Nunca FAIL solamente por nombre.
+
+G05-D01
+Contenido ajeno a especialidad
+
+Excepciones:
+Por Configurar
+
+G05-E01
+Coherencia categoría / clasificación
+
+Clasificación:
+Por Configurar
+
+--------------------------------------------------------
+G06 — FAMILIAS Y TIPOS
+--------------------------------------------------------
+
+G06-A01
+Familias en uso
+
+G06-A02
+Familias disponibles sin instancias
+
+INFORMATION
+
+G06-A03
+Tipos en uso
+
+G06-A04
+Tipos disponibles sin instancias
+
+INFORMATION
+
+G06-B01
+Familias potencialmente redundantes
+
+G06-B02
+Tipos potencialmente duplicados
+
+Comparar:
+
+categoría
+geometría
+dimensiones
+propiedades
+materiales
+parámetros
+
+NO comparar exclusivamente nombre.
+
+G06-B03
+Nombres semánticamente equivalentes
+
+Tipo:
+SEMANTIC_AI
+
+Ejemplo:
+
+Pilar 40
+P-40
+Pilar_400
+
+Resultado:
+WARNING
+hasta validación.
+
+G06-C01
+Contenido cargado y no utilizado
+
+Resultado:
+WARNING
+
+NO exigir purga automática.
+
+G06-C02
+Familias in situ repetitivas
+
+Resultado:
+WARNING
+
+Criterio:
+Por Configurar
+
+G06-C03
+Complejidad de familia
+
+Por definir
+
+--------------------------------------------------------
+G07 — GEOMETRÍA Y CONSISTENCIA ESPACIAL
+--------------------------------------------------------
+
+G07-A01
+Cobertura de geometría recuperable
+
+G07-A02
+Bounding Box disponible
+
+G07-A03
+Sólidos disponibles
+
+G07-B01
+Candidatos duplicados geométricos
+
+G07-B02
+Solapes no esperados
+
+Tolerancia:
+TOL-009
+
+Relaciones constructivas permitidas:
+Por Configurar
+
+NO interpretar automáticamente como colisión:
+
+viga-pilar
+losa-viga
+armadura-hormigón
+
+G07-C01
+Continuidad vertical
+
+G07-C02
+Gaps entre elementos
+
+Tolerancia:
+TOL-008
+
+G07-C03
+Continuidad entre niveles
+
+G07-C04
+Piso potencialmente ausente entre elementos verticales
+
+Método:
+Por definir
+
+G07-C05
+Alineación por eje
+
+Tolerancia:
+TOL-012
+
+G07-C06
+Alineación por cara
+
+Tolerancia:
+TOL-011
+
+G07-C07
+Cambio de sección
+
+Permitir:
+
+cara alineada
+cara opuesta alineada
+eje alineado
+
+Otras condiciones:
+Por Configurar
+
+G07-D01
+Dimensión potencialmente atípica
+
+Tolerancia:
+TOL-013
+
+No producir FAIL sólo por rareza estadística.
+
+G07-E01
+Elemento potencialmente aislado
+
+Usar:
+
+Bounding Box
+distancia
+proximidad
+
+Tolerancia:
+TOL-010
+
+G07-F01
+Geometría no recuperable
+
+Resultado:
+NOT EVALUATED
+
+NO confundir limitación de extracción con falla del modelo.
+
+--------------------------------------------------------
+G08 — SALUD TÉCNICA DEL MODELO
+--------------------------------------------------------
+
+G08-A — FICHA TÉCNICA
+
+INFORMATION
+
+Versión Revit
+Tamaño
+Colaboración
+Worksets
+Cantidad elementos
+Cantidad vistas
+Cantidad vínculos
+Cantidad warnings
+
+Si algún dato no está disponible:
+
+Por Configurar
+o NOT EVALUATED.
+
+G08-B — WARNINGS
+
+G08-B01
+Inventario de warnings
+
+G08-B02
+Warnings recurrentes
+
+G08-B03
+Clasificación de severidad
+
+Catálogo:
+Por Configurar
+
+G08-C — VÍNCULOS E IMPORTACIONES
+
+G08-C01
+RVT Links
+
+G08-C02
+CAD Links
+
+G08-C03
+CAD importado
+
+G08-C04
+Vínculos descargados
+
+NO exigir que todas las disciplinas estén vinculadas.
+
+G08-D — COLABORACIÓN
+
+G08-D01
+Worksets
+
+Regla corporativa:
+Por Configurar
+
+G08-E — VISTAS Y PLANOS
+
+G08-E01
+Inventario de vistas
+
+G08-E02
+Inventario de planos
+
+G08-E03
+View Templates
+
+G08-E04
+Posibles vistas residuales
+
+Resultado:
+WARNING
+
+No asumir que vista sin plano = error.
+
+G08-F — COMPLEJIDAD Y RENDIMIENTO
+
+Estado:
+
+Por definir
+
+Fuera de puntuación inicial.
+
+G08-G — MANTENIMIENTO
+
+G08-G01
+Contenido residual
+
+Método:
+Por definir
+
+G08-G02
+Contenido obsoleto
+
+Método:
+Por definir
+
+No exigir purga total.
+
+========================================================
+9. AUDITORÍA DE DATOS D01–D08
+========================================================
+
+Crear la estructura en navegación y arquitectura de datos.
+
+NO desarrollar todavía reglas completas que no estén definidas.
+
+Mostrar inicialmente:
+
+D01 Inventario de parámetros
+D02 Existencia y completitud
+D03 Tipos de dato y unidades
+D04 Validez
+D05 Consistencia semántica
+D06 Tipo e instancia
+D07 Requisitos por categoría
+D08 Aptitud para uso
+
+Estado inicial general:
+
+Por Configurar
+
+Sólo implementar el esqueleto y las entidades necesarias para permitir expansión posterior.
+
+========================================================
+10. ENTIDADES DE DATOS
+========================================================
+
+Crear como mínimo:
+
+AuditRun
+
+id
+projectId
+modelId
+versionId
+viewId
+discipline
+ruleSetId
+companyCatalogId
+projectCatalogId
+startedAt
+completedAt
+status
+
+AuditScope
+
+id
+auditRunId
+scopeType
+viewId
+modelId
+elementCount
+status
+
+AuditRule
+
+definida anteriormente.
+
+AuditTolerance
+
+definida anteriormente.
+
+AuditFinding
+
+id
+auditRunId
+ruleId
+result
+severity
+title
+description
+observedValue
+expectedValue
+toleranceId
+evidence
+createdAt
+
+AffectedElement
+
+findingId
+modelId
+elementId
+uniqueId
+category
+family
+type
+level
+
+AuditEvidence
+
+findingId
+source
+property
+observedValue
+expectedValue
+unit
+geometryReference
+viewerReference
+
+VerticalReferenceCatalog
+
+discipline
+category
+baseReference
+topReference
+classificationReference
+status
+
+CompanyAuditCatalog
+
+companyId
+version
+rules
+tolerances
+naming
+equivalences
+exceptions
+
+ProjectAuditCatalog
+
+projectId
+version
+rules
+tolerances
+naming
+equivalences
+exceptions
+
+========================================================
+11. INTERFAZ
+========================================================
+
+La interfaz debe ser SIMPLE.
+
+NO construir una única pantalla excesivamente larga.
+
+Utilizar menú lateral interno o subnavegación.
+
+Propuesta:
+
+AUDITORÍA
+
+Resumen
+
+CONFIGURACIÓN
+- Configuración de auditoría
+- Tolerancias
+- Rule Set
+
+CONTEXTO
+- Ficha del modelo
+- Coordenadas
+
+AUDITORÍA 3D
+- Niveles
+- Grillas
+- Categorías
+- Familias y tipos
+- Geometría
+- Salud técnica
+
+DATOS
+- Parámetros
+- Completitud
+- Validez
+- Consistencia
+- Aptitud para uso
+
+RESULTADOS
+- Hallazgos
+- Comparaciones
+
+========================================================
+12. DASHBOARD PRINCIPAL
+========================================================
+
+El resumen debe mostrar:
+
+Proyecto
+Modelo
+Vista
+Especialidad
+Versión
+Fecha análisis
+
+KPIs:
+
+Conformidad 3D
+Cobertura evaluada
+Reglas ejecutadas
+PASS
+WARNING
+FAIL
+NOT EVALUATED
+Elementos analizados
+Elementos afectados
+Hallazgos
+
+NO mostrar un único porcentaje si existe una cantidad significativa de reglas NOT EVALUATED.
+
+Agregar tarjetas por capítulo:
+
+G03 Niveles
+G04 Grillas
+G05 Categorías
+G06 Familias y tipos
+G07 Geometría
+G08 Salud técnica
+
+Cada tarjeta debe permitir abrir su sección.
+
+========================================================
+13. PÁGINA DE TOLERANCIAS
+========================================================
+
+Crear pantalla:
+
+Configuración > Tolerancias
+
+Tabla editable:
+
+Control
+Área
+Valor
+Unidad
+Origen
+Estado
+
+Ejemplo:
+
+Desviación angular | Grillas | 0.00 | grados | Global | Por Configurar
+Gap entre elementos | Geometría | 0.00 | mm | Global | Por Configurar
+Offset vertical | Niveles | 0.00 | mm | Global | Por Configurar
+
+Permitir:
+
+Editar
+Restaurar
+Herencia global/empresa/proyecto
+
+NO aplicar tolerancias técnicas inventadas.
+
+========================================================
+14. PÁGINA DE MATRIZ DE REGLAS
+========================================================
+
+Crear pantalla:
+
+Configuración > Rule Set
+
+Tabla:
+
+ID
+Capítulo
+Regla
+Especialidad
+Categoría
+Tipo
+Tolerancia
+Resultado
+Estado
+Activo
+
+Filtros:
+
+Capítulo
+Especialidad
+Categoría
+Tipo de regla
+Estado
+
+Los registros incompletos deben mostrar:
+
+Por Configurar
+
+o:
+
+Por definir
+
+según corresponda.
+
+========================================================
+15. HALLAZGOS Y VIEWER
+========================================================
+
+Página:
+
+Hallazgos
+
+Filtros:
+
+Estado
+Capítulo
+Regla
+Nivel
+Categoría
+Familia
+Tipo
+
+Tabla:
+
+ID
+Resultado
+Regla
+Elemento
+Categoría
+Nivel
+Descripción
+
+Al seleccionar un hallazgo:
+
+mostrar panel lateral con:
+
+Regla
+Resultado
+Descripción
+Elemento
+Valor observado
+Valor esperado
+Tolerancia
+Evidencia
+Buena práctica relacionada
+Origen de regla
+
+Acciones:
+
+VER EN MODELO
+AISLAR
+SELECCIONAR
+CREAR INCIDENCIA
+
+IMPORTANTE:
+
+Hallazgo ≠ Incidencia.
+
+Crear incidencia sólo mediante acción explícita o futura regla configurada.
+
+Preparar integración futura con módulo Review.
+
+========================================================
+16. VIEWER
+========================================================
+
+Utilizar el Viewer existente de la plataforma.
+
+El Viewer debe permitir:
+
+seleccionar elemento;
+aislar elemento;
+resaltar elementos afectados;
+mostrar conjuntos de elementos;
+mostrar pareja de elementos cuando corresponda;
+centrar cámara;
+recuperar Element ID / UniqueId.
+
+No crear un Viewer independiente si ya existe uno común en la plataforma.
+
+========================================================
+17. TRAZABILIDAD
+========================================================
+
+Todo resultado debe poder reconstruirse.
+
+Guardar:
+
+Proyecto
+Modelo
+Versión
+Vista
+Especialidad
+Rule Set
+Versión Rule Set
+Catálogo
+Versión catálogo
+Regla
+Tolerancia
+Dato observado
+Dato esperado
+Elemento
+Fecha
+Resultado
+
+Nunca sobrescribir silenciosamente una auditoría anterior.
+
+Cada ejecución genera:
+
+AuditRun
+
+independiente.
+
+========================================================
+18. COMPARACIONES
+========================================================
+
+No desarrollar todavía toda la lógica comparativa.
+
+Dejar arquitectura preparada para:
+
+AuditRun A
+vs
+AuditRun B
+
+Casos:
+
+modelo vs modelo;
+arquitectura vs estructura;
+estructura vs MEP;
+versión anterior vs versión actual.
+
+Mostrar sección:
+
+Comparaciones
+
+Estado inicial:
+
+Por Configurar
+
+========================================================
+19. PRINCIPIOS DE IMPLEMENTACIÓN
+========================================================
+
+1. No hardcodear reglas directamente en UI.
+
+2. Todo debe depender de AuditRule.
+
+3. No hardcodear tolerancias.
+
+4. Todo debe depender de AuditTolerance.
+
+5. Todos los valores iniciales de tolerancia = 0.00.
+
+6. No inventar criterios faltantes.
+
+7. Mostrar:
+   Por Configurar
+   o
+   Por definir.
+
+8. Mantener trazabilidad completa.
+
+9. Diseñar arquitectura extensible por especialidad.
+
+10. Comenzar funcionalmente por ESTRUCTURA.
+
+11. No asumir que una anomalía estadística es un FAIL.
+
+12. No asumir que ausencia de información desde una API significa que el dato no existe.
+
+13. No duplicar el mismo hallazgo en varios capítulos.
+
+14. Un hallazgo puede afectar uno o varios elementos.
+
+15. Mantener separados:
+    inventario;
+    hallazgo;
+    conformidad;
+    incidencia.
+
+========================================================
+20. DISEÑO VISUAL
+========================================================
+
+Mantener el lenguaje visual actual de la plataforma.
+
+Usar:
+
+tipografía existente;
+colores existentes;
+tarjetas existentes;
+componentes existentes;
+Viewer existente;
+iconografía consistente.
+
+La interfaz debe verse:
+
+profesional;
+técnica;
+limpia;
+compacta;
+orientada a BIM Managers y coordinadores.
+
+Evitar:
+
+pantallas recargadas;
+scroll vertical innecesario;
+gráficos decorativos;
+información duplicada.
+
+Priorizar:
+
+información accionable;
+estado;
+evidencia;
+navegación rápida;
+Viewer.
+
+========================================================
+21. DATOS MOCK
+========================================================
+
+Mientras no exista conexión real:
+
+utilizar datos mock claramente identificados.
+
+No presentar los datos mock como resultados reales de Autodesk.
+
+Permitir sustituir posteriormente cada proveedor mock por la fuente APS/AEC Data Model correspondiente.
+
+========================================================
+22. PRIORIDAD DE DESARROLLO
+========================================================
+
+Implementar en este orden:
+
+FASE 1
+
+1. Modelo de datos
+2. AuditRun
+3. AuditScope por vista
+4. AuditRule
+5. AuditTolerance
+6. Matriz de reglas G01–G08
+7. Configuración de auditoría
+8. Tabla de tolerancias
+9. Dashboard resumen
+10. G03 Niveles
+11. G04 Grillas
+12. Hallazgos
+13. Integración Viewer
+
+FASE 2
+
+G05 Categorías
+G06 Familias y tipos
+G07 Geometría
+G08 Salud técnica
+
+FASE 3
+
+D01–D08
+Comparaciones
+Integración Review
+
+========================================================
+23. CRITERIO FINAL
+========================================================
+
+El objetivo NO es construir simplemente un "Model Checker".
+
+El módulo debe convertirse en un motor configurable de auditoría BIM.
+
+Debe poder responder:
+
+¿Qué se auditó?
+¿Qué reglas se utilizaron?
+¿Qué pudo evaluarse?
+¿Qué no pudo evaluarse?
+¿Qué está correcto?
+¿Qué requiere revisión?
+¿Qué está objetivamente incorrecto?
+¿Qué elementos están afectados?
+¿Qué evidencia respalda el resultado?
+¿Qué tolerancia se utilizó?
+¿Qué regla corporativa se aplicó?
+
+Y todo resultado debe poder navegar desde:
+
+RESUMEN
+→ CAPÍTULO
+→ REGLA
+→ HALLAZGO
+→ ELEMENTO
+→ VIEWER
+
+Desarrollar la estructura de manera modular y reutilizable, evitando lógica específica acoplada a una sola especialidad o proyecto.

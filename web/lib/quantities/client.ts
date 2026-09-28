@@ -2,6 +2,12 @@ import { autodeskFetch } from "../autodesk/client";
 import type { DataPage, DataQuery } from "../autodesk/data";
 import type { QuantityProject } from "./contracts";
 const errors: Record<string, string> = {
+  audit_view_required: 'Selecciona una vista 3D publicada y guarda la configuración.',
+  audit_derivative_pending: 'Autodesk está preparando los datos de esta vista. Vuelve a ejecutar en unos momentos.',
+  audit_source_unavailable: 'No fue posible recuperar los datos de esta vista. No se generó un resultado técnico.',
+  audit_source_too_large: 'La lectura supera el tamaño disponible. Publica una vista de auditoría con un alcance más acotado.',
+  audit_storage_unavailable: 'El almacenamiento de auditorías no está disponible. No se ha guardado una ejecución.',
+  audit_invalid_catalog: 'Confirma la fuente y unidad de cada tolerancia antes de guardarla.',
   expired: "Conexión Autodesk no disponible. Conecta tu cuenta para continuar.",
   consent_required: "Vuelve a conectar Autodesk para autorizar la lectura de proyectos.",
   forbidden: "No tienes acceso a esta fuente o Autodesk no autorizó la solicitud.",

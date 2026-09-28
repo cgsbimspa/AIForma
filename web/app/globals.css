@@ -288,3 +288,4 @@ button:disabled { cursor: default; opacity: .45; }
  .assistant-header-status .assistant-identity br { display: none; }
  .assistant-header-status .assistant-identity strong { margin-left: 4px; }
 }
+.audit-subnav{margin:2px 6px 10px 23px;padding-left:12px;border-left:1px solid #d5e3f6;font-size:11px}.audit-subnav>a,.audit-subnav details a{display:block;padding:6px 8px;color:#496b94;border-radius:5px;margin:1px 0}.audit-subnav summary{cursor:pointer;color:#5c789a;font-size:10px;font-weight:650;letter-spacing:.02em;padding:7px 5px}.audit-subnav details div{padding-left:6px}.audit-subnav a[aria-current=page]{color:#075dd4;background:#e9f2ff;font-weight:650}.audit-subnav a:hover{background:#f0f5fc}
