@@ -1,9 +1,10 @@
 // AEC payload fields: https://aps.autodesk.com/blog/consume-aec-data-which-are-model-derivative-api
 // AEC records are model datum data, not dbIds or a count of visible Revit elements.
+import { parseAecLevels,type AuditAecLevels } from './levels.ts';
 export type GridPoint = [number, number, number];
 export type AuditGridSegment = { guid:string|null; type:string|number|null; start:GridPoint|null; end:GridPoint|null };
 export type AuditAecGrid = { key:string; id:string|null; label:string|null; document:string|null; segments:AuditGridSegment[]; geometryComplete:boolean };
-export type AuditAecFile = { endpoint:string; documentId:string|null; schemaVersion:string|null; grids:AuditAecGrid[]; invalidRecords:number; invalidSegments:number; gridsFieldAvailable:boolean; linkedDocumentCount:number|null };
+export type AuditAecFile = { endpoint:string; documentId:string|null; schemaVersion:string|null; grids:AuditAecGrid[]; invalidRecords:number; invalidSegments:number; gridsFieldAvailable:boolean; linkedDocumentCount:number|null; levels?:AuditAecLevels };
 export type AuditAecInventory = { status:'AVAILABLE'|'PARTIAL'|'NOT_FOUND'|'UNAVAILABLE'; fetchedAt:string; attempts:{endpoint:string;status:string}[]; files:AuditAecFile[]; message:string };
 const record=(v:unknown):Record<string,unknown>|null=>v!==null&&typeof v==='object'&&!Array.isArray(v)?v as Record<string,unknown>:null;
 const text=(v:unknown)=>typeof v==='string'&&v.trim()&&v.length<=2000?v:null;
@@ -27,7 +28,7 @@ export function parseAecGrids(value:unknown,endpoint:string):AuditAecFile {
   }
   grids.push({key:`${endpoint}#grids[${i}]`,id:text(grid.id),label:text(grid.label),document:text(grid.document),segments,geometryComplete:segments.length>0&&segments.every(s=>s.start!==null&&s.end!==null)});
  }
- return {endpoint,documentId:text(data.documentId),schemaVersion:text(data.version),grids,invalidRecords,invalidSegments,gridsFieldAvailable:Array.isArray(data.grids),linkedDocumentCount:Array.isArray(data.linkedDocuments)?data.linkedDocuments.length:null};
+ return {endpoint,documentId:text(data.documentId),schemaVersion:text(data.version),grids,invalidRecords,invalidSegments,gridsFieldAvailable:Array.isArray(data.grids),linkedDocumentCount:Array.isArray(data.linkedDocuments)?data.linkedDocuments.length:null,levels:parseAecLevels(data,endpoint)};
 }
 
 // Values are original coordinates. No conversion to mm or assumption of shared

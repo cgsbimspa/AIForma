@@ -10,7 +10,7 @@ import { projectScope } from '@/lib/quantities/contracts';
 import { verifiedSource } from '@/lib/quantities/autodesk';
 import { configSchema,catalogSchema,type AuditRun } from '@/lib/audit/contracts';
 import { createAuditStore } from '@/lib/audit/store';
-import { readAuditView } from '@/lib/audit/provider';
+import { readAuditView,property } from '@/lib/audit/provider';
 import { executeAudit,score } from '@/lib/audit/engine';
 import { auditRules } from '@/lib/audit/catalog';
 export const runtime='nodejs';export const dynamic='force-dynamic';export const maxDuration=120;
@@ -23,7 +23,7 @@ const schema=z.object({scope:projectScope,command:z.discriminatedUnion('action',
 const response=(value:unknown)=>NextResponse.json(value,{headers:privateHeaders});
 const store=()=>{if(!memoryConfigured())throw new DataError('audit_storage_unavailable',503);return createAuditStore(auditTransaction,storageKey());};
 function preview(value:unknown):unknown {return Array.isArray(value)&&value.length>50?{preview:value.slice(0,50),total:value.length,partial:true}:value;}
-function report(run:AuditRun){return {...run,metrics:score(run.findings),inventory:{...run.inventory,elements:[],levels:run.inventory.levels.map(e=>({...e,properties:{}})),grids:run.inventory.grids.map(e=>({...e,properties:{}}))},findings:run.findings.map(f=>({...f,affectedCount:f.affectedElements.length,facets:Object.fromEntries(['category','family','type','level'].map(key=>[key,[...new Set(f.affectedElements.map(e=>e[key as 'category']).filter(Boolean))]])),affectedElements:f.affectedElements.slice(0,50),observedValue:preview(f.observedValue),evidence:f.evidence.map(e=>({...e,observedValue:preview(e.observedValue),viewerReference:{...e.viewerReference,dbIds:e.viewerReference.dbIds.slice(0,50)}}))}))};}
+function report(run:AuditRun){return {...run,metrics:score(run.findings),inventory:{...run.inventory,elements:[],levels:run.inventory.levels.map(e=>{const value=property(e,['Elevation','Elevación'])?.value;return {...e,publishedElevation:typeof value==='string'||typeof value==='number'?value:null,properties:{}};}),grids:run.inventory.grids.map(e=>({...e,properties:{}}))},findings:run.findings.map(f=>({...f,affectedCount:f.affectedElements.length,facets:Object.fromEntries(['category','family','type','level'].map(key=>[key,[...new Set(f.affectedElements.map(e=>e[key as 'category']).filter(Boolean))]])),affectedElements:f.affectedElements.slice(0,50),observedValue:preview(f.observedValue),evidence:f.evidence.map(e=>({...e,observedValue:preview(e.observedValue),viewerReference:{...e.viewerReference,dbIds:e.viewerReference.dbIds.slice(0,50)}}))}))};}
 export async function GET(request:NextRequest){try{
  const scope=projectScope.parse(JSON.parse(request.nextUrl.searchParams.get('scope')??'null')),actor=await memoryActor(request,scope),db=store();
  const runId=request.nextUrl.searchParams.get('run');if(!runId)return response(await db.workspace(actor));

@@ -99,6 +99,6 @@ export async function readAuditAec(token:string,modelUrn:string,signal?:AbortSig
  }));
  result.files.sort((a,b)=>a.endpoint.localeCompare(b.endpoint));
  result.status=result.files.length?(failed?'PARTIAL':'AVAILABLE'):hadManifest&&!failed&&!assets.size?'NOT_FOUND':'UNAVAILABLE';
- result.message=result.status==='NOT_FOUND'?'Los manifiestos consultados no incluyen datos AEC. Esto no demuestra que el RVT carezca de ejes.':result.status==='UNAVAILABLE'?'No fue posible recuperar datos AEC; se conserva la lectura de la vista. Reintenta la auditoría y revisa la publicación si persiste.':result.status==='PARTIAL'?'Lectura AEC parcial: hay fuentes o segmentos no disponibles. Consulta el detalle de cobertura.':'Datos AEC recuperados de esta versión: referencias del modelo y documentos vinculados publicados. Su presencia no demuestra visibilidad en la vista ni cobertura de todos los vínculos.';
+ result.message=result.status==='NOT_FOUND'?'Los manifiestos consultados no incluyen datos AEC. Esto no demuestra que el RVT carezca de ejes o niveles.':result.status==='UNAVAILABLE'?'No fue posible recuperar datos AEC; se conserva la lectura de la vista. Reintenta la auditoría y revisa la publicación si persiste.':result.status==='PARTIAL'?'Lectura AEC parcial: hay fuentes o segmentos no disponibles. Consulta el detalle de cobertura.':'Datos AEC recuperados de esta versión: referencias del modelo y documentos vinculados publicados. Su presencia no demuestra visibilidad en la vista ni cobertura de todos los vínculos.';
  return result;
 }

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { auditRules, auditRuleSetVersion, effectiveTolerances } from './catalog.ts';
 import { property } from './provider.ts';
 import { gridChordAngle,repeatedGridLabels } from './grids.ts';
+import { repeatedLevelNames } from './levels.ts';
 import type { AuditConfiguration, AuditElement, AuditFinding, AuditInventory, AuditResult, AuditRun, CompanyAuditCatalog, ProjectAuditCatalog } from './contracts.ts';
 
 // Do not interpret unitless values, display strings containing unknown units or ambiguous properties.
@@ -50,8 +51,27 @@ export function executeAudit(input:{configuration:AuditConfiguration;inventory:A
  for(const rule of rules.filter(r=>r.active)){
   const r=rule.ruleId;
   if(r in metadata){const v=metadata[r];add(r,v===null||r==='G01-008'?'NOT EVALUATED':'INFORMATION',r==='G01-004'?'Especialidad declarada por el usuario; no inferida del contenido.':r==='G01-008'?'Autodesk devuelve createTime, fecha de creación de esta versión. No confirma por separado la fecha de publicación de la vista en Revit.':'Dato de la fuente Autodesk verificada.',[],v);continue;}
-  if(r==='G03-A01'){add(r,inventory.levels.length?'INFORMATION':'NOT EVALUATED',inventory.levels.length?'Niveles recuperados en la vista; elevaciones sin unidad explícita permanecen no disponibles.':'La vista no publica objetos de nivel identificables. Las referencias de los elementos se muestran por separado.',inventory.levels,inventory.levels.map(e=>({id:e.elementId,uniqueId:e.uniqueId,name:e.name,elevation:property(e,['Elevation','Elevación'])?.value??null})));continue;}
-  if(r==='G03-B01'){duplicates(r,inventory.levels);continue;}
+  if(r==='G03-A01'||r==='G03-B01'){
+   let available=false;
+   if(inventory.levels.length){available=true;if(r==='G03-B01')duplicates(r,inventory.levels);else add(r,'INFORMATION','Niveles identificados en el árbol de la vista. Elevaciones originales; no se asignan unidades a valores numéricos sin unidad.',inventory.levels,inventory.levels.map(e=>({id:e.elementId,uniqueId:e.uniqueId,name:e.name,elevation:property(e,['Elevation','Elevación'])?.value??null})));}
+   for(const file of inventory.aec?.files??[]){
+    const levels=file.levels;if(!levels)continue;
+    if(levels.records.length){
+     available=true;
+     const values=r==='G03-A01'?levels.records:repeatedLevelNames(levels).map(rows=>({name:rows[0].name,documentId:rows[0].documentId,originPath:rows[0].originPath,records:rows.map(l=>({guid:l.guid,record:l.key}))}));
+     add(r,'INFORMATION',r==='G03-A01'?'Niveles recuperados de datos AEC, aunque no estén visibles en la vista 3D. Se conserva su elevación original, origen y atributos publicados. Unidades y transformación entre vínculos no verificadas: no se asignan pisos ni se comparan cotas entre documentos.':'Nombres repetidos dentro de cada origen AEC: candidatos informativos para revisar. Nombres iguales de documentos o instancias distintas no se consideran duplicados.',[],values);
+     const finding=findings.at(-1)!;finding.evidence=[{...finding.evidence[0],source:file.endpoint,property:r==='G03-A01'?'levels + linkedDocuments[].levels':'levels.name por origen AEC',fetchedAt:inventory.aec!.fetchedAt}];
+    }
+    const uncovered=levels.documents.filter(d=>!d.fieldAvailable);
+    if(uncovered.length||levels.invalidRecords||levels.invalidFields){
+     add(r,'NOT EVALUATED','Cobertura de niveles incompleta: hay documentos sin campo levels o registros con datos faltantes. No se interpreta como ausencia de niveles.',[],{documents:uncovered,invalidRecords:levels.invalidRecords,invalidFields:levels.invalidFields});
+     const finding=findings.at(-1)!;finding.evidence=[{...finding.evidence[0],source:file.endpoint,property:'levels: cobertura por documento',fetchedAt:inventory.aec!.fetchedAt}];
+    }
+   }
+   if(!available)add(r,'NOT EVALUATED','No se recuperaron niveles identificables en las fuentes consultadas. No demuestra su ausencia en el RVT. Consulta Cobertura y ejecuta una nueva auditoría si el informe es anterior.',[],{viewLevelRecords:inventory.levels.length,aecStatus:inventory.aec?.status??'NOT_QUERIED'});
+   else if(inventory.aec&&['UNAVAILABLE','PARTIAL'].includes(inventory.aec.status))add(r,'NOT EVALUATED',inventory.aec.message);
+   continue;
+  }
   if(r==='G03-B03'||r==='G03-B04'){
    const t=tolerances.find(t=>t.id===rule.tolerance);
    if(t?.status!=='Confirmada'||t.unit!=='mm'){add(r,'NOT EVALUATED',`${rule.tolerance}: Por Configurar. Cero no equivale a una tolerancia confirmada.`);continue;}
@@ -122,5 +142,5 @@ export function executeAudit(input:{configuration:AuditConfiguration;inventory:A
   if(r.startsWith('G04-E')&&configuration.discipline==='MEP'){add(r,'N/A','Relación elemento / grilla no aplicable inicialmente a MEP según el alcance definido.');continue;}
   add(r,'NOT EVALUATED',rule.tolerance?`${rule.tolerance}: ${tolerances.find(t=>t.id===rule.tolerance)?.status??'Por Configurar'}. Método, geometría o criterios adicionales pendientes de definición/verificación.`:rule.method==='Por definir'?'Método o criterio: Por definir. No se ha emitido una conclusión técnica.':'La fuente no entrega evidencia suficiente para esta comprobación.');
  }
- return {id,projectId:source.scope.projectId,modelId:source.scope.itemId,versionId:source.version.id,viewId:source.view.id,discipline:configuration.discipline,ruleSetId:configuration.ruleSetId,ruleSetVersion:auditRuleSetVersion,companyCatalogId:`${companyCatalog.companyId}:v${companyCatalog.version}`,projectCatalogId:`${projectCatalog.projectId}:v${projectCatalog.version}`,startedAt:input.startedAt,completedAt,status:findings.some(f=>f.result==='NOT EVALUATED')?'PARTIAL':'COMPLETED',createdBy:input.createdBy,source,configuration,rules,companyCatalog,projectCatalog,tolerances,engineVersion:'audit-engine-1.1.0',findings,inventory:{...inventory,elements},scope:{id:randomUUID(),auditRunId:id,scopeType:'VIEW',viewId:source.view.id,modelId:source.scope.itemId,elementCount:elements.length,status:inventory.missing?'PARTIAL':'VERIFIED',population:inventory.population,unavailableCount:inventory.missing}};
+ return {id,projectId:source.scope.projectId,modelId:source.scope.itemId,versionId:source.version.id,viewId:source.view.id,discipline:configuration.discipline,ruleSetId:configuration.ruleSetId,ruleSetVersion:auditRuleSetVersion,companyCatalogId:`${companyCatalog.companyId}:v${companyCatalog.version}`,projectCatalogId:`${projectCatalog.projectId}:v${projectCatalog.version}`,startedAt:input.startedAt,completedAt,status:findings.some(f=>f.result==='NOT EVALUATED')?'PARTIAL':'COMPLETED',createdBy:input.createdBy,source,configuration,rules,companyCatalog,projectCatalog,tolerances,engineVersion:'audit-engine-1.2.0',findings,inventory:{...inventory,elements},scope:{id:randomUUID(),auditRunId:id,scopeType:'VIEW',viewId:source.view.id,modelId:source.scope.itemId,elementCount:elements.length,status:inventory.missing?'PARTIAL':'VERIFIED',population:inventory.population,unavailableCount:inventory.missing}};
 }
