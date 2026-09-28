@@ -22,9 +22,9 @@ import { readViewClassification, classificationInventory, classificationRule } f
   const selectionMessage = async event => {
     const data=event.data;
     if(event.origin!==window.location.origin||event.source!==window.parent||data?.viewId!==input.viewId||data.urn!==input.urn||!viewer?.model)return;
-    if(data.type==='aiforma-coordination-colors'&&Array.isArray(data.groups)&&data.groups.length<=100000&&data.groups.every(g=>typeof g?.id==='string'&&['PASS','WARNING','FAIL','NOT EVALUATED','N/A'].includes(g.state))){
+    if(data.type==='aiforma-coordination-colors'&&Array.isArray(data.groups)&&data.groups.length<=100000&&data.groups.every(g=>typeof g?.id==='string'&&['PASS','WARNING','FAIL','PRELIMINARY','NOT EVALUATED','N/A'].includes(g.state))){
       try{
-        const map=await mapping(),rank={'N/A':0,PASS:1,'NOT EVALUATED':2,WARNING:3,FAIL:4},palette={'N/A':[.65,.69,.75],PASS:[.1,.75,.4],'NOT EVALUATED':[.5,.57,.65],WARNING:[1,.65,.05],FAIL:[.95,.16,.2]},worst=new Map();
+        const map=await mapping(),rank={'N/A':0,PASS:1,PRELIMINARY:2,'NOT EVALUATED':3,WARNING:4,FAIL:5},palette={'N/A':[.65,.69,.75],PASS:[.1,.75,.4],PRELIMINARY:[.2,.5,.95],'NOT EVALUATED':[.5,.57,.65],WARNING:[1,.65,.05],FAIL:[.95,.16,.2]},worst=new Map();
         for(const g of data.groups){const id=map[g.id];if(Number.isSafeInteger(id)&&(!worst.has(id)||rank[g.state]>rank[worst.get(id)]))worst.set(id,g.state);}
         viewer.clearThemingColors(viewer.model);
         for(const [id,state] of worst)viewer.setThemingColor(id,new THREE.Vector4(...palette[state],1),viewer.model,false);

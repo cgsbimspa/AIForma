@@ -10,6 +10,7 @@ import {systems,reviewTopics} from '../lib/coordination/catalog.ts';
 import {measurement,executeReview,report,results,compareRuns,extractModel} from '../lib/coordination/engine.ts';
 import {createCoordinationStore} from '../lib/coordination/store.ts';
 import {modelOrigin,modelCoverage,parameterCandidates} from '../lib/coordination/inspection.ts';
+import {automaticReading} from '../lib/coordination/automatic.ts';
 // Synthetic TEST ONLY fixtures. No project/model observations are asserted here.
 const actor={organizationId:'TEST_ORG',projectId:'TEST_PROJECT',userId:'TEST_USER'},now=new Date().toISOString();
 const source={scope:{kind:'file',hubId:actor.organizationId,projectId:actor.projectId,folderIds:['TEST_FOLDER'],itemId:'TEST_FILE'},fileName:'TEST.rvt',projectName:'TEST project',path:'TEST / TEST.rvt',version:{id:'TEST_V1',number:1,name:'TEST.rvt',createdAt:now,modelId:'TEST_URN',webUrl:null,endpoint:'https://developer.api.autodesk.com/TEST',fetchedAt:now},view:{id:'TEST_VIEW',name:'TEST view',role:'3d',endpoint:'https://developer.api.autodesk.com/TEST',fetchedAt:now},versionPolicy:'manual'};
@@ -27,7 +28,7 @@ test('RIDAA base has stable source-linked controls; exterior does not inherit in
  assert.ok(rule.requirement.includes('1 %'));assert.ok(rule.application.includes('No ventilación'));
 });
 test('unmapped rules and unverified networks produce no invented PASS or FAIL',()=>{
- const run=execute([row(1,'5 %')],configuration);assert.ok(run.findings.every(f=>f.state==='NOT EVALUATED'));assert.equal(run.rulesExecuted,0);assert.equal(run.status,'PARTIAL');assert.equal(run.graph.state,'NOT AVAILABLE');assert.equal(run.graph.elements[0].upstream,null);assert.equal(report(run).counts.PASS,0);
+ const run=execute([row(1,'5 %')],configuration);assert.ok(run.findings.every(f=>['NOT EVALUATED','PRELIMINARY'].includes(f.state)));assert.equal(run.preliminaryComparisons,2);assert.equal(run.rulesExecuted,0);assert.equal(run.status,'PARTIAL');assert.equal(run.graph.state,'NOT AVAILABLE');assert.equal(run.graph.elements[0].upstream,null);assert.equal(report(run).counts.PASS,0);assert.equal(report(run).counts.FAIL,0);
 });
 test('scope confirmation, 3D source and exact system membership are required',()=>{
  assert.throws(()=>execute([row(1,'3 %')],{...configuration,scope:{...configuration.scope,confirmed:false}}),/coordination_scope_required/);
@@ -48,7 +49,7 @@ test('numeric evaluation preserves published value, unit, identities, input vers
 });
 test('missing units and ambiguous formats remain not evaluated; explicit units convert deterministically',()=>{
  for(const raw of [null,3,'3','approx 3 %','3 m','1,000.00 %'])assert.equal(execute([row(1,raw)]).findings.find(f=>f.ruleId===rule.id).state,'NOT EVALUATED');
- assert.equal(measurement('0.075 m','mm'),75);assert.equal(measurement('5 cm','mm'),50);assert.equal(measurement('3,2 %','%'),3.2);assert.equal(measurement('3 ft','m'),null);
+ assert.equal(measurement('0.075 m','mm'),75);assert.equal(measurement('5 cm','mm'),50);assert.equal(measurement('3,2 %','%'),3.2);assert.ok(Math.abs(measurement('3 ft','m')-.9144)<1e-9);
 });
 test('partial property population is disclosed, never zero-filled',()=>{
  const run=execute([row(1,'3 %')],undefined,[999]);assert.equal(run.missingCount,1);assert.equal(run.status,'PARTIAL');assert.equal(report(run).counts.PASS,1);assert.equal(run.readCount,1);
@@ -83,14 +84,69 @@ test('parameter proposals read linked values and units but never activate a rule
  assert.equal(proposals.find(p=>p.property==='Dimensions.Slope').readableCount,2);
  assert.equal(proposals.find(p=>p.property==='Dimensions.Slope').linkedCount,1);
  const run=executeReview(configuration,inv,actor.userId,1);
- assert.equal(run.rulesExecuted,0);assert.ok(run.findings.every(f=>f.state==='NOT EVALUATED'));
- assert.equal(run.findings.find(f=>f.ruleId===rule.id).pendingReason,'MAPPING_REQUIRED');
+ assert.equal(run.rulesExecuted,0);assert.ok(run.findings.every(f=>['NOT EVALUATED','PRELIMINARY'].includes(f.state)));
+ assert.equal(run.findings.find(f=>f.ruleId===rule.id).pendingReason,'APPLICABILITY_REQUIRED');
  assert.equal(run.findings.find(f=>f.ruleId==='RIDAA-87-DOWN').pendingReason,'INPUT_REQUIRED');
  assert.equal(modelCoverage(elements,inv).readCount,3);
 });
 test('missing mapping, missing readable value and an unmatched category have distinct actionable reasons',()=>{
  assert.equal(execute([row(1,null)]).findings.find(f=>f.ruleId===rule.id).pendingReason,'VALUE_UNAVAILABLE');
  assert.equal(execute([row(1,'3 %')],{...configuration,criteria:[{...criterion,categories:['TEST other category']}]}).findings.find(f=>f.ruleId===rule.id).pendingReason,'NO_MATCHING_ELEMENTS');
+});
+
+test('automatic comparison runs without mappings, preserves link occurrence and never certifies applicability',()=>{
+ const original=JSON.stringify(configuration),a={...row(1,'1 %'),externalId:`${testLinkA}/${testElement}`},b={...row(2,'4 %'),externalId:`${testLinkB}/${testElement}`};
+ const run=execute([a,b],configuration),min=run.findings.filter(f=>f.ruleId===rule.id);
+ assert.equal(run.preliminaryRulesExecuted,2);assert.equal(run.preliminaryComparisons,4);
+ assert.deepEqual(min.map(f=>f.observed),[1,4]);assert.deepEqual(min.map(f=>f.difference),[-2,1]);
+ assert.deepEqual(min.map(f=>f.comparison.matches),[false,true]);
+ assert.ok(min.every(f=>f.state==='PRELIMINARY'&&f.criterion===null&&f.comparison.basis==='REFERENCE_ONLY'&&f.pendingReason==='APPLICABILITY_REQUIRED'));
+ assert.deepEqual(min.map(f=>f.evidence.uniqueId),[a.externalId,b.externalId]);
+ assert.equal(report(run).counts.PASS,0);assert.equal(report(run).counts.FAIL,0);assert.equal(run.rulesExecuted,0);
+ assert.equal(JSON.stringify(configuration),original);assert.equal(results(run,{origin:testLinkA,comparison:'OUTSIDE_REFERENCE'}).rows[0].observed,1);
+ assert.equal(results(run,{}).rows[0].state,'PRELIMINARY');
+});
+
+test('Spanish published paths, units and separate pipe occurrences are read without nominal fitting dimensions',()=>{
+ const rows=[{objectid:1,name:'TEST linked pipe',externalId:`${testLinkA}/${testElement}`,properties:{Category:'Tuberías',Restricciones:{Pendiente:'1.615 %'},Mecánica:{Diámetro:'110.000 mm'}}},
+ {objectid:2,name:'TEST fitting',properties:{Category:'Uniones de tubería',Cotas:{'Diámetro nominal':'40.000 mm'}}}];
+ const run=execute(rows,configuration),d=run.findings.filter(f=>f.ruleId==='RIDAA-97-D'&&f.observed!==null);
+ assert.equal(d.length,1);assert.equal(d[0].observed,110);assert.equal(d[0].evidence.property,'Mecánica.Diámetro');assert.equal(d[0].state,'PRELIMINARY');
+ assert.ok(d[0].description.includes('Sólo ventilación principal'));assert.equal(run.preliminaryComparisons,3);
+});
+
+test('missing, ambiguous and unlabelled values stay pending, never silently substituted',()=>{
+ const rows=[row(1,null),row(2,3),row(3,'3 %',{Other:{Pendiente:'5 %'}}),row(4,'3 %',{Other:{Pendiente:'3 %'}})];
+ const run=execute(rows,configuration),min=run.findings.filter(f=>f.ruleId===rule.id);
+ assert.deepEqual(min.map(f=>f.state),['NOT EVALUATED','NOT EVALUATED','NOT EVALUATED','PRELIMINARY']);
+ assert.equal(min[2].pendingReason,'AMBIGUOUS_PARAMETER');assert.equal(min[2].observed,null);
+ assert.deepEqual(min[2].evidence.raw,{'Dimensions.Slope':'3 %','Other.Pendiente':'5 %'});
+ const e=extractModel(inventory([row(10,null)]))[0];delete e.values['Dimensions.Slope'];
+ assert.equal(automaticReading(rule.id,e,'%').reason,'PARAMETER_NOT_FOUND');
+});
+
+test('automatic reading supports explicit slope units, preserves zero and does not infer vertical application',()=>{
+ assert.equal(measurement('30 mm/m','%'),3);assert.equal(measurement('0,03 m/m','%'),3);assert.equal(measurement('3 cm/m','%'),3);
+ assert.ok(Math.abs(measurement('0.36 in/ft','%')-3)<1e-9);assert.ok(Math.abs(measurement('45 °','%')-100)<1e-9);
+ assert.equal(measurement('90 °','%'),null);assert.equal(measurement('1:100','%'),null);assert.equal(measurement(.03,'%'),null);
+ const run=execute([row(1,'0.000 %'),row(2,'109654.772 %')],configuration),min=run.findings.filter(f=>f.ruleId===rule.id);
+ assert.deepEqual(min.map(f=>f.observed),[0,109654.772]);assert.ok(min.every(f=>f.state==='PRELIMINARY'));
+});
+
+test('manual scopes take precedence and reference-only comparisons cannot be counted as corrected violations',()=>{
+ const a=execute([row(1,'1 %')],configuration),b=execute([row(1,'5 %')],configuration);
+ b.source=structuredClone(source);b.source.version.id='TEST_V2';b.source.version.number=2;
+ assert.equal(compareRuns(a,b).counts.corrected,0);assert.equal(compareRuns(a,b).counts.new,0);
+ const confirmed=execute([row(1,'1 %'),row(2,'4 %')]);
+ assert.equal(confirmed.rulesExecuted,1);assert.deepEqual(confirmed.findings.filter(f=>f.ruleId===rule.id).map(f=>f.state),['FAIL','PASS']);
+ assert.equal(confirmed.preliminaryRulesExecuted,1);
+});
+
+test('automatic comparisons obey selected project scope and never apply interior references to exterior systems',()=>{
+ const run=execute([row(1,'1 %',{System:'TEST_A'}),row(2,'4 %',{System:'TEST_B'})],{...configuration,scope:{mode:'PROPERTY',property:'System',value:'TEST_A',confirmed:true}});
+ assert.equal(run.readCount,1);assert.ok(run.findings.every(f=>!f.element||f.element.dbId===1));
+ const exterior=execute([row(1,'4 %')],{...configuration,systemId:'SAN-02'});
+ assert.equal(exterior.preliminaryComparisons,0);assert.equal(exterior.rulesExecuted,0);
 });
 test('comparing repeated link occurrences does not collapse their equal native ids',()=>{
  const rows=[{...row(1,'2 %'),externalId:`${testLinkA}/${testElement}`},{...row(2,'2 %'),externalId:`${testLinkB}/${testElement}`}];

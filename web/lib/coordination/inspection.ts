@@ -18,19 +18,20 @@ export function modelCoverage(elements:Pick<Element,'uniqueId'|'origin'|'categor
 const normalize=(s:string)=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase();
 // Candidate discovery only. Matching a property label does not confirm the
 // legal scope, material, role (e.g. principal ventilation) or exceptions.
-const labels:Record<string,string[]>={
+export const parameterLabels:Record<string,string[]>={
  'RIDAA-88-MIN':['Slope','Pendiente'],'RIDAA-88-MAX':['Slope','Pendiente'],
  'RIDAA-89':['Water Seal Depth','Trap Seal Depth','Carga del cierre hidráulico','Altura de sello hidráulico'],
  'RIDAA-97-D':['Diameter','Diámetro','Nominal Diameter','Diámetro nominal'],
  'RIDAA-52-CU':['Diameter','Diámetro','Nominal Diameter','Diámetro nominal'],
  'RIDAA-52-PL':['Diameter','Diámetro','Nominal Diameter','Diámetro nominal'],
 };
+export const matchesParameter=(ruleId:string,path:string)=>(parameterLabels[ruleId]??[]).some(label=>normalize(label)===normalize(path.split('.').at(-1)!));
 export function parameterCandidates(elements:Element[],measure:(v:unknown,u:string)=>number|null):ParameterCandidate[]{
  const output:ParameterCandidate[]=[];
  for(const rule of ridaaRules.filter(r=>r.check)){
-  const names=new Set((labels[rule.id]??[]).map(normalize)),candidates=new Map<string,ParameterCandidate>();
+  const candidates=new Map<string,ParameterCandidate>();
   for(const e of elements)for(const [path,value] of Object.entries(e.values)){
-   if(!names.has(normalize(path.split('.').at(-1)!)))continue;
+   if(!matchesParameter(rule.id,path))continue;
    const candidate=candidates.get(path)??{ruleId:rule.id,property:path,count:0,readableCount:0,linkedCount:0,categories:[],examples:[]};
    candidate.count++;if(measure(value,rule.check!.unit)!==null)candidate.readableCount++;
    if(e.origin?.kind==='LINKED')candidate.linkedCount++;

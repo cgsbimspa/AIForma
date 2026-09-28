@@ -23,7 +23,7 @@ Los restantes controles conservan sus dependencias. Las condiciones de las NCh c
 2. Extractor de objetos hoja y propiedades de Model Derivative. Se informa la población y cuántos objetos no tienen propiedades. Categorías MEP sólo desde propiedades o ancestros exactos del árbol publicado, nunca del nombre del elemento.
 3. Alcance confirmado por vista o igualdad exacta de parámetro/valor. Los cambios de fuente retiran asociaciones anteriores y requieren revisar el alcance.
 4. Estructura de grafo con nodos, adyacencias, elevaciones, UEH y campos hidráulicos. **Conectores no disponibles** en este extractor: campos desconocidos permanecen nulos. No se infiere conectividad por proximidad.
-5. Motor de reglas determinístico. Unidades explícitas; conversión dimensional sólo entre mm/cm/m. Los valores sin unidad o ambiguos permanecen sin evaluar. Los controles de pendiente comparan el parámetro de diseño publicado; no afirman haber medido la geometría.
+5. Motor de reglas determinístico. Unidades explícitas; conversión dimensional entre mm/cm/m/ft/in y pendiente porcentual, mm/m, cm/m, m/m, in/ft o ángulo explícito menor que 90° en valor absoluto. Los valores sin unidad o ambiguos permanecen sin evaluar. Los controles de pendiente comparan el parámetro de diseño publicado; no afirman haber medido la geometría.
 6. Resultado/evidencia por regla y elemento: fuente, versión, vista, fecha, parámetro original, requisito y configuración, método y motor. PASS indica únicamente que se satisface ese criterio bajo el alcance confirmado. No se presenta una certificación integral.
 7. Incidencias internas, comentarios y marcas de revisión asociados a la ejecución. No se crean issues en ACC ni se alteran resultados calculados.
 
@@ -34,8 +34,6 @@ Los motores de geometría de red, continuidad, recorridos, sentido de flujo y c�
 `coordination_record` mantiene configuración versionada, ejecuciones inmutables y anotaciones, con cifrado autenticado, RLS por organización/proyecto, autor verificado y control de revisión concurrente. Se reutiliza el rol de auditoría existente, con una tabla separada. Migración: `node scripts/migrate-coordination.mjs` con la conexión administrativa existente suministrada por entorno. No hay claves en el repositorio.
 
 La comparación exige el mismo archivo, proyecto, sistema, alcance, motor y criterios. Usa UniqueId + regla. No declara corregido un elemento desaparecido o ambiguo. Un cambio FAIL → PASS permite marcar corregido; una mera revisión manual no lo permite. Las revisiones históricas conservan su fuente y no se renombran como resultados de la configuración actual.
-
-## Verificación
 
 ## Lectura de vínculos y preparación de reglas (motor 1.1)
 
@@ -52,3 +50,13 @@ Los pendientes distinguen asociación faltante, entradas adicionales de la regla
 Se prueban vínculos repetidos y anidados, conservación de identidad, evaluación separada, propuestas sin aprobación automática, filtros por procedencia/motivo y compatibilidad de informes históricos sin mutación.
 
 `web/tests/coordination.test.mjs` contiene exclusivamente datos sintéticos rotulados TEST. Cubre los límites normativos, exclusión de redes exteriores, confirmación de alcance, ausencia de unidades, trazabilidad, comparación y aislamiento/cifrado/inmutabilidad de almacenamiento. Las pruebas de auditoría y del visor compartido verifican que la integración no cambie sus garantías existentes.
+
+## Comparación automática sobre evidencia publicada (motor 1.2)
+
+Al ejecutar una revisión, las reglas numéricas sin asociación manual buscan nombres de parámetros reconocidos y unidades explícitas en los elementos del alcance confirmado, incluidos vínculos. Para pendientes y diámetros se usan únicamente las categorías de tubería reconocidas; las dimensiones nominales de accesorios no se usan como diámetro de tubería. No se convierte un número sin unidad ni se elige silenciosamente entre parámetros con valores diferentes.
+
+Cada valor legible produce una comparación `PRELIMINARY` con valor, operador, referencia, diferencia, parámetro original, versión e identidad completa del elemento. No modifica la configuración ni activa una asociación normativa. Todos esos resultados, estén dentro o fuera de la referencia, quedan **por confirmar ámbito**. No afirman que una tubería sea ventilación principal, que un ramal esté sometido al régimen ordinario, ni que no tenga excepciones. Las reglas asociadas explícitamente conservan prioridad y siguen produciendo PASS/FAIL exclusivamente bajo su ámbito confirmado.
+
+La interfaz distingue reglas confirmadas de comparaciones automáticas, permite filtrar dentro/fuera de la referencia y colorea los preliminares en azul. Las revisiones antiguas mantienen sus resultados y muestran la necesidad de ejecutar el nuevo motor. La comparación de versiones nunca cuenta un resultado preliminar como incumplimiento corregido. Los parámetros faltantes, sin unidad o ambiguos y las dependencias de red pendientes permanecen identificados como No evaluado.
+
+La norma base y sus umbrales no cambian en esta mejora. Referencia contrastada: copia BCN de la versión 2009-02-10 publicada por [SMAPA](https://media.smapa.cl/media/documentos/2021/11/reglamento-de-instalaciones-domiciliarias-de-agua-potable-y-alcantarillado.pdf). No se equipara automáticamente 1 % a incumplimiento: el artículo 88 contempla casos que requieren justificar su aplicación.

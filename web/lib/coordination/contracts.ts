@@ -4,7 +4,7 @@ import {systems} from './catalog.ts';
 import {ridaaRules,ridaaSource} from './ridaa.ts';
 const text=z.string().trim().min(1).max(1000);
 export const systemId=z.string().refine(id=>systems.some(s=>s.id===id));
-export const states=['PASS','WARNING','FAIL','NOT EVALUATED','N/A'] as const;
+export const states=['PASS','WARNING','FAIL','PRELIMINARY','NOT EVALUATED','N/A'] as const;
 export type State=typeof states[number];
 export const criterionSchema=z.object({
  ruleId:z.string().refine(id=>ridaaRules.some(r=>r.id===id&&r.check)),property:text,unit:z.enum(['mm','m','%','l/s','m/s','kPa','mca','UEH','un']),
@@ -22,13 +22,13 @@ export const emptyConfiguration=(id:string):Configuration=>({systemId:id,source:
 export type ModelOrigin={kind:'HOST'|'LINKED'|'UNRESOLVED';key:string;instancePath:string[];elementUniqueId:string|null};
 export type ModelCoverage={groups:(ModelOrigin & {count:number;categories:string[];samplePaths:string[]})[];linkedElements:number;readCount:number;missingCount:number;scope:string};
 export type ParameterCandidate={ruleId:string;property:string;count:number;readableCount:number;linkedCount:number;categories:string[];examples:string[]};
-export type PendingReason='MAPPING_REQUIRED'|'INPUT_REQUIRED'|'NO_MATCHING_ELEMENTS'|'VALUE_UNAVAILABLE';
+export type PendingReason='MAPPING_REQUIRED'|'INPUT_REQUIRED'|'NO_MATCHING_ELEMENTS'|'VALUE_UNAVAILABLE'|'PARAMETER_NOT_FOUND'|'AMBIGUOUS_PARAMETER'|'APPLICABILITY_REQUIRED';
 export type Element={dbId:number;uniqueId:string|null;elementId:string|null;name:string;category:string|null;categorySource:'property'|'tree'|null;categoryPath:string[];system:string|null;subspecialty:string|null;level:string|null;building:string|null;zone:string|null;values:Record<string,unknown>;origin?:ModelOrigin};
 export type NetworkElement={id:string;system:string|null;type:string|null;startNode:string|null;endNode:string|null;upstream:string[]|null;downstream:string[]|null;diameter:number|null;length:number|null;startElevation:number|null;endElevation:number|null;level:string|null;building:string|null;zone:string|null;connectionState:'NOT AVAILABLE'|'VERIFIED';upstreamUEH:number|null;downstreamUEH:number|null;slope:number|null;flowDirection:string|null;qi:number|null;qmp:number|null;flow:number|null;velocity:number|null;pressureLoss:number|null;availablePressure:number|null};
 export type NetworkGraph={state:'NOT AVAILABLE'|'VERIFIED';reason:string;elements:NetworkElement[]};
 export type Evidence={endpoint:string;treeEndpoint:string;fetchedAt:string;projectId:string;modelId:string;versionId:string;viewId:string;dbId:number|null;uniqueId:string|null;property:string|null;raw:unknown;unit:string|null;method:string};
-export type Finding={id:string;ruleId:string;systemId:string;group:string;title:string;state:State;kind:'NORMATIVE FAIL'|'COORDINATION ISSUE'|'WARNING'|'INFORMATION'|'NOT EVALUATED'|'N/A';element:Element|null;observed:number|null;required:number|null;difference:number|null;description:string;criterion:Criterion|null;confidence:null;evidence:Evidence;pendingReason?:PendingReason};
-export type Run={id:string;systemId:string;source:QuantitySource;configuration:Configuration;configurationRevision:number;createdBy:string;createdAt:string;engineVersion:string;population:string;readCount:number;excludedCount:number;missingCount:number;rulesExecuted:number;findings:Finding[];graph:NetworkGraph;status:'COMPLETED'|'PARTIAL';coverage?:ModelCoverage;candidates?:ParameterCandidate[]};
+export type Finding={id:string;ruleId:string;systemId:string;group:string;title:string;state:State;kind:'NORMATIVE FAIL'|'COORDINATION ISSUE'|'WARNING'|'INFORMATION'|'NOT EVALUATED'|'N/A';element:Element|null;observed:number|null;required:number|null;difference:number|null;description:string;criterion:Criterion|null;confidence:null;evidence:Evidence;pendingReason?:PendingReason;comparison?:{operator:'>='|'<=';matches:boolean;basis:'REFERENCE_ONLY'|'CONFIRMED_SCOPE'}};
+export type Run={id:string;systemId:string;source:QuantitySource;configuration:Configuration;configurationRevision:number;createdBy:string;createdAt:string;engineVersion:string;population:string;readCount:number;excludedCount:number;missingCount:number;rulesExecuted:number;findings:Finding[];graph:NetworkGraph;status:'COMPLETED'|'PARTIAL';coverage?:ModelCoverage;candidates?:ParameterCandidate[];preliminaryRulesExecuted?:number;preliminaryComparisons?:number};
 export type PropertyCatalog={readCount:number;missingCount:number;population:string;categories:string[];properties:{path:string;count:number;examples:string[]}[];fetchedAt:string;coverage:ModelCoverage;candidates:ParameterCandidate[]};
 export type RunSummary={id:string;systemId:string;label:string;createdAt:string};
 export type Annotation={id:string;runId:string;findingId:string;kind:'comment'|'reviewed'|'issue';text:string;createdAt:string;createdBy:string;systemId:string};
