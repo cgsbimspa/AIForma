@@ -17,4 +17,4 @@ export const hotWaterFuture = ['Recirculación de agua caliente','Bombas','Acumu
 export const href=(slug='')=>`${root}${slug?`/${slug}`:''}`;
 export const systemHref=(id:string)=>href(`sanitario/${systems.find(s=>s.id===id)?.slug??''}`);
 export const reviewTopics=systems.flatMap(s=>s.topics.flatMap(([group,names],g)=>names.split('|').map((name,i)=>({id:`${s.id}-${g+1}${String(i+1).padStart(2,'0')}`,systemId:s.id,name,group:group as typeof groups[number]}))));
-export const engineVersion='coordination-1.0';
+export const engineVersion='coordination-1.1';

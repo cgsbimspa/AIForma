@@ -26,7 +26,7 @@ export async function GET(request:NextRequest){try{
  const params=request.nextUrl.searchParams,scope=projectScope.parse(JSON.parse(params.get('scope')??'null')),actor=await memoryActor(request,scope),db=store(),id=params.get('run');
  if(!id)return response(await db.workspace(actor));
  const run=await db.run(actor,z.string().uuid().parse(id));
- if(params.has('results')){const filters=Object.fromEntries(['state','group','rule','system','subspecialty','building','level'].map(k=>[k,params.get(k)??'']));return response(results(run,filters,z.coerce.number().int().min(0).max(100000).parse(params.get('offset')??0)));}
+ if(params.has('results')){const filters=Object.fromEntries(['state','group','rule','system','subspecialty','building','level','origin','pending'].map(k=>[k,params.get(k)??'']));return response(results(run,filters,z.coerce.number().int().min(0).max(100000).parse(params.get('offset')??0)));}
  if(params.has('colors'))return response({groups:run.findings.filter(f=>f.element?.uniqueId).map(f=>({id:f.element!.uniqueId!,state:f.state}))});
  return response(report(run));
 }catch(e){return apiError(e);}}

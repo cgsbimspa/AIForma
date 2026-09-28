@@ -37,4 +37,18 @@ La comparación exige el mismo archivo, proyecto, sistema, alcance, motor y crit
 
 ## Verificación
 
+## Lectura de vínculos y preparación de reglas (motor 1.1)
+
+El inventario recorre recursivamente el árbol completo de la vista publicada, también sus ramas vinculadas. Conserva el `externalId` completo publicado por APS. En identificadores compuestos de Revit, la cadena de instancias y el identificador final se mantienen separados para mostrar procedencia, pero las acciones del visor y las comparaciones usan siempre la cadena completa. Dos instancias del mismo vínculo no se deduplican por el último identificador. Los formatos no reconocidos se muestran con procedencia no identificada.
+
+La subvista **Modelos y vínculos** muestra cobertura, categorías, muestras de rutas publicadas y parámetros. No afirma que el RVT original haya publicado todos sus vínculos ni inventa la versión individual de un vínculo. Los resultados históricos pueden mostrar un desglose derivado de los identificadores que ya conservaron, sin modificar sus resultados originales.
+
+**Reglas RIDAA** sugiere parámetros por nombres explícitos (por ejemplo, Pendiente/Slope o Diámetro/Diameter), cuenta los valores con unidad interpretable y muestra cuántos proceden de vínculos. Son propuestas: no confirman material, ventilación principal, régimen ordinario ni excepciones. Antes de ejecutar un criterio se conserva la confirmación de ámbito exigida por el proyecto. Las unidades desconocidas siguen sin producir cumplimiento.
+
+Los pendientes distinguen asociación faltante, entradas adicionales de la regla, conjunto sin coincidencias y parámetro/unidad no disponible. Si no se ejecuta ninguna regla numérica, la vista explica la causa y enlaza directamente a la preparación. Los conectores y la red hidráulica no se deducen del nombre ni de la existencia de vínculos.
+
+### Pruebas de vínculos
+
+Se prueban vínculos repetidos y anidados, conservación de identidad, evaluación separada, propuestas sin aprobación automática, filtros por procedencia/motivo y compatibilidad de informes históricos sin mutación.
+
 `web/tests/coordination.test.mjs` contiene exclusivamente datos sintéticos rotulados TEST. Cubre los límites normativos, exclusión de redes exteriores, confirmación de alcance, ausencia de unidades, trazabilidad, comparación y aislamiento/cifrado/inmutabilidad de almacenamiento. Las pruebas de auditoría y del visor compartido verifican que la integración no cambie sus garantías existentes.

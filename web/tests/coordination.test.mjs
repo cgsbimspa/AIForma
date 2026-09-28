@@ -9,6 +9,7 @@ import {ridaaRules,ridaaSource} from '../lib/coordination/ridaa.ts';
 import {systems,reviewTopics} from '../lib/coordination/catalog.ts';
 import {measurement,executeReview,report,results,compareRuns,extractModel} from '../lib/coordination/engine.ts';
 import {createCoordinationStore} from '../lib/coordination/store.ts';
+import {modelOrigin,modelCoverage,parameterCandidates} from '../lib/coordination/inspection.ts';
 // Synthetic TEST ONLY fixtures. No project/model observations are asserted here.
 const actor={organizationId:'TEST_ORG',projectId:'TEST_PROJECT',userId:'TEST_USER'},now=new Date().toISOString();
 const source={scope:{kind:'file',hubId:actor.organizationId,projectId:actor.projectId,folderIds:['TEST_FOLDER'],itemId:'TEST_FILE'},fileName:'TEST.rvt',projectName:'TEST project',path:'TEST / TEST.rvt',version:{id:'TEST_V1',number:1,name:'TEST.rvt',createdAt:now,modelId:'TEST_URN',webUrl:null,endpoint:'https://developer.api.autodesk.com/TEST',fetchedAt:now},view:{id:'TEST_VIEW',name:'TEST view',role:'3d',endpoint:'https://developer.api.autodesk.com/TEST',fetchedAt:now},versionPolicy:'manual'};
@@ -54,6 +55,56 @@ test('partial property population is disclosed, never zero-filled',()=>{
 });
 test('category uses exact published ancestors only; names and conflicting ancestors are not classifiers',()=>{
  const inv=inventory([{objectid:1,name:'TEST Pipes guessing forbidden',externalId:'TEST',properties:{}}]);inv.elements[0].treePath=['TEST RVT','Pipes','TEST FAMILY'];assert.equal(extractModel(inv)[0].category,'Pipes');inv.elements[0].treePath=['TEST RVT','TEST FAMILY'];assert.equal(extractModel(inv)[0].category,null);inv.elements[0].treePath=['Pipes','Pipe Fittings'];assert.equal(extractModel(inv)[0].category,null);
+});
+
+const testLinkA='aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa-00000001',testLinkB='bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb-00000002',testElement='cccccccc-cccc-cccc-cccc-cccccccccccc-00000003';
+test('linked instances are traversed, evaluated and retained separately even with the same native element id',()=>{
+ const rows=[{...row(1,'2 %'),externalId:`${testLinkA}/${testElement}`},{...row(2,'4 %'),externalId:`${testLinkB}/${testElement}`}];
+ const tree={data:{objects:[{objectid:900,name:'TEST HOST',objects:[{objectid:901,name:'TEST LINK A',objects:[{objectid:1}]},{objectid:902,name:'TEST LINK B',objects:[{objectid:2}]}]}]}};
+ const inv=parseInventory(tree,{data:{collection:rows}},source,'TEST_PROPERTIES','TEST_TREE');
+ const run=executeReview({...configuration,criteria:[criterion]},inv,actor.userId,1),findings=run.findings.filter(f=>f.ruleId===rule.id);
+ assert.deepEqual(findings.map(f=>f.state),['FAIL','PASS']);assert.equal(run.readCount,2);
+ assert.equal(run.coverage.linkedElements,2);assert.equal(run.coverage.groups.length,2);
+ assert.deepEqual(findings.map(f=>f.element.origin.key),[testLinkA,testLinkB]);
+ assert.deepEqual(findings.map(f=>f.evidence.uniqueId),rows.map(r=>r.externalId));
+ assert.equal(findings[0].element.origin.elementUniqueId,findings[1].element.origin.elementUniqueId);
+ assert.equal(results(run,{origin:testLinkB,state:'PASS'}).total,1);
+ assert.deepEqual(findings[0].element.categoryPath,['TEST HOST','TEST LINK A']);
+});
+test('nested link paths preserve every instance; unknown identifier formats are never labelled as host',()=>{
+ assert.deepEqual(modelOrigin(`${testLinkA}/${testLinkB}/${testElement}`).instancePath,[testLinkA,testLinkB]);
+ assert.equal(modelOrigin(testElement).kind,'HOST');
+ for(const id of [null,'TEST_ID','file.rvt/object',`${testLinkA}/invalid`])assert.equal(modelOrigin(id).kind,'UNRESOLVED');
+});
+test('parameter proposals read linked values and units but never activate a rule or assume its scope',()=>{
+ const inv=inventory([{...row(1,'3 %'),externalId:`${testLinkA}/${testElement}`},row(2,3),row(3,'5 %',{Other:{Pendiente:'7 %'}})]);
+ const elements=extractModel(inv),proposals=parameterCandidates(elements,measurement).filter(p=>p.ruleId===rule.id);
+ assert.equal(proposals.length,2);assert.equal(proposals.find(p=>p.property==='Dimensions.Slope').count,3);
+ assert.equal(proposals.find(p=>p.property==='Dimensions.Slope').readableCount,2);
+ assert.equal(proposals.find(p=>p.property==='Dimensions.Slope').linkedCount,1);
+ const run=executeReview(configuration,inv,actor.userId,1);
+ assert.equal(run.rulesExecuted,0);assert.ok(run.findings.every(f=>f.state==='NOT EVALUATED'));
+ assert.equal(run.findings.find(f=>f.ruleId===rule.id).pendingReason,'MAPPING_REQUIRED');
+ assert.equal(run.findings.find(f=>f.ruleId==='RIDAA-87-DOWN').pendingReason,'INPUT_REQUIRED');
+ assert.equal(modelCoverage(elements,inv).readCount,3);
+});
+test('missing mapping, missing readable value and an unmatched category have distinct actionable reasons',()=>{
+ assert.equal(execute([row(1,null)]).findings.find(f=>f.ruleId===rule.id).pendingReason,'VALUE_UNAVAILABLE');
+ assert.equal(execute([row(1,'3 %')],{...configuration,criteria:[{...criterion,categories:['TEST other category']}]}).findings.find(f=>f.ruleId===rule.id).pendingReason,'NO_MATCHING_ELEMENTS');
+});
+test('comparing repeated link occurrences does not collapse their equal native ids',()=>{
+ const rows=[{...row(1,'2 %'),externalId:`${testLinkA}/${testElement}`},{...row(2,'2 %'),externalId:`${testLinkB}/${testElement}`}];
+ const a=execute(rows),b=execute([{...rows[0],properties:row(1,'4 %').properties},rows[1]]);
+ b.source=structuredClone(source);b.source.version.number=2;b.source.version.id='TEST_V2';
+ const comparison=compareRuns(a,b);assert.equal(comparison.counts.corrected,1);assert.equal(comparison.counts.persistent,1);
+});
+test('historical reports expose recorded link coverage and pending reasons without changing stored findings',()=>{
+ const run=execute([{...row(1,'2 %'),externalId:`${testLinkA}/${testElement}`}],configuration);
+ delete run.coverage;delete run.candidates;for(const f of run.findings)delete f.pendingReason;
+ const original=JSON.stringify(run),summary=report(run),page=results(run,{pending:'MAPPING_REQUIRED'});
+ assert.equal(summary.coverage.linkedElements,1);assert.equal(summary.coverage.groups[0].key,testLinkA);
+ assert.ok(page.total>0);assert.ok(page.rows.every(f=>f.pendingReason==='MAPPING_REQUIRED'));
+ assert.equal(JSON.stringify(run),original);assert.equal(summary.rulesExecuted,0);
 });
 test('facets and pagination only return findings within this immutable review',()=>{
  const run=execute(Array.from({length:55},(_,i)=>row(i+1,'1 %')));const filtered=results(run,{state:'FAIL',level:'TEST N1'});assert.equal(filtered.total,55);assert.equal(filtered.rows.length,50);assert.equal(results(run,{state:'FAIL'},50).rows.length,5);assert.equal(results(run,{level:'TEST_UNKNOWN'}).total,0);
