@@ -1,0 +1,7 @@
+'use client';
+import Link from 'next/link';
+import {usePathname} from 'next/navigation';
+import {ShieldCheck,ChevronDown} from 'lucide-react';
+import {href,systemHref,systems,specialties,root} from '@/lib/coordination/catalog';
+import {useCoordination} from './context';
+export function CoordinationSidebar(){const path=usePathname(),c=useCoordination();return <details className="coord-nav" key={path.startsWith(root)?'active':'idle'} open={path.startsWith(root)}><summary className={path.startsWith(root)?'active':''}><ShieldCheck size={17}/><span>Coordinación Normativa</span><ChevronDown size={13}/></summary><div className="coord-nav-children"><Link href={href()} aria-current={path===root?'page':undefined}>Resumen</Link>{specialties.map(s=>s.enabled?<details key={s.id} open={path.includes('/sanitario')}><summary>{s.name}</summary><Link href={href('sanitario')} aria-current={path===href('sanitario')?'page':undefined}>Resumen sanitario</Link>{systems.map(system=>{const count=c.workspace?.annotations.filter(a=>a.kind==='issue'&&a.systemId===system.id).length??0;return <Link key={system.id} href={systemHref(system.id)} aria-current={path.startsWith(systemHref(system.id))?'page':undefined}>{system.name}{count>0&&<span title="Incidencias internas registradas">{count}</span>}</Link>;})}</details>:<div className="coord-disabled" key={s.id} aria-disabled="true"><span>{s.name}</span><small>Próximamente</small></div>)}</div></details>;}

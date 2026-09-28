@@ -1,4 +1,4 @@
-/* global Autodesk */
+/* global Autodesk, THREE */
 import { installPropertyInspector } from "./quantity-properties.js";
 import { buildViewCalculation } from "./quantity-calculation.js";
 import { createQuantityFilter } from "./quantity-filter.js";
@@ -22,10 +22,21 @@ import { readViewClassification, classificationInventory, classificationRule } f
   const selectionMessage = async event => {
     const data=event.data;
     if(event.origin!==window.location.origin||event.source!==window.parent||data?.viewId!==input.viewId||data.urn!==input.urn||!viewer?.model)return;
+    if(data.type==='aiforma-coordination-colors'&&Array.isArray(data.groups)&&data.groups.length<=100000&&data.groups.every(g=>typeof g?.id==='string'&&['PASS','WARNING','FAIL','NOT EVALUATED','N/A'].includes(g.state))){
+      try{
+        const map=await mapping(),rank={'N/A':0,PASS:1,'NOT EVALUATED':2,WARNING:3,FAIL:4},palette={'N/A':[.65,.69,.75],PASS:[.1,.75,.4],'NOT EVALUATED':[.5,.57,.65],WARNING:[1,.65,.05],FAIL:[.95,.16,.2]},worst=new Map();
+        for(const g of data.groups){const id=map[g.id];if(Number.isSafeInteger(id)&&(!worst.has(id)||rank[g.state]>rank[worst.get(id)]))worst.set(id,g.state);}
+        viewer.clearThemingColors(viewer.model);
+        for(const [id,state] of worst)viewer.setThemingColor(id,new THREE.Vector4(...palette[state],1),viewer.model,false);
+        window.parent.postMessage({type:'aiforma-viewer',state:'audit-action',viewId:input.viewId,urn:input.urn,message:`Estados aplicados a ${worst.size} elementos localizados en esta vista.`},window.location.origin);
+      }catch{window.parent.postMessage({type:'aiforma-viewer',state:'audit-action',viewId:input.viewId,urn:input.urn,message:'No se pudieron aplicar los colores de resultados. Los datos de la revisión se conservan.'},window.location.origin);}
+      return;
+    }
     if(data.type==='aiforma-audit-action'&&['focus','isolate','select'].includes(data.action)&&Array.isArray(data.ids)&&data.ids.length<=150000&&data.ids.every(id=>typeof id==='string')){
       try{
         const map=await mapping(),ids=[...new Set(data.ids.flatMap(id=>Number.isSafeInteger(map[id])?[map[id]]:[]))];
         if(ids.length){viewer.showAll();if(data.action==='isolate')viewer.isolate(ids);else viewer.select(ids);viewer.fitToView(ids);}
+        else if(!data.ids.length&&data.action==='isolate'){viewer.showAll();viewer.select([]);}
         window.parent.postMessage({type:'aiforma-viewer',state:'audit-action',viewId:input.viewId,urn:input.urn,message:`${ids.length} elementos localizados de ${data.ids.length} identificadores solicitados en esta vista.${ids.length<data.ids.length?' Algunos objetos no tienen geometría localizable.':''}`},window.location.origin);
       }catch{window.parent.postMessage({type:'aiforma-viewer',state:'audit-action',viewId:input.viewId,urn:input.urn,message:'No se pudieron resolver los identificadores del hallazgo. No se aplicó una selección inferida.'},window.location.origin);}
       return;

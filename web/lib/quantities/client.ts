@@ -2,6 +2,12 @@ import { autodeskFetch } from "../autodesk/client";
 import type { DataPage, DataQuery } from "../autodesk/data";
 import type { QuantityProject } from "./contracts";
 const errors: Record<string, string> = {
+  coordination_view_required:'Selecciona y guarda un archivo RVT con una vista 3D publicada.',
+  coordination_scope_required:'Confirma qué sistema sanitario representa el alcance seleccionado antes de ejecutar.',
+  coordination_empty_scope:'No se recuperaron elementos que coincidan con el sistema configurado. Revisa su parámetro y valor.',
+  coordination_scope_too_large:'La revisión supera el tamaño disponible. Utiliza una vista o un filtro de sistema más acotado.',
+  coordination_storage_unavailable:'El almacenamiento normativo no está disponible. No se ha guardado una revisión.',
+  coordination_comparison_mismatch:'La comparación requiere el mismo archivo, sistema, alcance, motor y criterios.',
   audit_view_required: 'Selecciona una vista 3D publicada y guarda la configuración.',
   audit_derivative_pending: 'Autodesk está preparando los datos de esta vista. Vuelve a ejecutar en unos momentos.',
   audit_source_unavailable: 'No fue posible recuperar los datos de esta vista. No se generó un resultado técnico.',

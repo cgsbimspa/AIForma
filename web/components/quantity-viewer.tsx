@@ -5,7 +5,7 @@ import { quantityResponse } from "@/lib/quantities/client";
 import type { QuantityProject, QuantitySource } from "@/lib/quantities/contracts";
 import { inventorySchema, type ClassificationInventory, liveCalculationSchema, type CalculationEvent } from "@/lib/quantities/live";
 
-export function QuantityViewer({ project, source, highlightedElementIds=[], filteredElementIds=null, onSelectElements, classificationFilter, calculationRequest=0, onCalculation, onInventory, auditAction }: { project: QuantityProject; source: QuantitySource | null; highlightedElementIds?:string[]; filteredElementIds?:string[]|null; onSelectElements?:(ids:string[])=>void; classificationFilter?: {specialty:string; subspecialty:string; floor:string}; onInventory?:(data:ClassificationInventory)=>void; calculationRequest?:number; onCalculation?:(event:CalculationEvent)=>void; auditAction?:{id:number;action:'focus'|'isolate'|'select';ids:string[]} }) {
+export function QuantityViewer({ project, source, highlightedElementIds=[], filteredElementIds=null, onSelectElements, classificationFilter, calculationRequest=0, onCalculation, onInventory, auditAction, coordinationColors }: { project: QuantityProject; source: QuantitySource | null; highlightedElementIds?:string[]; filteredElementIds?:string[]|null; onSelectElements?:(ids:string[])=>void; classificationFilter?: {specialty:string; subspecialty:string; floor:string}; onInventory?:(data:ClassificationInventory)=>void; calculationRequest?:number; onCalculation?:(event:CalculationEvent)=>void; auditAction?:{id:number;action:'focus'|'isolate'|'select';ids:string[]}; coordinationColors?:{id:number;groups:{id:string;state:string}[]} }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const [retry, setRetry] = useState(0);
   const [loaded, setLoaded] = useState<{ key: string; url: string } | null>(null);
@@ -74,6 +74,10 @@ export function QuantityViewer({ project, source, highlightedElementIds=[], filt
     frame.current?.contentWindow?.postMessage({type:'aiforma-audit-action',...auditAction,viewId:source?.view?.id,urn:source?.version.modelId},window.location.origin);
   },[auditAction,status,source?.view?.id,source?.version.modelId]);
   const filterReady=filterState?.key===filterKey&&filterState.phase==='ready';
+  useEffect(()=>{
+    if(status!=='Vista seleccionada cargada'||!coordinationColors)return;
+    frame.current?.contentWindow?.postMessage({type:'aiforma-coordination-colors',groups:coordinationColors.groups,viewId:source?.view?.id,urn:source?.version.modelId},window.location.origin);
+  },[coordinationColors,status,source?.view?.id,source?.version.modelId]);
   const filterActive=filterReady&&filterState.active;
   const actionCount=filterReady?(filterActive?filterState.count:selectionCount):0;
   const targetLabel=filterActive?'filtrados':'seleccionados manualmente';

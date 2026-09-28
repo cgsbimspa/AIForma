@@ -9,6 +9,8 @@ import { Sidebar, SidebarProvider, SidebarContent, SidebarHeader, SidebarFooter,
 import { Button } from "@/components/ui/button";
 import { HeaderStatusContext } from "./workspace-header";
 import { AuditSidebar } from './audit/audit-sidebar';
+import { CoordinationSidebar } from './coordination/sidebar';
+import { CoordinationProvider } from './coordination/context';
 
 function WorkspaceContent({children}: {children: React.ReactNode}) {
   const pathname = usePathname();
@@ -26,7 +28,7 @@ function WorkspaceContent({children}: {children: React.ReactNode}) {
     }
   }, [pathname, setOpenMobile]);
   function navigation(items: readonly typeof modules[number][]) {
-    return <SidebarMenu>{items.map((module) => <SidebarMenuItem key={module.slug}><SidebarMenuButton asChild isActive={pathname === `/${module.slug}` || pathname.startsWith(`/${module.slug}/`)} className="nav-link"><Link href={`/${module.slug}`} aria-current={pathname === `/${module.slug}` ? "page" : undefined} onClick={() => setOpenMobile(false)}><module.icon aria-hidden="true"/><span>{module.name}</span></Link></SidebarMenuButton>{module.slug==='auditoria-bim'&&pathname.startsWith('/auditoria-bim')&&<AuditSidebar/>}</SidebarMenuItem>)}</SidebarMenu>;
+    return <SidebarMenu>{items.map((module) => <SidebarMenuItem key={module.slug}>{module.slug==='coordinacion-normativa'?<CoordinationSidebar/>:<><SidebarMenuButton asChild isActive={pathname === `/${module.slug}` || pathname.startsWith(`/${module.slug}/`)} className="nav-link"><Link href={`/${module.slug}`} aria-current={pathname === `/${module.slug}` ? "page" : undefined} onClick={() => setOpenMobile(false)}><module.icon aria-hidden="true"/><span>{module.name}</span></Link></SidebarMenuButton>{module.slug==='auditoria-bim'&&pathname.startsWith('/auditoria-bim')&&<AuditSidebar/>}</>}</SidebarMenuItem>)}</SidebarMenu>;
   }
   if (pathname === "/cubicaciones") return <div className="quantity-shell"><a className="skip-link" href="#main-content">Saltar al contenido</a><main id="main-content" ref={mainRef} tabIndex={-1}>{children}</main></div>;
   return <>
@@ -43,5 +45,5 @@ function WorkspaceContent({children}: {children: React.ReactNode}) {
 }
 
 export function WorkspaceShell({children}: {children: React.ReactNode}) {
-  return <SidebarProvider style={{"--sidebar-width": "17rem"} as React.CSSProperties}><WorkspaceContent>{children}</WorkspaceContent></SidebarProvider>;
+  return <SidebarProvider style={{"--sidebar-width": "17rem"} as React.CSSProperties}><CoordinationProvider><WorkspaceContent>{children}</WorkspaceContent></CoordinationProvider></SidebarProvider>;
 }
