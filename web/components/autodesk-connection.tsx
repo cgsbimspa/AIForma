@@ -60,8 +60,8 @@ export function AutodeskConnection() {
 
   return <div className="autodesk-connection">
     <div className={`connection-state ${status?.connected && !status.error ? "is-connected" : ""}`} role="status" aria-live="polite">
-      <span className={status?.connected && !status.error ? "connected-dot" : "disconnected-dot"} aria-hidden="true"/>
-      <span>{status?.error === "unavailable" ? "Conexión por verificar" : status?.connected ? <>Conectado con usuario <strong>{status.user?.name}</strong></> : "Autodesk sin conectar"}</span>
+      <span className={!status ? "connection-pending-dot" : status.connected && !status.error ? "connected-dot" : "disconnected-dot"} aria-hidden="true"/>
+      <span>{!status ? "Verificando conexión…" : status.error === "unavailable" ? "Conexión por verificar" : status.connected ? <>Conectado con usuario <strong>{status.user?.name}</strong></> : "Autodesk sin conectar"}</span>
     </div>
     <form method="post" action={status?.connected ? "/api/autodesk/disconnect" : "/api/autodesk/connect"} onSubmit={() => setSubmitting(true)}>
       <button className={`autodesk-button ${status?.connected ? "disconnect" : ""}`} disabled={!status || !status.configured || submitting}>

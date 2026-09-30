@@ -22,7 +22,7 @@ import { readViewClassification, classificationInventory, classificationRule } f
   // and fast-loading views, even when the SDK hides its property button.
   const propertyButton=document.createElement('button');
   propertyButton.id='aiforma-property-button';propertyButton.textContent='Propiedades';propertyButton.type='button';propertyButton.disabled=true;
-  propertyButton.onclick=()=>void inspectProperties().then(panel=>panel?.setVisible(true));
+  propertyButton.onclick=()=>void inspectProperties().then(panel=>panel?.setVisible(!panel.isVisible()));
   document.body.append(propertyButton);
   const mapping = () => externalMap ? Promise.resolve(externalMap) : new Promise((resolve,reject)=>viewer.model.getExternalIdMapping(map=>{externalMap=map;reverseMap=new Map(Object.entries(map).map(([id,dbId])=>[dbId,id]));resolve(map);},reject));
   const selectionMessage = async event => {
@@ -118,5 +118,5 @@ import { readViewClassification, classificationInventory, classificationRule } f
     });
   } catch { clearTimeout(timeout); fail("No se pudo iniciar Autodesk Viewer."); }
   const resize = new ResizeObserver(() => viewer?.resize()); resize.observe(document.body);
-  window.addEventListener("pagehide", () => { done = true; clearTimeout(timeout); resize.disconnect(); disposeBimChat?.(); quantityFilter?.dispose(); disposeQuantityV2?.(); window.removeEventListener("message",selectionMessage); viewer?.finish(); }, { once: true });
+  window.addEventListener("pagehide", () => { done = true; clearTimeout(timeout); resize.disconnect(); disposeBimChat?.(); quantityFilter?.dispose(); disposeQuantityV2?.(); window.removeEventListener("message",selectionMessage); if(inspector)void inspector.then(panel=>{if(panel){viewer?.removePanel(panel);panel.uninitialize();}}); viewer?.finish(); }, { once: true });
 })();

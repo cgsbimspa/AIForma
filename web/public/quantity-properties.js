@@ -24,7 +24,9 @@ const node = (tag, text, className) => {
 };
 
 export async function installPropertyInspector(viewer) {
-  const manager = await viewer.loadExtension('Autodesk.PropertiesManager');
+  // Standalone panel: PropertiesManager 7.119 calls its toolbar button's
+  // setState from setPanel even when that button has not been created yet.
+  // Fast-loading views must not depend on that optional toolbar lifecycle.
   class CompletePropertiesPanel extends Autodesk.Viewing.UI.PropertyPanel {
     constructor() {
       super(viewer.container, 'aiforma-properties', 'Propiedades del elemento', { localizeTitle: false });
@@ -142,6 +144,6 @@ export async function installPropertyInspector(viewer) {
     }
   }
   const panel = new CompletePropertiesPanel();
-  if (!manager.setPanel(panel)) { panel.uninitialize(); throw new Error('property_panel_unavailable'); }
+  viewer.addPanel(panel);
   return panel;
 }

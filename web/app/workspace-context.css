@@ -63,3 +63,4 @@
 @media(max-width:767px){.workspace-main .topbar {padding:8px 12px;}.global-project-picker {order:4;flex-basis:100%;min-width:0;}.global-model-context{order:5;max-width:none;}.workspace-main .quantity-page:has(.qv2-desk) {height:auto;min-height:0;overflow:visible;}.workspace-main .quantity-page .quantity-desk-board{min-height:600px;}.specialty-catalog-heading {align-items:start;}.specialty-catalog-heading label {white-space:nowrap;}.workspace-main .assistant-topbar .assistant-header-title {display:none;}.workspace-main .topbar .quantity-header-slot {flex-wrap:wrap;}.workspace-main .topbar .quantity-top-actions {flex-basis:100%;}}
 
 .workspace-main .topbar .quantity-header-slot:empty{display:none;}
+.connection-pending-dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:#daa344;flex-shrink:0;}
