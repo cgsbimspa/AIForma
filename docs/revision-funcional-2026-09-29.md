@@ -88,6 +88,7 @@ No se guardan modelos, matrices de propiedades ni resultados BIM indiscriminadam
 - Segundo proyecto: Lomas del Patagual 1 mostró su archivo y configuración de Alcantarillado. Volver a Distrito Verde recuperó su tablero estructural, sin mezclar fuentes.
 - Auditoría real: se recuperaron referencias AEC aunque no estuvieran como elementos de la vista; G02 devolvió transformación publicada con evidencia. Reglas e inventarios de grillas/niveles se abrieron desde su resumen.
 - Se recuperó la nueva auditoría desde el historial después de una recarga completa.
+- El Asistente IA mantuvo el proyecto activo como alcance de consulta al entrar desde Auditoría. Se verificó el menú móvil y se conservó el nombre del módulo en su encabezado compacto.
 - Visor corregido: una losa seleccionada devolvió 94 propiedades publicadas (34 internas); el resumen y las partidas se limitaron a ese elemento. Filtro Floors + Aislar aplicado correctamente. No aparecieron nuevas excepciones del panel después de la corrección.
 - La comprobación visual se realizó a 1600 × 950 y a 539 píxeles de ancho. A 539 px, el ancho del contenido y el viewport coincidieron, sin desbordamiento horizontal. El encabezado permanece visible al desplazarse. Capturas locales: `web/work/review-proof/auditoria-resumen.png`, `auditoria-responsive.png` y `cubicaciones-propiedades.png` (no se publican los datos del modelo como recursos de la aplicación).
 

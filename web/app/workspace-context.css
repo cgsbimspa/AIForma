@@ -64,3 +64,4 @@
 
 .workspace-main .topbar .quantity-header-slot:empty{display:none;}
 .connection-pending-dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:#daa344;flex-shrink:0;}
+@media(max-width:767px){.workspace-main .assistant-topbar .assistant-header-title{display:block;flex:1;min-width:95px;}.workspace-main .assistant-topbar .assistant-header-title .eyebrow,.workspace-main .assistant-topbar .assistant-header-title .page-description{display:none;}.workspace-main .assistant-topbar .assistant-header-title h1{font-size:16px;margin:0;}}
