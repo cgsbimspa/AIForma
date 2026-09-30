@@ -1,5 +1,7 @@
 "use client";
 
+import {useProjectContext,useProjectState} from "./project-context";
+import {projectSessionKey} from "@/lib/project-session";
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { navigationRetentionMs, rememberConversation, recallConversation, type ConversationSnapshot } from "@/lib/assistant/navigation";
 import { createPortal } from "react-dom";
@@ -64,10 +66,12 @@ export function AssistantWorkspace() {
 function PanelHeading({ icon, title, subtitle, children }: { icon: React.ReactNode; title: string; subtitle: string; children?: React.ReactNode }) { return <header className="assistant-panel-heading"><span className="panel-heading-icon">{icon}</span><div><h2>{title}</h2><p>{subtitle}</p></div>{children}</header>; }
 type Selection = { initialMode?: DocumentMode | "search"; scope: DataScope; label: string; path?: string };
 function ConnectedWorkspace({ aiConfigured, invalidate }: { aiConfigured: boolean; invalidate: (code: string) => void }) {
-  const [navigation,setNavigation]=useState<{selection:Selection;previous:Selection[];initial?:ConversationSnapshot<ChatSnapshot>}>({selection:{scope:{kind:"all"},label:"Toda mi base de Forma"},previous:[]});
+  const projectContext=useProjectContext();
+  const [navigation,setNavigation]=useProjectState<{selection:Selection;previous:Selection[];initial?:ConversationSnapshot<ChatSnapshot>}>("assistant.navigation",()=>({selection:projectContext.projectId?{scope:projectContext.project,label:projectContext.projects.find(p=>p.id===projectContext.projectId)?.name??"Proyecto activo"}:{scope:{kind:"all"},label:"Toda mi base de Forma"},previous:[]}));
   const selection=navigation.selection;
-  const snapshots=useRef(new Map<string,ConversationSnapshot<ChatSnapshot>>());
-  const setSelection=useCallback((next:Selection)=>setNavigation(current=>JSON.stringify(current.selection.scope)===JSON.stringify(next.scope)?current:{selection:next,previous:[...current.previous,current.selection],initial:recallConversation(snapshots.current,JSON.stringify(next.scope))}),[]);
+  const [snapshotMap]=useProjectState("assistant.snapshots",()=>new Map<string,ConversationSnapshot<ChatSnapshot>>());
+  const snapshots=useRef(snapshotMap);
+  const setSelection=useCallback((next:Selection)=>{if(next.scope.kind!=="all"&&(next.scope.projectId!==projectContext.projectId||next.scope.hubId!==projectContext.hubId)){projectContext.session.set(projectSessionKey(projectContext.owner,next.scope.hubId,next.scope.projectId,"assistant.navigation"),{selection:next,previous:[]});projectContext.selectProject(next.scope.hubId,next.scope.projectId);return;}setNavigation(current=>JSON.stringify(current.selection.scope)===JSON.stringify(next.scope)?current:{selection:next,previous:[...current.previous,current.selection],initial:recallConversation(snapshots.current,JSON.stringify(next.scope))});},[projectContext,setNavigation]);
   const back=()=>setNavigation(current=>current.previous.length?{selection:current.previous.at(-1)!,previous:current.previous.slice(0,-1),initial:recallConversation(snapshots.current,JSON.stringify(current.previous.at(-1)!.scope))}:current);
   const saveSnapshot=useCallback((key:string,data:ChatSnapshot,expiresAt:number)=>rememberConversation(snapshots.current,key,data,expiresAt),[]);
   const [chatRevision,setChatRevision]=useState(0);
@@ -86,7 +90,7 @@ function ConnectedWorkspace({ aiConfigured, invalidate }: { aiConfigured: boolea
       <div className="forma-tree" key={revision}><Branch query={{ operation: "hubs", hubId: null, projectId: null, folderId: null, page: 0 }} selection={selection} select={setSelection} invalidate={invalidate} filter={filter}/></div>
       <footer className="explorer-footer"><ShieldCheck size={15}/><span>Sólo lectura · Abre las carpetas para ver su contenido. Los permisos de Autodesk se respetan.</span></footer>
     </section>
-    <ChatPanel key={`${scopeKey}:${chatRevision}`} restoreSelection={restoreSelection} initial={navigation.initial} saveSnapshot={saveSnapshot} onBack={navigation.previous.length?back:undefined} previousLabel={navigation.previous.at(-1)?.label} select={setSelection} selection={selection} aiConfigured={aiConfigured} invalidate={invalidate}/>
+    <ChatPanel key={`${scopeKey}:${chatRevision}`} restoreSelection={restoreSelection} initial={navigation.initial??recallConversation(snapshotMap,scopeKey)} saveSnapshot={saveSnapshot} onBack={navigation.previous.length?back:undefined} previousLabel={navigation.previous.at(-1)?.label} select={setSelection} selection={selection} aiConfigured={aiConfigured} invalidate={invalidate}/>
   </div>;
 }
 type BranchProps = { query: DataQuery; selection: Selection; select: (selection: Selection) => void; invalidate: (code: string) => void; filter: string; folderIds?: string[]; path?: string };

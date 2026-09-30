@@ -1,4 +1,5 @@
 'use client';
+import {normalizeResult,resultStatus} from '@/lib/audit/result-status';
 import Link from 'next/link';
 import { Suspense,useState } from 'react';
 import { useSearchParams } from 'next/navigation';
@@ -17,7 +18,7 @@ function Findings(){
  const run=a.run;
  if(!run)return <AuditEmpty title="Sin hallazgos cargados">Abre una ejecución desde <Link href={auditHref('')}>Resumen</Link> para revisar sus controles y evidencias.</AuditEmpty>;
  const findings=run.findings as Finding[],current=query.get('hallazgo'),finding=findings.find(f=>f.id===current);
- const values={...filters,result:filters.result??query.get('estado')??''};
+ const values={...filters,result:filters.result??normalizeResult(query.get('estado')??'')??''};
  const rows=findings.filter(f=>Object.entries(values).every(([k,v])=>!v||(k==='result'?f.result===v:k==='chapter'?f.ruleId.startsWith(v):k==='rule'?f.ruleId===v:(f.facets?.[k as 'category']??f.affectedElements.map(e=>e[k as 'category'])).includes(v))));
  const rule=finding?run.rules.find(r=>r.ruleId===finding.ruleId):null;
  async function detailPage(f:Finding,p=0){
@@ -31,7 +32,7 @@ function Findings(){
   {!finding&&<section className="audit-card"><div className="audit-title-row"><h2>Resultados y hallazgos</h2><span>{rows.length} registros · {run.findings.length} total</span></div><p className="audit-muted">Inventarios y controles no evaluados se muestran separados por estado. Un hallazgo no crea una incidencia automáticamente.</p>
    <div className="audit-filters">{['result','chapter','rule','level','category','family','type'].map(k=>{
     const options=k==='result'?[...auditResults]:k==='chapter'?[...new Set(findings.map(f=>f.ruleId.slice(0,3)))]:k==='rule'?[...new Set(findings.map(f=>f.ruleId))]:[...new Set(findings.flatMap(f=>f.facets?.[k as 'category']??f.affectedElements.map(e=>e[k as 'category']).filter((v):v is string=>v!==null)))].sort();
-    return <label key={k}>{{result:'Estado',chapter:'Capítulo',rule:'Regla',level:'Nivel',category:'Categoría',family:'Familia',type:'Tipo'}[k]}<select value={values[k as keyof typeof values]??''} onChange={e=>{setFilters(v=>({...v,[k]:e.target.value}));setPage(0);}}><option value="">Todos</option>{options.map(v=><option key={v}>{v}</option>)}</select></label>;
+    return <label key={k}>{{result:'Estado',chapter:'Capítulo',rule:'Regla',level:'Nivel',category:'Categoría',family:'Familia',type:'Tipo'}[k]}<select value={values[k as keyof typeof values]??''} onChange={e=>{setFilters(v=>({...v,[k]:e.target.value}));setPage(0);}}><option value="">Todos</option>{options.map(v=><option key={v} value={v}>{k==='result'&&normalizeResult(v)?resultStatus[normalizeResult(v)!].label:v}</option>)}</select></label>;
    })}</div><div className="audit-table-wrap"><table><thead><tr><th>Resultado</th><th>Regla</th><th>Elementos</th><th>Categoría / nivel</th><th>Descripción</th></tr></thead><tbody>{rows.slice(page*40,(page+1)*40).map(f=><tr key={f.id} className={f.id===current?'audit-selected':''}><td><AuditBadge value={f.result}/></td><td><Link href={`${auditHref('hallazgos')}?hallazgo=${f.id}`} onClick={()=>{setElementsPage(null);setViewer(false);setAction(undefined);}}>{f.ruleId} · {f.title}</Link><small>{f.id.slice(0,8)}</small></td><td>{f.affectedCount??f.affectedElements.length}</td><td>{(f.facets?.category??[...new Set(f.affectedElements.map(e=>e.category))]).filter(Boolean).join(', ')||'No disponible'}<br/><small>{(f.facets?.level??[...new Set(f.affectedElements.map(e=>e.level))]).filter(Boolean).join(', ')}</small></td><td>{f.description}</td></tr>)}</tbody></table></div>{!rows.length&&<p>No se encontraron registros para estos filtros.</p>}<div className="audit-actions"><button disabled={!page} onClick={()=>setPage(p=>p-1)}>Anterior</button><span>Página {page+1} de {Math.max(1,Math.ceil(rows.length/40))}</span><button disabled={(page+1)*40>=rows.length} onClick={()=>setPage(p=>p+1)}>Siguiente</button></div>
   </section>}
   {finding&&<div className="audit-detail-navigation"><Link href={auditHref('hallazgos')} onClick={()=>{setViewer(false);setAction(undefined);setElementsPage(null);}}>← Volver a resultados</Link><span>{finding.ruleId} · Detalle y evidencia</span></div>}

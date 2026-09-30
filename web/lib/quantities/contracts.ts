@@ -34,6 +34,7 @@ export const templateVersionSchema = z.object({
 export type QuantityTemplateVersion = z.infer<typeof templateVersionSchema>;
 export type QuantityTemplate = { id: string; specialtyCode: string; name: string; currentVersion: number; active: boolean };
 export const configurationSchema = z.object({
+  enabled:z.boolean().optional(), hidden:z.boolean().optional(),
   calculationSettings: settingsSchema.optional(),
   id: z.string().uuid(), specialtyCode, source: sourceSchema.nullable(), templateVersionId: z.string().uuid().nullable(),
   revision: z.number().int().nonnegative(), createdAt: date, updatedAt: date, updatedBy: text,

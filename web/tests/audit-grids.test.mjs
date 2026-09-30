@@ -59,14 +59,14 @@ test('engine uses AEC with no visible Grids, keeps provenance, does not inflate 
  const aec=await readAuditAec('TEST_TOKEN','TEST_URN',undefined,async url=>response(String(url).endsWith('/manifest')?manifest:payload));
  const audit=run(aec);assert.equal(audit.scope.elementCount,0);
  for(const id of ['G04-A01','G04-A02','G04-A03','G04-A04','G04-A05']){
-  const finding=audit.findings.find(f=>f.ruleId===id);assert.equal(finding.result,'INFORMATION');assert.equal(finding.evidence[0].source,aec.files[0].endpoint);assert.deepEqual(finding.affectedElements,[]);assert.deepEqual(finding.evidence[0].viewerReference.dbIds,[]);
+  const finding=audit.findings.find(f=>f.ruleId===id);assert.equal(finding.result,'INFORMATIVE');assert.equal(finding.evidence[0].source,aec.files[0].endpoint);assert.deepEqual(finding.affectedElements,[]);assert.deepEqual(finding.evidence[0].viewerReference.dbIds,[]);
  }
  assert.equal(audit.findings.find(f=>f.ruleId==='G04-A05').evidence[0].unit,null);
  assert.equal(audit.findings.find(f=>f.ruleId==='G04-A04').observedValue[0].segments[0].chordAngleXYDegrees,0);
- assert.equal(audit.findings.find(f=>f.ruleId==='G04-B01').result,'INFORMATION');
- assert.ok(audit.findings.filter(f=>f.ruleId.startsWith('G04-C')).every(f=>f.result==='NOT EVALUATED'));
+ assert.equal(audit.findings.find(f=>f.ruleId==='G04-B01').result,'INFORMATIVE');
+ assert.ok(audit.findings.filter(f=>f.ruleId.startsWith('G04-C')).every(f=>f.result==='NOT_EVALUATED'));
 });
 test('old reports and ambiguous same-name view grids cannot become false duplicate warnings',()=>{
  const viewGrid={elementId:'',dbId:1,uniqueId:null,name:'A',category:'Grids',family:null,type:null,level:null,properties:{}};
- const audit=run(undefined,[viewGrid,{...viewGrid,dbId:2}]);assert.equal(audit.findings.find(f=>f.ruleId==='G04-B01').result,'NOT EVALUATED');
+ const audit=run(undefined,[viewGrid,{...viewGrid,dbId:2}]);assert.equal(audit.findings.find(f=>f.ruleId==='G04-B01').result,'NOT_EVALUATED');
 });

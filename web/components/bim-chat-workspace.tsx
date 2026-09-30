@@ -1,31 +1,24 @@
 "use client";
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {useProjectContext,useProjectState,useModelContext} from "./project-context";
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Box, MessageSquare, ArrowUp, Settings2, RefreshCw, ExternalLink, Plus, ShieldCheck } from 'lucide-react';
-import { AutodeskConnection } from './autodesk-connection';
 import { QuantitySourcePicker } from './quantity-source-picker';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from './ui/dialog';
-import { quantityBrowse, quantityCommand, quantityResponse } from '@/lib/quantities/client';
-import type { Entry } from '@/lib/autodesk/data';
+import { quantityCommand, quantityResponse } from '@/lib/quantities/client';
 import type { QuantityProject, QuantitySource } from '@/lib/quantities/contracts';
 import { catalogSchema, resultSchema, describeBimResult, type BimCatalog, type BimPlan, type BimResult } from '@/lib/bim-chat/contracts';
 
 export function BimChatWorkspace(){
-  const [hubs,setHubs]=useState<Entry[]>([]),[hubId,setHubId]=useState('');
-  const [projects,setProjects]=useState<Entry[]>([]),[projectId,setProjectId]=useState('');
-  const [error,setError]=useState(''),[busy,setBusy]=useState(false),[retry,setRetry]=useState(0),[nextPage,setNextPage]=useState<number|null>(null),[partial,setPartial]=useState(false);
-  useEffect(()=>{const controller=new AbortController();void quantityBrowse({operation:'hubs'},controller.signal).then(page=>{if(controller.signal.aborted)return;setHubs(page.entries);setPartial(page.evidence.partial);if(page.entries.length===1)setHubId(page.entries[0].id);}).catch(e=>{if(!controller.signal.aborted)setError(e.message);});return()=>controller.abort();},[retry]);
-  useEffect(()=>{if(!hubId)return;const controller=new AbortController();async function load(){setBusy(true);setError('');try{const page=await quantityBrowse({operation:'projects',hubId},controller.signal);if(controller.signal.aborted)return;setProjects(page.entries);setNextPage(page.evidence.nextPage);setPartial(page.evidence.partial);}catch(e){if(!controller.signal.aborted)setError((e as Error).message);}finally{if(!controller.signal.aborted)setBusy(false);}}void load();return()=>controller.abort();},[hubId,retry]);
-  async function more(){if(nextPage===null)return;setBusy(true);try{const page=await quantityBrowse({operation:'projects',hubId,page:nextPage});setProjects(old=>[...new Map([...old,...page.entries].map(p=>[p.id,p])).values()]);setNextPage(page.evidence.nextPage);setPartial(page.evidence.partial);}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
-  const project=useMemo<QuantityProject>(()=>({kind:'project',hubId,projectId}),[hubId,projectId]);
+  const {projectId,hubId,project,error}=useProjectContext();
   return <div className="bim-chat-page">
-    <header className="bim-chat-heading"><div><p className="eyebrow">CONVERSA CON TU MODELO</p><h1>Chat BIM IA</h1><p>Elige una vista. Consulta sus elementos y actúa sobre el modelo.</p></div><AutodeskConnection/></header>
-    <div className="bim-chat-projects"><label>Cuenta Autodesk<select value={hubId} disabled={busy} onChange={e=>{setHubId(e.target.value);setProjects([]);setProjectId('');setNextPage(null);}}><option value="">Seleccionar cuenta</option>{hubs.map(h=><option key={h.id} value={h.id}>{h.name}</option>)}</select></label><label>Proyecto<select value={projectId} disabled={!hubId||busy} onChange={e=>setProjectId(e.target.value)}><option value="">Seleccionar proyecto</option>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>{nextPage!==null&&<button className="quantity-secondary" disabled={busy} onClick={()=>void more()}>Más proyectos</button>}<button className="quantity-icon-button" aria-label="Recargar proyectos" disabled={busy} onClick={()=>setRetry(n=>n+1)}><RefreshCw size={17}/></button>{busy&&<span role="status">Consultando Autodesk…</span>}</div>
-    {error&&<p role="alert" className="quantity-error">{error}</p>}{partial&&<p className="quantity-help">La lista de Autodesk puede estar incompleta. Carga más proyectos o vuelve a consultar.</p>}
+    <header className="bim-chat-heading"><div><p className="eyebrow">CONVERSA CON TU MODELO</p><h1>Chat BIM IA</h1><p>Elige una vista. Consulta sus elementos y actúa sobre el modelo.</p></div></header>
+    {error&&<p role="alert" className="quantity-error">{error}</p>}
     {projectId?<BimProject key={`${hubId}:${projectId}`} project={project}/>:<div className="bim-chat-welcome"><Box size={42}/><h2>Tu modelo, una conversación</h2><p>Selecciona el proyecto y después un archivo RVT, su versión y una vista publicada.</p><div><span>Modelo a la izquierda</span><span>Chat y acciones a la derecha</span></div></div>}
   </div>;
 }
 function BimProject({project}:{project:QuantityProject}){
-  const [source,setSource]=useState<QuantitySource|null>(null),[configure,setConfigure]=useState(true),[reload,setReload]=useState(0);
+  const [source,setSource]=useProjectState<QuantitySource|null>("bim.source",null),[configure,setConfigure]=useState(!source?.view),[reload,setReload]=useState(0);
+  useModelContext(source);
   const key=source?.view?`${source.scope.itemId}:${source.version.id}:${source.view.id}:${reload}`:'empty';
   return <><div className="bim-chat-modelbar"><div><strong>{source?.fileName??'Selecciona un modelo BIM'}</strong><span>{source?`V${source.version.number} · ${source.view?.name??'Vista pendiente'}`:'Archivo RVT de Autodesk Forma'}</span></div><button className="quantity-secondary" onClick={()=>setConfigure(true)}><Settings2 size={15}/>Configurar archivo y vista</button>{source?.view&&<button className="quantity-icon-button" aria-label="Recargar modelo" onClick={()=>setReload(n=>n+1)}><RefreshCw size={16}/></button>}</div>
     <Dialog open={configure} onOpenChange={setConfigure}><DialogContent className="bim-chat-config"><DialogTitle>Elegir modelo y vista</DialogTitle><DialogDescription>Selecciona el RVT, su versión y la vista publicada. Al cambiar la fuente se inicia otra conversación.</DialogDescription><QuantitySourcePicker project={project} source={source} disabled={false} onChange={value=>{setSource(value);if(value?.view)setConfigure(false);}}/></DialogContent></Dialog>

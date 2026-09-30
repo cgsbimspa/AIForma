@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { DataError } from '../autodesk/data.ts';
+import {normalizeResult} from './result-status.ts';
 import { encryptHistory,decryptHistory,type Actor } from '../memory/domain.ts';
 import type { Query,Transaction } from '../memory/database.ts';
 import { catalogSchema,configSchema,type AuditConfiguration,type AuditRun,type AuditWorkspace } from './contracts.ts';
@@ -34,7 +35,7 @@ export function createAuditStore(transaction:Transaction,key:Buffer){
    if(run.projectId!==actor.projectId||run.source.scope.hubId!==actor.organizationId||run.createdBy!==actor.userId)throw new DataError('out_of_scope',403);
    return transaction(actor,q=>insert(q,actor,actor.projectId,'run',1,run,`${run.source.fileName} · V${run.source.version.number} · ${run.source.view!.name}`,run.id));
   },
-  async run(actor:Actor,id:string):Promise<AuditRun>{return transaction(actor,async q=>{const row=(await q("SELECT * FROM audit_record WHERE id=$1 AND kind='run' AND project_id=$2",[id,actor.projectId]))[0];if(!row)throw new DataError('not_found',404);return decode(actor,row) as AuditRun;});},
+  async run(actor:Actor,id:string):Promise<AuditRun>{return transaction(actor,async q=>{const row=(await q("SELECT * FROM audit_record WHERE id=$1 AND kind='run' AND project_id=$2",[id,actor.projectId]))[0];if(!row)throw new DataError('not_found',404);const run=decode(actor,row) as AuditRun;return {...run,findings:run.findings.map(f=>({...f,result:normalizeResult(f.result)??'NOT_EVALUATED'})),rules:run.rules.map(r=>({...r,controlType:(r.controlType as string)==='INFORMATION'?'INFORMATIVE':r.controlType,possibleResults:r.possibleResults.map(v=>normalizeResult(v)??'NOT_EVALUATED')}))};});},
   async issueRequest(actor:Actor,run:AuditRun,findingId:string){
    if(!run.findings.some(f=>f.id===findingId))throw new DataError('not_found',404);
    return transaction(actor,q=>insert(q,actor,actor.projectId,'issue-request',1,{runId:run.id,findingId,status:'PENDING_REVIEW_INTEGRATION',requestedBy:actor.userId},'Solicitud explícita de incidencia'));

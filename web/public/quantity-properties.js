@@ -52,7 +52,7 @@ export async function installPropertyInspector(viewer) {
       this.identity = node('details', undefined, 'aiforma-property-identity');
       this.tableArea = node('div', undefined, 'aiforma-property-table');
       this.body.append(this.choice, this.search, this.summary, this.identity, this.tableArea);
-      this.selectionChanged = () => { if (this.isVisible()) this.refresh(); else { this.revision++; this.result = null; } };
+      this.selectionChanged = () => { if(viewer.getSelection().length)this.setVisible(true);else if(this.isVisible())this.refresh();else {this.revision++;this.result=null;} };
       viewer.addEventListener(Autodesk.Viewing.SELECTION_CHANGED_EVENT, this.selectionChanged);
     }
     setVisible(show) {

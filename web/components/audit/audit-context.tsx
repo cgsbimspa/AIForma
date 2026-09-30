@@ -1,6 +1,7 @@
 'use client';
+import { useProjectContext, useProjectState } from '../project-context';
 import { createContext,useContext,useEffect,useMemo,useState,useCallback,type ReactNode } from 'react';
-import { quantityBrowse,quantityResponse } from '@/lib/quantities/client';
+import { quantityResponse } from '@/lib/quantities/client';
 import type { Entry } from '@/lib/autodesk/data';
 import type { QuantityProject } from '@/lib/quantities/contracts';
 import type { AuditWorkspace,AuditRun } from '@/lib/audit/contracts';
@@ -16,17 +17,14 @@ export async function auditResponse<T>(scope:QuantityProject,command?:unknown,qu
  return quantityResponse<T>(`/api/audit${command?'':`?scope=${encodeURIComponent(JSON.stringify(scope))}${query}`}`,command?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({scope,command}),signal}:{signal});
 }
 export function AuditProvider({children}:{children:ReactNode}){
- const [hubs,setHubs]=useState<Entry[]>([]),[projects,setProjects]=useState<Entry[]>([]),[hubId,setHubId]=useState(''),[projectId,setProjectId]=useState(''),[nextPage,setNextPage]=useState<number|null>(null);
- const [workspace,setWorkspace]=useState<AuditWorkspace|null>(null),[run,setRun]=useState<AuditReport|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
+ const {hubs,projects,hubId,projectId,nextPage,setHub,setProject,moreProjects}=useProjectContext();
+ const [workspace,setWorkspace]=useProjectState<AuditWorkspace|null>("audit.workspace",null),[run,setRun]=useProjectState<AuditReport|null>("audit.report",null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
  const project=useMemo<QuantityProject>(()=>({kind:'project',hubId,projectId}),[hubId,projectId]);
- useEffect(()=>{const abort=new AbortController();void quantityBrowse({operation:'hubs'},abort.signal).then(p=>{setHubs(p.entries);if(p.entries.length===1)setHubId(p.entries[0].id);}).catch(e=>{if(!abort.signal.aborted)setError(e.message);});return()=>abort.abort();},[]);
- useEffect(()=>{if(!hubId)return;const abort=new AbortController();void quantityBrowse({operation:'projects',hubId},abort.signal).then(p=>{setProjects(p.entries);setNextPage(p.evidence.nextPage);}).catch(e=>{if(!abort.signal.aborted)setError(e.message);}).finally(()=>{if(!abort.signal.aborted)setBusy(false);});return()=>abort.abort();},[hubId]);
- useEffect(()=>{if(!projectId)return;const abort=new AbortController();void auditResponse<AuditWorkspace>(project,undefined,'',abort.signal).then(setWorkspace).catch(e=>{if(!abort.signal.aborted)setError(e.message);}).finally(()=>{if(!abort.signal.aborted)setBusy(false);});return()=>abort.abort();},[project,projectId]);
- const reload=useCallback(async()=>{if(!projectId)return;setBusy(true);setError('');try{setWorkspace(await auditResponse<AuditWorkspace>(project));}catch(e){setError((e as Error).message);}finally{setBusy(false);}},[project,projectId]);
+ useEffect(()=>{if(!projectId)return;const abort=new AbortController();void auditResponse<AuditWorkspace>(project,undefined,'',abort.signal).then(setWorkspace).catch(e=>{if(!abort.signal.aborted)setError(e.message);}).finally(()=>{if(!abort.signal.aborted)setBusy(false);});return()=>abort.abort();},[project,projectId,setWorkspace]);
+ const reload=useCallback(async()=>{if(!projectId)return;setBusy(true);setError('');try{setWorkspace(await auditResponse<AuditWorkspace>(project));}catch(e){setError((e as Error).message);}finally{setBusy(false);}},[project,projectId,setWorkspace]);
  async function command(c:unknown){setBusy(true);setError('');setNotice('');try{const result=await auditResponse<AuditWorkspace|AuditReport>(project,c);if('findings'in result){setRun(result);setWorkspace(await auditResponse<AuditWorkspace>(project));setNotice('Ejecución guardada con su vista, versión, reglas y evidencia.');}else if('configuration'in result){setWorkspace(result);setNotice('Configuración guardada. Las ejecuciones anteriores conservan sus criterios originales.');}return result;}catch(e){setError((e as Error).message);throw e;}finally{setBusy(false);}}
  async function openRun(id:string){setBusy(true);setError('');try{setRun(await auditResponse<AuditReport>(project,undefined,`&run=${encodeURIComponent(id)}`));}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
- async function moreProjects(){if(nextPage===null)return;setBusy(true);try{const p=await quantityBrowse({operation:'projects',hubId,page:nextPage});setProjects(old=>[...old,...p.entries]);setNextPage(p.evidence.nextPage);}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
- const setHub=(id:string)=>{setBusy(Boolean(id));setHubId(id);setProjectId('');setProjects([]);setWorkspace(null);setRun(null);setError('');setNotice('');};
- const setProject=(id:string)=>{setBusy(Boolean(id));setProjectId(id);setWorkspace(null);setRun(null);setError('');setNotice('');};
  return <AuditContext.Provider value={{hubs,projects,hubId,projectId,project,workspace,run,busy,error,notice,nextPage,setHub,setProject,moreProjects,reload,command,openRun,setNotice}}>{children}</AuditContext.Provider>;
 }
+
+export function AuditProjectProvider({children}:{children:ReactNode}){const p=useProjectContext();return <AuditProvider key={`${p.owner}:${p.hubId}:${p.projectId}`}>{children}</AuditProvider>;}

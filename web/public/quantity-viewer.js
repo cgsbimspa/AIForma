@@ -17,7 +17,13 @@ import { readViewClassification, classificationInventory, classificationRule } f
     window.parent.postMessage({type:'aiforma-viewer',state:'parameters',count,total,viewId:input.viewId,urn:input.urn},window.location.origin);
   }).catch(error => { classification = undefined; throw error; });
   const classificationReport = (state, message) => window.parent.postMessage({ type: 'aiforma-viewer', state: 'classification', result: state, message, viewId: input.viewId, urn: input.urn, ruleId: classificationRule.id, ruleVersion: classificationRule.version }, window.location.origin);
-  const inspectProperties = () => inspector ??= installPropertyInspector(viewer).catch(() => classificationReport('error','La paleta completa no está disponible. Vuelve a cargar la vista para reintentar.'));
+  const inspectProperties = () => inspector ??= installPropertyInspector(viewer).catch(() => { inspector=undefined;classificationReport('error','No se pudo abrir la paleta. Pulsa Propiedades para reintentar.');return null; });
+  // Independent of Autodesk's adaptive toolbar: remains reachable in compact
+  // and fast-loading views, even when the SDK hides its property button.
+  const propertyButton=document.createElement('button');
+  propertyButton.id='aiforma-property-button';propertyButton.textContent='Propiedades';propertyButton.type='button';propertyButton.disabled=true;
+  propertyButton.onclick=()=>void inspectProperties().then(panel=>panel?.setVisible(true));
+  document.body.append(propertyButton);
   const mapping = () => externalMap ? Promise.resolve(externalMap) : new Promise((resolve,reject)=>viewer.model.getExternalIdMapping(map=>{externalMap=map;reverseMap=new Map(Object.entries(map).map(([id,dbId])=>[dbId,id]));resolve(map);},reject));
   const selectionMessage = async event => {
     const data=event.data;
@@ -81,6 +87,7 @@ import { readViewClassification, classificationInventory, classificationRule } f
       viewer.addEventListener(Autodesk.Viewing.MODEL_ROOT_LOADED_EVENT, event => {
         if (event.model !== viewer.model || done) return;
         report('loading', 'Modelo abierto; descargando geometría y preparando parámetros…');
+        propertyButton.disabled=false;
         void inspectProperties();
       });
       viewer.addEventListener(Autodesk.Viewing.SELECTION_CHANGED_EVENT, async event=>{
@@ -92,6 +99,7 @@ import { readViewClassification, classificationInventory, classificationRule } f
         const matches = doc.getRoot().search({ guid: input.geometryId, type: "geometry" });
         if (matches.length !== 1) { clearTimeout(timeout); fail("La vista seleccionada no está disponible en el modelo publicado. Selecciona otra vista de esta versión."); return; }
         viewer.addEventListener(Autodesk.Viewing.GEOMETRY_LOADED_EVENT, () => {
+          propertyButton.disabled=false;
           clearTimeout(timeout);
           if (!done) {
             void inspectProperties();

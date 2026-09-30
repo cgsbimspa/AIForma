@@ -47,17 +47,17 @@ test('same AEC download supplies grids and levels without extra calls; bounded t
 });
 test('engine reports AEC levels even with no view Levels, retains provenance and partial link coverage, never inflates counts',()=>{
  const audit=run(parseAecGrids(payload,endpoint));
- const found=audit.findings.find(f=>f.ruleId==='G03-A01'&&f.result==='INFORMATION');
+ const found=audit.findings.find(f=>f.ruleId==='G03-A01'&&f.result==='INFORMATIVE');
  assert.equal(found.observedValue.length,3);assert.equal(found.evidence[0].source,endpoint);
  assert.deepEqual(found.evidence[0].viewerReference.dbIds,[]);assert.deepEqual(found.affectedElements,[]);
  assert.equal(audit.scope.elementCount,0);assert.equal(audit.inventory.elements.length,0);
- assert.ok(audit.findings.some(f=>f.ruleId==='G03-A01'&&f.result==='NOT EVALUATED'&&f.description.includes('Cobertura')));
- assert.ok(audit.findings.filter(f=>['G03-B03','G03-B04','G03-C02'].includes(f.ruleId)).every(f=>f.result==='NOT EVALUATED'));
+ assert.ok(audit.findings.some(f=>f.ruleId==='G03-A01'&&f.result==='NOT_EVALUATED'&&f.description.includes('Cobertura')));
+ assert.ok(audit.findings.filter(f=>['G03-B03','G03-B04','G03-C02'].includes(f.ruleId)).every(f=>f.result==='NOT_EVALUATED'));
  assert.ok(!audit.findings.some(f=>f.result==='FAIL'));
 });
 test('old AEC reports remain readable and do not claim the expanded level reading occurred',()=>{
  const file=parseAecGrids(payload,endpoint);delete file.levels;
- assert.equal(run(file).findings.find(f=>f.ruleId==='G03-A01').result,'NOT EVALUATED');
+ assert.equal(run(file).findings.find(f=>f.ruleId==='G03-A01').result,'NOT_EVALUATED');
 });
 test('view datum parent levels are read without classifying element names that merely mention a level',()=>{
  const tree={data:{objects:[{objectid:9,name:'TEST_ROOT',objects:[{objectid:1,name:'TEST N1',objects:[{objectid:2,name:'TEST detail'}]},{objectid:3,name:'TEST Nivel'}]}]}};

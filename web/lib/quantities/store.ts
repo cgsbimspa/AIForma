@@ -90,6 +90,12 @@ export function createQuantityStore(transaction: Transaction, key: Buffer) {
         return assignTemplate(q, actor, value);
       });
     },
+    async visibility(actor: Actor, input:{id:string;revision:number;enabled:boolean;hidden:boolean}) {
+      return transaction(actor,async q=>{const previous=await config(q,actor,input.id);if(previous.revision!==input.revision)throw new DataError('configuration_conflict',409);
+        const value=configurationSchema.parse({...previous,enabled:input.enabled,hidden:input.hidden,revision:previous.revision+1,updatedAt:new Date().toISOString(),updatedBy:actor.userId});
+        await q('UPDATE quantity_configuration SET payload=$1,revision=$2,updated_at=now(),updated_by=$3 WHERE id=$4',[encode(actor,value.id,value),value.revision,actor.userId,value.id]);return value;
+      });
+    },
     async save(actor: Actor, input: { id: string; revision: number; source: QuantitySource | null; templateVersionId: string | null; calculationSettings?:CalculationSettings }) {
       return transaction(actor, async q => {
         const previous = await config(q, actor, input.id);

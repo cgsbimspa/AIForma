@@ -1,8 +1,8 @@
 'use client';
+import {useModelContext} from '../project-context';
 import Link from 'next/link';
 import {useState} from 'react';
 import {ShieldCheck,ChevronRight,RefreshCw,Play,FileCheck2,Settings2,History,BookOpen,Box} from 'lucide-react';
-import {AutodeskConnection} from '@/components/autodesk-connection';
 import {useCoordination} from './context';
 import {systems,specialties,href,systemHref,futureCoordination,hotWaterFuture} from '@/lib/coordination/catalog';
 import {ridaaRules,ridaaSource} from '@/lib/coordination/ridaa';
@@ -19,12 +19,13 @@ export function CoordinationPage({systemId,section}:{systemId?:string;section:st
  const report=c.report?.systemId===systemId?c.report:null;
  const [publication,setPublication]=useState<{key:string;latest:ModelVersion}|null>(null),[checking,setChecking]=useState(false),[checkError,setCheckError]=useState('');
  const source=config.source,sourceKey=source?`${c.projectId}:${source.scope.itemId}:${source.version.id}`:'';
+ useModelContext(source);
  const latest=publication?.key===sourceKey?publication.latest:null;
  async function verify(){if(!source)return;setChecking(true);setCheckError('');try{const v=await quantityCommand<{latest:ModelVersion}>(c.project,{action:'versions',file:source.scope});setPublication({key:sourceKey,latest:v.latest});}catch(e){setCheckError((e as Error).message);}finally{setChecking(false);}}
  async function run(){try{await c.command<Report>({action:'run',systemId,revision});}catch{/* Provider displays error. */}}
  const selectedProject=c.projects.find(p=>p.id===c.projectId);
  return <div className="coord-page">
-  <header className="coord-context"><div className="coord-brand"><ShieldCheck size={23}/><div><strong>Coordinación Normativa</strong><small>Revisión con evidencia</small></div></div><label>Cuenta Autodesk<select value={c.hubId} disabled={c.busy} onChange={e=>c.setHub(e.target.value)}><option value="">Selecciona una cuenta</option>{c.hubs.map(h=><option key={h.id} value={h.id}>{h.name}</option>)}</select></label><label>Proyecto<select value={c.projectId} disabled={c.busy||!c.hubId} onChange={e=>c.setProject(e.target.value)}><option value="">Selecciona un proyecto</option>{c.projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>{c.nextPage!==null&&<button disabled={c.busy} onClick={()=>void c.more()}>Más proyectos</button>}<button title="Recargar configuración" disabled={c.busy||!c.projectId} onClick={()=>void c.reload()}><RefreshCw size={16}/></button><AutodeskConnection/></header>
+  <div className="coord-context-actions"><button disabled={c.busy||!c.projectId} onClick={()=>void c.reload()}><RefreshCw size={14}/>Recargar configuración</button></div>
   {(c.error||checkError)&&<p className="coord-alert" role="alert">{c.error||checkError}</p>}{c.notice&&<p role="status" className="coord-notice">{c.notice}</p>}
   <div className="coord-title"><div><div className="coord-crumb"><Link href={href()}>Coordinación</Link>{system&&<><ChevronRight size={12}/><Link href={href('sanitario')}>Sanitario</Link></>}</div><h1>{system?.name??(section==='resumen'?'Resumen de coordinación':specialties.find(s=>s.slug===section)?.name??'Sanitario')}</h1></div>{system&&<div className="coord-actions"><button disabled={!source||checking||c.busy} onClick={()=>void verify()}><RefreshCw size={14}/>{checking?'Verificando…':'Verificar versión'}</button><button className="coord-primary" disabled={c.busy||!source?.view||!config.scope.confirmed} onClick={()=>void run()}><Play size={14}/>{c.busy?'Procesando…':'Ejecutar revisión'}</button></div>}</div>
   {system&&<><div className="coord-modelbar"><Box size={17}/><div><strong>{source?.fileName??'Archivo sin configurar'}</strong><small>{source?`${source.view?.name??'Vista pendiente'} · V${source.version.number}`:'Selecciona el archivo y su vista publicada'}</small></div><span className={`coord-version ${latest?latest.id===source?.version.id?'current':'old':''}`}><i/>{latest?(latest.id===source?.version.id?'Última publicación verificada':`Actualización disponible · V${latest.number}`):'Publicación por verificar'}</span><Link href={`${systemHref(system.id)}/configuracion`}>Actualizar / versión anterior</Link><Link href={`${systemHref(system.id)}/historial`}>Comparar versiones</Link></div><nav className="coord-tabs" aria-label="Vistas del sistema">{[['revision','Revisión',FileCheck2],['configuracion','Archivo y alcance',Settings2],['vinculos','Modelos y vínculos',Box],['reglas','Reglas RIDAA',BookOpen],['historial','Historial',History]].map(([id,name,Icon])=>{const I=Icon as typeof FileCheck2;return <Link key={id as string} href={`${systemHref(system.id)}${id==='revision'?'':`/${id}`}`} aria-current={section===id?'page':undefined}><I size={15}/>{name as string}</Link>;})}</nav></>}

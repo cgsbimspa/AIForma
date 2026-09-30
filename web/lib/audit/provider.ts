@@ -1,3 +1,4 @@
+import {propertyCoordinates} from './coordinates.ts';
 import { z } from 'zod';
 import { DataError } from '../autodesk/data.ts';
 import type { QuantitySource } from '../quantities/contracts.ts';
@@ -58,7 +59,7 @@ export function parseInventory(tree:unknown,properties:unknown,source:QuantitySo
   if(['Levels','Niveles'].includes(el.category??''))levels.push(el);
   if(leaves.has(row.objectid))elements.push(el);else excluded++;
  }
- return {elements,levels,grids,endpoint,treeEndpoint,fetchedAt:new Date().toISOString(),missing:[...leaves].filter(id=>!seen.has(id)).length,excluded,population:'Objetos hoja del árbol de la vista publicada con propiedades recuperadas. Los nodos agrupadores se excluyen; no representa todo el archivo RVT. El inventario de ejes y niveles también consulta nodos de referencia y datos AEC, sin sumarlos como elementos de la vista.'};
+ return {coordinateEvidence:propertyCoordinates(rows,endpoint),elements,levels,grids,endpoint,treeEndpoint,fetchedAt:new Date().toISOString(),missing:[...leaves].filter(id=>!seen.has(id)).length,excluded,population:'Objetos hoja del árbol de la vista publicada con propiedades recuperadas. Los nodos agrupadores se excluyen; no representa todo el archivo RVT. El inventario de ejes y niveles también consulta nodos de referencia y datos AEC, sin sumarlos como elementos de la vista.'};
 }
 async function read(token:string,endpoint:string,signal?:AbortSignal,fetcher:typeof fetch=fetch) {
  const response=await fetcher(endpoint,{headers:{Authorization:`Bearer ${token}`,Accept:'application/json'},cache:'no-store',redirect:'error',signal:signal?AbortSignal.any([signal,AbortSignal.timeout(45000)]):AbortSignal.timeout(45000)});

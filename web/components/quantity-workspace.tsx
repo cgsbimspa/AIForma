@@ -1,11 +1,12 @@
 "use client";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Boxes, Plus, ArrowLeft, ArrowRight, Box, ShieldCheck, RefreshCw, Settings2, Search, Bell, Save } from "lucide-react";
-import Link from "next/link";
+import { useProjectContext, useProjectState } from "./project-context";
+import {specialtyState,type ProcessReceipt} from "@/lib/quantities/specialty-state";
+import {projectSessionKey} from "@/lib/project-session";
+import { useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { Boxes, Plus, ArrowLeft, ArrowRight, Box, ShieldCheck, RefreshCw, Settings2, Save } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "./ui/dialog";
 import { QuantityTopbar, QuantityFilters, QuantitySummaryCards, QuantityTable } from "./quantity-panels";
 import { matchingRun, projectQuantityRows, filterQuantityRows, quantityTotals, type QuantityFiltersValue } from "@/lib/quantities/presentation";
-import { AutodeskConnection } from "./autodesk-connection";
 import { QuantitySourcePicker } from "./quantity-source-picker";
 import { QuantityResults } from "./quantity-results";
 import { liveCalculationSchema, presentLiveCalculation, type ClassificationInventory, type CalculationEvent, type LiveCalculation } from "@/lib/quantities/live";
@@ -17,60 +18,29 @@ import { isMEPTemplate } from '@/public/quantity-v2/mep-templates.js';
 import { quantitySpecialties, specialtyName } from "@/lib/quantities/catalog";
 import { classificationFacets, classificationRule, subspecialtyCriteria } from "@/public/quantity-classification.js";
 import { quantityState, processingBlocker } from "@/lib/quantities/engine";
-import { quantityBrowse, quantityCommand, quantityResponse } from "@/lib/quantities/client";
-import type { Entry } from "@/lib/autodesk/data";
+import { quantityCommand, quantityResponse } from "@/lib/quantities/client";
 import type { ModelVersion, ModelView, QuantityComparison, QuantityConfiguration, QuantityProject, QuantitySource, QuantityTemplateVersion, QuantityWorkspace as Workspace } from "@/lib/quantities/contracts";
 
 const stateLabels = { NOT_CONFIGURED: "Sin configurar", READY: "Configurada · sin procesar", PROCESSING: "Procesando", CURRENT: "Actualizada", STALE: "Nueva versión disponible", ERROR: "Por verificar" };
 export function QuantityWorkspace() {
-  const [headerSlot,setHeaderSlot]=useState<HTMLElement|null>(null);
-  const [hubs, setHubs] = useState<Entry[]>([]), [hubId, setHubId] = useState("");
-  const [projects, setProjects] = useState<Entry[]>([]), [projectId, setProjectId] = useState("");
-  const [nextPage, setNextPage] = useState<number | null>(null);
-  const [error, setError] = useState(""), [busy, setBusy] = useState(false), [retry, setRetry] = useState(0);
-  useEffect(() => {
-    const controller = new AbortController();
-    async function load() {
-      setBusy(true); setError("");
-      try { const page = await quantityBrowse({ operation: "hubs" }, controller.signal); setHubs(page.entries); if (page.entries.length === 1) setHubId(page.entries[0].id); }
-      catch (e) { if (!controller.signal.aborted) setError((e as Error).message); }
-      finally { if (!controller.signal.aborted) setBusy(false); }
-    }
-    void load(); return () => controller.abort();
-  }, [retry]);
-  useEffect(() => {
-    if (!hubId) return;
-    const controller = new AbortController();
-    async function load() {
-      setBusy(true); setError("");
-      try { const page = await quantityBrowse({ operation: "projects", hubId }, controller.signal); setProjects(page.entries); setNextPage(page.evidence.nextPage); }
-      catch (e) { if (!controller.signal.aborted) setError((e as Error).message); }
-      finally { if (!controller.signal.aborted) setBusy(false); }
-    }
-    void load(); return () => controller.abort();
-  }, [hubId, retry]);
-  async function moreProjects() {
-    if (nextPage === null) return;
-    setBusy(true); setError("");
-    try { const page = await quantityBrowse({ operation: "projects", hubId, page: nextPage }); setProjects(old => [...old, ...page.entries]); setNextPage(page.evidence.nextPage); }
-    catch (e) { setError((e as Error).message); } finally { setBusy(false); }
-  }
+  const headerSlot=useContext(QuantityHeaderContext);
+  const {hubId,projectId,projects,project:projectScope,error}=useProjectContext();
   const project = projects.find(p => p.id === projectId);
-  const projectScope = useMemo<QuantityProject>(() => ({ kind: "project", hubId, projectId }), [hubId, projectId]);
   return <QuantityHeaderContext.Provider value={headerSlot}><div className="page-content quantity-page">
-    <header className="quantity-app-topbar"><Link href="/" className="quantity-brand"><Box size={26}/><span><strong>BIM + IA</strong><small>Cubicaciones</small></span></Link><div className="quantity-project-bar"><label>Cuenta Autodesk<select value={hubId} disabled={busy} onChange={e => { setHubId(e.target.value); setProjectId(""); setProjects([]); setNextPage(null); }}><option value="">Seleccionar cuenta</option>{hubs.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}</select></label><label>Proyecto<select value={projectId} disabled={!hubId || busy} onChange={e => setProjectId(e.target.value)}><option value="">Seleccionar proyecto</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>{nextPage !== null && <button className="quantity-secondary" disabled={busy} onClick={() => void moreProjects()}>Más proyectos</button>}<button className="quantity-icon-button" aria-label="Volver a consultar proyectos de Autodesk" disabled={busy} onClick={() => setRetry(n => n + 1)}><RefreshCw size={17}/></button>{busy && <span role="status">Consultando Autodesk…</span>}</div><div className="quantity-header-slot" ref={setHeaderSlot}/><button className="quantity-icon-button" aria-label="Buscar proyecto" onClick={()=>document.querySelector<HTMLSelectElement>('.quantity-project-bar label:nth-child(2) select')?.focus()}><Search size={18}/></button><button className="quantity-icon-button" disabled title="Notificaciones no disponibles" aria-label="Notificaciones no disponibles"><Bell size={18}/></button><AutodeskConnection/></header>
     {error && <p role="alert" className="quantity-error">{error}</p>}
-    {project ? <ProjectQuantities key={`${hubId}:${projectId}`} project={projectScope} name={project.name}/> : <section className="quantity-welcome quantity-panel"><div className="quantity-welcome-icon"><Boxes size={32}/></div><h2>Configuración de Cubicaciones</h2><p>Selecciona un proyecto de Autodesk para agregar sus especialidades y configurar las fuentes BIM.</p><div className="quantity-flow"><span>Especialidad</span><ArrowRight/><span>Plantilla</span><ArrowRight/><span>RVT + versión + vista</span><ArrowRight/><span>Cubicación</span></div><p className="quantity-help">Se mostrarán únicamente los proyectos y archivos accesibles para tu cuenta.</p></section>}
+    {project ? <ProjectQuantities key={`${hubId}:${projectId}`} project={projectScope} name={project.name}/> : <section className="quantity-welcome quantity-panel"><div className="quantity-welcome-icon"><Boxes size={32}/></div><h2>Configuración de Cubicaciones</h2><p>Selecciona un proyecto de Autodesk para acceder a sus especialidades y configurar las fuentes BIM.</p><div className="quantity-flow"><span>Especialidad</span><ArrowRight/><span>Plantilla</span><ArrowRight/><span>RVT + versión + vista</span><ArrowRight/><span>Cubicación</span></div><p className="quantity-help">Se mostrarán únicamente los proyectos y archivos accesibles para tu cuenta.</p></section>}
   </div></QuantityHeaderContext.Provider>;
 }
 
 function ProjectQuantities({ project, name }: { project: QuantityProject; name: string }) {
+  const context=useProjectContext();
+  const [management,setManagement]=useState(false),[showHidden,setShowHidden]=useState(false);
   const [filterSlot,setFilterSlot]=useState<HTMLElement|null>(null);
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
-  const [selected, setSelected] = useState<string | null>(null), [specialty, setSpecialty] = useState("");
+  const [selected, setSelected] = useProjectState<string | null>("quantities.board",null);
   const [openConfiguration, setOpenConfiguration] = useState(false);
   const [savedRevision, setSavedRevision] = useState<string | null>(null);
-  const [adding, setAdding] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState("");
+  const [busy, setBusy] = useState(false), [error, setError] = useState("");
   const [latest, setLatest] = useState<Record<string, ModelVersion | undefined>>({});
   const [versionErrors, setVersionErrors] = useState<Record<string, string>>({});
   const [retry, setRetry] = useState(0);
@@ -90,11 +60,11 @@ function ProjectQuantities({ project, name }: { project: QuantityProject; name: 
     try { const result = await quantityCommand<{ latest: ModelVersion }>(project, { action: "latest", configurationId: id }, signal); setLatest(old => ({ ...old, [id]: result.latest })); }
     catch (e) { if (!signal?.aborted) setVersionErrors(old => ({ ...old, [id]: (e as Error).message })); }
   }, [project]);
-  async function add() {
-    if (!specialty || !workspace) return;
-    setBusy(true); setError("");
-    try { const created = await quantityCommand<QuantityConfiguration>(project, { action: "add", specialtyCode: specialty }); setWorkspace(await quantityResponse<Workspace>(`/api/quantities?scope=${encodeURIComponent(JSON.stringify(project))}`)); setAdding(false); setSpecialty(""); setSelected(created.id); }
-    catch (e) { setError((e as Error).message); } finally { setBusy(false); }
+  async function openSpecialty(code:string,configure:boolean){
+    setBusy(true);setError('');try{let c=workspace?.configurations.find(c=>c.specialtyCode===code);if(!c){c=await quantityCommand<QuantityConfiguration>(project,{action:'add',specialtyCode:code});setWorkspace(await quantityResponse<Workspace>(`/api/quantities?scope=${encodeURIComponent(JSON.stringify(project))}`));}setOpenConfiguration(configure||!c.source?.view);setSelected(c.id);}catch(e){setError((e as Error).message);}finally{setBusy(false);}
+  }
+  async function visibility(code:string,enabled:boolean,hidden:boolean){
+    setBusy(true);setError('');try{let c=workspace?.configurations.find(c=>c.specialtyCode===code);if(!c)c=await quantityCommand<QuantityConfiguration>(project,{action:'add',specialtyCode:code});await quantityCommand(project,{action:'visibility',id:c.id,revision:c.revision,enabled,hidden});setWorkspace(await quantityResponse<Workspace>(`/api/quantities?scope=${encodeURIComponent(JSON.stringify(project))}`));}catch(e){setError((e as Error).message);}finally{setBusy(false);}
   }
   async function prepareMEP(){
     setBusy(true);setError('');
@@ -103,17 +73,18 @@ function ProjectQuantities({ project, name }: { project: QuantityProject; name: 
   }
   const configuration = workspace?.configurations.find(c => c.id === selected);
   return <QuantityFilterSlotContext.Provider value={filterSlot}><div className={`quantity-project-stage${configuration ? " has-desk" : ""}${configuration&&isMEPTemplate(configuration.specialtyCode)?" has-mep-desk":""}`}>
-    <div className="quantity-section-title"><div>{configuration ? <button className="quantity-text-button" onClick={() => setSelected(null)}><ArrowLeft size={15}/>Volver a especialidades</button> : <h2>Configuración de Cubicaciones</h2>}<p>{configuration ? `${specialtyName(configuration.specialtyCode)} · Mesa de trabajo` : name}</p></div>{configuration&&isMEPTemplate(configuration.specialtyCode)&&<div className="quantity-filter-slot" ref={setFilterSlot}/>}<div className="quantity-inline-actions"><button className="quantity-secondary" disabled={busy} onClick={() => { setSelected(null); setLatest({}); setRetry(n => n + 1); }}><RefreshCw size={15}/>Recargar configuración</button>{!configuration && <button className="quantity-primary" disabled={!workspace || busy} onClick={() => setAdding(v => !v)}><Plus size={16}/>Agregar especialidad</button>}</div></div>
+    <div className="quantity-section-title"><div>{configuration ? <button className="quantity-text-button" onClick={() => setSelected(null)}><ArrowLeft size={15}/>Volver a especialidades</button> : <h2>Configuración de Cubicaciones</h2>}<p>{configuration ? `${specialtyName(configuration.specialtyCode)} · Tablero` : name}</p></div>{configuration&&isMEPTemplate(configuration.specialtyCode)&&<div className="quantity-filter-slot" ref={setFilterSlot}/>}<div className="quantity-inline-actions"><button className="quantity-secondary" disabled={busy} onClick={() => { setSelected(null); setLatest({}); setRetry(n => n + 1); }}><RefreshCw size={15}/>Recargar configuración</button>{!configuration && <button className="quantity-secondary" disabled={!workspace || busy} onClick={() => setManagement(true)}><Settings2 size={16}/>Gestionar especialidades</button>}</div></div>
     {error && <p className="quantity-error" role="alert">{error}</p>}{busy && <p role="status">Cargando configuración…</p>}
-    {!configuration&&workspace&&<div className="quantity-inline-actions"><button className="quantity-secondary" disabled={busy} onClick={()=>setMepSetup(true)}><Plus size={15}/>Crear plantillas por especialidad MEP</button><p className="quantity-help">Cada especialidad tiene su propia plantilla, archivo y vista.</p></div>}
+    <Dialog open={management} onOpenChange={setManagement}><DialogContent className="quantity-page quantity-modal"><DialogTitle>Especialidades del proyecto</DialogTitle><DialogDescription>Catálogo predefinido. Activar, desactivar u ocultar conserva las fuentes, reglas y resultados guardados.</DialogDescription><p className="quantity-help">Se aplica el mismo acceso de edición del proyecto que en las configuraciones existentes.</p><div className="specialty-management">{quantitySpecialties.map(s=>{const c=workspace?.configurations.find(c=>c.specialtyCode===s.code);return <div key={s.code}><strong>{s.name}</strong><label><input type="checkbox" checked={c?.enabled!==false} disabled={busy} onChange={e=>void visibility(s.code,e.target.checked,c?.hidden===true)}/>Activa</label><label><input type="checkbox" checked={c?.hidden===true} disabled={busy} onChange={e=>void visibility(s.code,c?.enabled!==false,e.target.checked)}/>Oculta</label></div>;})}</div><details><summary>Preparación de varias plantillas MEP</summary><p>Conserva la herramienta existente para compartir una fuente inicial verificada.</p><button className="quantity-secondary" disabled={busy} onClick={()=>{setManagement(false);setMepSetup(true);}}>Preparar plantillas MEP</button></details></DialogContent></Dialog>
     <Dialog open={mepSetup} onOpenChange={setMepSetup}><DialogContent className="quantity-page quantity-modal"><DialogTitle>Plantillas por especialidad MEP</DialogTitle><DialogDescription>Crear las especialidades MEP faltantes. Las configuraciones existentes se conservan.</DialogDescription><p>Agua fría, agua caliente, alcantarillado, electricidad, ventilación, gas, incendio, HVAC, telecomunicaciones y las tres especialidades exteriores.</p><label>Fuente inicial<select aria-label="Fuente inicial para plantillas MEP" value={mepSource} disabled={busy} onChange={e=>setMepSource(e.target.value)}><option value="">Configurar el archivo y vista de cada especialidad después</option>{workspace?.configurations.filter(c=>isMEPTemplate(c.specialtyCode)&&c.source?.view).map(c=><option key={c.id} value={c.id}>{specialtyName(c.specialtyCode)} · {c.source!.fileName} · V{c.source!.version.number} · {c.source!.view!.name}</option>)}</select></label><p className="quantity-help">Si eliges una fuente, se verifica en Autodesk y se copian su vista y criterios confirmados sólo a las nuevas especialidades. Después puedes cambiar cada archivo y vista por separado. No se asignan elementos por el nombre de la plantilla.</p><button className="quantity-primary" disabled={busy} onClick={()=>void prepareMEP()}>{busy?'Creando plantillas…':'Crear plantillas MEP'}</button></DialogContent></Dialog>
-    {adding && <form className="quantity-add-specialty" onSubmit={e => { e.preventDefault(); void add(); }}><label htmlFor="quantity-specialty">Especialidad</label><select id="quantity-specialty" value={specialty} onChange={e => setSpecialty(e.target.value)}><option value="">Seleccionar especialidad</option>{quantitySpecialties.filter(s => !workspace?.configurations.some(c => c.specialtyCode === s.code)).map(s => <option key={s.code} value={s.code}>{s.name}</option>)}</select><button className="quantity-primary" disabled={!specialty || busy}>Agregar al proyecto</button><button type="button" className="quantity-secondary" onClick={() => setAdding(false)}>Cancelar</button></form>}
     {configuration && workspace ? <QuantityDesk key={(configuration.specialtyCode==='structure'||isMEPTemplate(configuration.specialtyCode))?`${configuration.id}:v2`:`${configuration.id}:${configuration.revision}`} project={project} configuration={configuration} savedSuccessfully={savedRevision === `${configuration.id}:${configuration.revision}`} openConfiguration={openConfiguration} projectName={name} templates={workspace.templates.filter(t => t.specialtyCode === configuration.specialtyCode)} runs={workspace.runs.filter(r => r.specialtyCode === configuration.specialtyCode)} historyPartial={workspace.historyPartial} latest={latest[configuration.id]} versionError={versionErrors[configuration.id]} checkVersion={checkVersion} onSave={value => { setSavedRevision(`${value.id}:${value.revision}`); setWorkspace(old => old && { ...old, configurations: old.configurations.map(c => c.id === value.id ? value : c) }); }} onTemplate={value => setWorkspace(old => old && { ...old, templates: [value, ...old.templates] })}/> : workspace && <>
-      {!workspace.configurations.length ? <div className="quantity-empty quantity-panel"><Boxes size={34}/><h3>Este proyecto aún no tiene especialidades configuradas</h3><p>Agrega una especialidad para elegir su plantilla, archivo RVT, versión y vista.</p></div> : <div className="quantity-cards">{workspace.configurations.map(c => {
-        const template = workspace.templates.find(t => t.id === c.templateVersionId), run = workspace.runs.find(r => r.specialtyCode === c.specialtyCode);
-        const status = quantityState(c, template, run, latest[c.id]);
-        return <article className="quantity-specialty-card quantity-panel" key={c.id}><div className="quantity-card-heading"><span className="quantity-card-icon"><Boxes size={22}/></span><h3>{specialtyName(c.specialtyCode)}</h3></div><span className={`quantity-status state-${status.state.toLowerCase()}`}>{stateLabels[status.state]}</span><dl><dt>Plantilla</dt><dd>{template ? `${template.name} · v${template.version}` : "Sin configurar"}</dd><dt>Archivo RVT</dt><dd>{c.source?.fileName ?? "Fuente BIM no configurada"}</dd><dt>Vista específica</dt><dd>{c.source?.view?.name ?? "No seleccionada"}</dd><dt>Versión seleccionada</dt><dd>{c.source ? `V${c.source.version.number}` : "No seleccionada"}</dd><dt>Versión cubicada</dt><dd>{run ? `V${run.source.version.number}` : "No procesada"}</dd><dt>Última publicación</dt><dd>{latest[c.id] ? `V${latest[c.id]!.number}` : "Por verificar"}</dd></dl><p className="quantity-help">{isMEPTemplate(c.specialtyCode)?'MEP: largos, cantidades y superficies de ductos con procedencia.':c.specialtyCode==='structure'?(c.source?.view?'Abre la vista para calcular Hormigón, Moldaje y Enfierradura con sus fuentes.':'Selecciona archivo RVT, versión y vista.'):status.reason}</p>{versionErrors[c.id] && <p className="quantity-error">{versionErrors[c.id]}</p>}<div className="quantity-inline-actions"><button className="quantity-primary" onClick={() => { setOpenConfiguration(true); setSelected(c.id); }}><Settings2 size={15}/>Configurar archivo y vista</button><button className="quantity-secondary" onClick={() => { setOpenConfiguration(false); setSelected(c.id); }}>Abrir mesa de trabajo<ArrowRight size={14}/></button>{c.source && <button className="quantity-icon-button" aria-label={`Verificar última versión de ${specialtyName(c.specialtyCode)}`} onClick={() => void checkVersion(c.id)}><RefreshCw size={15}/></button>}</div></article>;
-      })}</div>}
+      <div className="specialty-catalog-heading"><p>Elige una especialidad para configurar su fuente o abrir su tablero.</p><label><input type="checkbox" checked={showHidden} onChange={e=>setShowHidden(e.target.checked)}/>Mostrar ocultas</label></div>
+      <div className="quantity-cards specialty-catalog">{quantitySpecialties.filter(s=>showHidden||!workspace.configurations.find(c=>c.specialtyCode===s.code)?.hidden).map(s=>{
+        const c=workspace.configurations.find(c=>c.specialtyCode===s.code),run=workspace.runs.find(r=>r.specialtyCode===s.code);
+        const receipt=c?context.session.get<ProcessReceipt|null>(projectSessionKey(context.owner,context.hubId,context.projectId,`quantity.receipt:${c.id}`),()=>null):null;
+        const state=specialtyState(c,run,receipt,c?versionErrors[c.id]:undefined);
+        return <article className="quantity-panel specialty-card" key={s.code}><div className="specialty-card-title"><Boxes size={20}/><h3>{s.name}</h3>{c?.hidden&&<small>Oculta</small>}</div><span className={`specialty-state is-${state.code}`}><i aria-hidden="true">{state.symbol}</i>{state.label}</span><div className="quantity-inline-actions"><button className="quantity-primary" disabled={busy||c?.enabled===false} onClick={()=>void openSpecialty(s.code,false)}>{c?.source?.view?'Abrir tablero':'Configurar'}</button>{c?.source?.view&&<button className="quantity-text-button" disabled={busy||c?.enabled===false} onClick={()=>void openSpecialty(s.code,true)}>Configuración</button>}</div></article>;
+      })}</div>
     </>}
   </div></QuantityFilterSlotContext.Provider>;
 }

@@ -1,6 +1,6 @@
 import type { AuditRule, AuditTolerance, AuditConfiguration, VerticalReferenceCatalog } from './contracts.ts';
 
-export const auditRuleSetVersion = '1.2.0';
+export const auditRuleSetVersion = '1.3.0';
 // Controlled source: user specification, 2026-09-27, docs/auditoria-especificacion.txt.
 export const chapterNames:Record<string,string>={G01:'Identificación',G02:'Coordenadas',G03:'Niveles',G04:'Grillas',G05:'Categorías',G06:'Familias y tipos',G07:'Geometría',G08:'Salud técnica'};
 const toleranceDefinitions = [
@@ -130,6 +130,7 @@ G08-G01|Contenido residual|D
 G08-G02|Contenido obsoleto|D
 `;
 const methods:Record<string,string>={
+ 'G02-001':'Extracción de origen interno publicado','G02-002':'Extracción de punto base publicado','G02-003':'Extracción de punto topográfico publicado','G02-004':'Lectura de coordenadas compartidas publicadas','G02-005':'Lectura de norte de proyecto publicado','G02-006':'Lectura de norte verdadero publicado','G02-007':'Lectura de transformación de referencia AEC',
  'G01-001':'Identidad del proyecto consultada en Autodesk','G01-003':'Nombre de archivo consultado en Autodesk','G01-004':'Especialidad declarada explícitamente en la configuración','G01-006':'Identificador de cuenta Autodesk del proyecto','G01-007':'Versión verificada en Autodesk','G01-008':'Fecha de publicación devuelta por Autodesk',
  'G03-A01':'Inventario de niveles del árbol de la vista y datos AEC de la versión; elevación, atributos y cobertura por origen publicado',
  'G03-B01':'Comparación exacta en la vista y candidatos informativos por origen AEC; no equipara niveles de vínculos por nombre',
@@ -152,6 +153,6 @@ const methods:Record<string,string>={
  'G08-A01':'Ficha de la fuente verificada y de la cobertura de lectura de la vista; no certifica salud técnica',
 };
 export const auditRules:AuditRule[]=definitions.trim().split('\n').map(line=>{
- const [ruleId,name,type,tolerance]=line.split('|'), chapter=ruleId.slice(0,3), controlType=({I:'INFORMATION',D:'DETERMINISTIC',C:'CALCULATED',S:'SEMANTIC_AI'} as const)[type as 'I'|'D'|'C'|'S'];
- return {ruleId,chapter,group:ruleId.split('-')[1].slice(0,1),name,description:name,specialty:ruleId.startsWith('G04-E')?'ESTRUCTURA':'Todas',category:ruleId.startsWith('G03-C')?'Según catálogo vertical':'Todas',controlType,scope:chapter==='G04'||['G03-A01','G03-B01'].includes(ruleId)?'VIEW_AND_MODEL_DATUM':'VIEW',dataSource:chapter==='G04'||['G03-A01','G03-B01'].includes(ruleId)?'Autodesk Model Derivative · árbol de la vista + Autodesk.AEC.ModelData de la versión':'Autodesk Model Derivative · vista publicada',property:'Según evidencia de la ejecución',method:methods[ruleId]??'Por definir',tolerance:tolerance??null,possibleResults:controlType==='INFORMATION'||ruleId==='G04-B01'?['INFORMATION','NOT EVALUATED']:ruleId==='G03-B01'?['PASS','WARNING','INFORMATION','NOT EVALUATED']:controlType==='SEMANTIC_AI'?['WARNING','NOT EVALUATED','N/A']:['PASS','WARNING','FAIL','NOT EVALUATED','N/A'],severity:controlType==='INFORMATION'?'Informativa':'Por Configurar',evidenceRequired:'Fuente, versión, vista, propiedad, valor e identificadores afectados',goodPractice:'Por Configurar',catalog:'GLOBAL → COMPANY → PROJECT',configurationStatus:methods[ruleId]&&!tolerance?'Disponible':'Por Configurar',version:auditRuleSetVersion,active:true};
+ const [ruleId,name,type,tolerance]=line.split('|'), chapter=ruleId.slice(0,3), controlType=({I:'INFORMATIVE',D:'DETERMINISTIC',C:'CALCULATED',S:'SEMANTIC_AI'} as const)[type as 'I'|'D'|'C'|'S'];
+ return {ruleId,chapter,group:ruleId.split('-')[1].slice(0,1),name,description:name,specialty:ruleId.startsWith('G04-E')?'ESTRUCTURA':'Todas',category:ruleId.startsWith('G03-C')?'Según catálogo vertical':'Todas',controlType,scope:chapter==='G04'||['G03-A01','G03-B01'].includes(ruleId)?'VIEW_AND_MODEL_DATUM':'VIEW',dataSource:chapter==='G04'||['G03-A01','G03-B01'].includes(ruleId)?'Autodesk Model Derivative · árbol de la vista + Autodesk.AEC.ModelData de la versión':'Autodesk Model Derivative · vista publicada',property:'Según evidencia de la ejecución',method:methods[ruleId]??'Por definir',tolerance:tolerance??null,possibleResults:controlType==='INFORMATIVE'||ruleId==='G04-B01'?['INFORMATIVE','NOT_EVALUATED']:ruleId==='G03-B01'?['PASS','WARNING','INFORMATIVE','NOT_EVALUATED']:controlType==='SEMANTIC_AI'?['WARNING','NOT_EVALUATED','NOT_APPLICABLE']:['PASS','WARNING','FAIL','NOT_EVALUATED','NOT_APPLICABLE'],severity:controlType==='INFORMATIVE'?'Informativa':'Por Configurar',evidenceRequired:'Fuente, versión, vista, propiedad, valor e identificadores afectados',goodPractice:'Por Configurar',catalog:'GLOBAL → COMPANY → PROJECT',configurationStatus:methods[ruleId]&&!tolerance?'Disponible':'Por Configurar',version:auditRuleSetVersion,active:true};
 });

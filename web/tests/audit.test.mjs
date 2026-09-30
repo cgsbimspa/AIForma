@@ -49,13 +49,13 @@ test('published category ancestors enable exact vertical mappings, retaining sou
 });
 test('unavailable levels are not declared nonexistent; incomplete data is not PASS or FAIL',()=>{
  const run=execute(inventory([row(1,'TEST slab','Floors',{Level:'N2'})],[2]));
- assert.equal(run.scope.status,'PARTIAL');assert.equal(run.findings.find(f=>f.ruleId==='G03-B01').result,'NOT EVALUATED');
- assert.ok(run.findings.filter(f=>['G03-C02','G03-C03'].includes(f.ruleId)).every(f=>f.result==='NOT EVALUATED'));
+ assert.equal(run.scope.status,'PARTIAL');assert.equal(run.findings.find(f=>f.ruleId==='G03-B01').result,'NOT_EVALUATED');
+ assert.ok(run.findings.filter(f=>['G03-C02','G03-C03'].includes(f.ruleId)).every(f=>f.result==='NOT_EVALUATED'));
  assert.ok(!run.findings.some(f=>f.result==='FAIL'));
 });
 test('unit-aware level comparisons require confirmed tolerance and preserve evidence, duplicates only WARNING',()=>{
  const inv=inventory([row(1,'TEST N1','Levels',{Elevation:'1 m'}),row(2,'TEST N1','Levels',{Elevation:'1001 mm'})]);
- assert.equal(execute(inv).findings.find(f=>f.ruleId==='G03-B03').result,'NOT EVALUATED');
+ assert.equal(execute(inv).findings.find(f=>f.ruleId==='G03-B03').result,'NOT_EVALUATED');
  const t={...globalTolerances[0],origin:'PROJECT',status:'Confirmada',value:2,evidence:'TEST explicitly validated criterion'};
  const run=execute(inv,{projectCatalog:{...project,version:1,tolerances:[t]}}),f=run.findings.find(f=>f.ruleId==='G03-B03');
  assert.equal(f.result,'WARNING');assert.equal(f.observedValue.differenceMm,1);assert.equal(f.affectedElements.length,2);assert.equal(f.evidence[0].viewerReference.viewId,'TEST_VIEW');assert.equal(run.tolerances[0].value,2);
@@ -69,25 +69,25 @@ test('catalog inheritance, zero confirmed and zero unconfigured remain distinct'
 });
 test('vertical mapping never guesses equivalents and checks both base and top references',()=>{
  const inv=inventory([row(1,'N2','Levels',{Elevation:'2 m'}),row(2,'TEST Wall','Walls',{'Base Constraint':'N2'}),row(3,'TEST Slab','Floors',{Level:'Piso 2'})]);
- const run=execute(inv);const c=run.findings.filter(f=>f.ruleId==='G03-C01');assert.ok(c.some(f=>f.result==='NOT EVALUATED'&&f.affectedElements.some(e=>e.dbId===2)));
- assert.ok(run.findings.filter(f=>f.ruleId==='G03-C02'&&f.affectedElements.some(e=>e.dbId===3)).every(f=>f.result==='NOT EVALUATED'));
+ const run=execute(inv);const c=run.findings.filter(f=>f.ruleId==='G03-C01');assert.ok(c.some(f=>f.result==='NOT_EVALUATED'&&f.affectedElements.some(e=>e.dbId===2)));
+ assert.ok(run.findings.filter(f=>f.ruleId==='G03-C02'&&f.affectedElements.some(e=>e.dbId===3)).every(f=>f.result==='NOT_EVALUATED'));
 });
 test('informational, unevaluated and N/A records never reduce conformity, including mixed rules',()=>{
- const findings=[{ruleId:'TEST_A',result:'PASS',affectedElements:[]},{ruleId:'TEST_A',result:'NOT EVALUATED',affectedElements:[]},{ruleId:'TEST_B',result:'INFORMATION',affectedElements:[]},{ruleId:'TEST_C',result:'N/A',affectedElements:[]}];
+ const findings=[{ruleId:'TEST_A',result:'PASS',affectedElements:[]},{ruleId:'TEST_A',result:'NOT_EVALUATED',affectedElements:[]},{ruleId:'TEST_B',result:'INFORMATIVE',affectedElements:[]},{ruleId:'TEST_C',result:'NOT_APPLICABLE',affectedElements:[]}];
  assert.equal(score(findings).conformity,100);assert.equal(score(findings).pending,1);assert.equal(score(findings.slice(1)).conformity,null);
 });
 test('MEP element-grid rules are N/A and disabled rules do not execute',()=>{
  const run=execute(inventory([]),{configuration:{...configuration,discipline:'MEP',disabledRules:['G01-001']}});
- assert.ok(run.findings.filter(f=>f.ruleId.startsWith('G04-E')).every(f=>f.result==='N/A'));assert.ok(!run.findings.some(f=>f.ruleId==='G01-001'));
+ assert.ok(run.findings.filter(f=>f.ruleId.startsWith('G04-E')).every(f=>f.result==='NOT_APPLICABLE'));assert.ok(!run.findings.some(f=>f.ruleId==='G01-001'));
 });
 test('category, family and type inventories count verified values and retain unavailable groups without guessing',()=>{
  const a=row(1,'TEST instance A','Floors',{Level:'TEST N1'}),b=row(2,'TEST instance B','Floors');
  a.properties.Identity.Family='TEST family';a.properties.Identity['Type Name']='TEST type';
  const run=execute(inventory([a,b]));
- assert.equal(run.findings.find(f=>f.ruleId==='G05-A01'&&f.result==='INFORMATION').observedValue[0].count,2);
- assert.equal(run.findings.find(f=>f.ruleId==='G06-A01'&&f.result==='INFORMATION').observedValue[0].value,'TEST family');
- assert.equal(run.findings.find(f=>f.ruleId==='G06-A03'&&f.result==='NOT EVALUATED').affectedElements[0].dbId,2);
- assert.equal(run.findings.find(f=>f.ruleId==='G08-A01').result,'INFORMATION');
+ assert.equal(run.findings.find(f=>f.ruleId==='G05-A01'&&f.result==='INFORMATIVE').observedValue[0].count,2);
+ assert.equal(run.findings.find(f=>f.ruleId==='G06-A01'&&f.result==='INFORMATIVE').observedValue[0].value,'TEST family');
+ assert.equal(run.findings.find(f=>f.ruleId==='G06-A03'&&f.result==='NOT_EVALUATED').affectedElements[0].dbId,2);
+ assert.equal(run.findings.find(f=>f.ruleId==='G08-A01').result,'INFORMATIVE');
 });
 test('provider handles 202 pending without interpreting it as an empty model',async()=>{
  await assert.rejects(readAuditView('TEST_TOKEN',source,undefined,async()=>new Response('{}',{status:202})),/audit_derivative_pending/);

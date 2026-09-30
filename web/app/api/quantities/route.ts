@@ -19,6 +19,7 @@ export const maxDuration = 60;
 const fileScope = scopeSchema.options[3];
 const sourceInput = z.object({ scope: fileScope, versionId: z.string().min(1).max(2000), viewId: z.string().min(1).max(2000).nullable() }).strict();
 const action = z.discriminatedUnion("action", [
+  z.object({action:z.literal("visibility"),id:z.string().uuid(),revision:z.number().int().nonnegative(),enabled:z.boolean(),hidden:z.boolean()}).strict(),
   z.object({action:z.literal('prepare-mep-specialties'),sourceConfigurationId:z.string().uuid().nullable()}).strict(),
   z.object({ action: z.literal("prepare-templates") }).strict(),
   z.object({ action: z.literal("add"), specialtyCode }).strict(),
@@ -76,6 +77,7 @@ export async function POST(request: NextRequest) {
     // token themselves. Resolve storage identity only for stored workspace actions.
     const actor = await memoryActor(request, scope);
     const db = store();
+    if(command.action==='visibility')return response(await db.visibility(actor,command));
     if(command.action==='prepare-mep-specialties'){
       let source=null;
       if(command.sourceConfigurationId){

@@ -1,0 +1,65 @@
+.workspace-main .topbar { height:auto; min-height:72px; padding:8px 16px; gap:14px; flex-wrap:wrap; background:#fff; }
+.workspace-main .breadcrumbs { gap:8px; flex-shrink:0; font-size:12px; }
+.workspace-main .breadcrumbs>a,.workspace-main .breadcrumb-divider,.workspace-main .breadcrumbs>svg { display:none; }
+.global-project-picker { display:flex; align-items:end; gap:8px; flex:1 1 360px; max-width:590px; min-width:260px; }
+.global-project-picker label { display:flex; flex-direction:column; flex:1; min-width:0; gap:3px; font-size:10px; color:#526d91; }
+.global-project-picker select { width:100%; border:1px solid #ceddf4; border-radius:7px; background:#fff; color:#24446d; height:32px; padding:4px 8px; font-size:12px; text-overflow:ellipsis; }
+.global-project-picker button { border:1px solid #d6e3f6; border-radius:7px; height:32px; padding:6px 9px; color:#185cc5; background:#fff; font-size:11px; }
+.global-context-error { max-width:140px; font-size:10px; color:#b32924; }
+.global-model-context { display:flex; flex-direction:column; min-width:120px; max-width:320px; gap:3px; font-size:11px; flex:1; }
+.global-model-context strong { font-size:12px; text-overflow:ellipsis; overflow:hidden; white-space:nowrap; }
+.workspace-main .topbar>.autodesk-connection { flex:0 0 160px; font-size:10px; margin-left:auto; }
+.workspace-main .topbar .connection-state { font-size:10px; color:#325578; }
+.workspace-main .topbar .autodesk-button { background:transparent; color:#245894; padding:2px 0; border:0; font-size:10px; }
+.workspace-main .topbar .connection-notice { max-width:175px; font-size:10px; }
+.workspace-main .topbar .quantity-header-slot { display:flex; flex:2 1 600px; align-items:center; gap:12px; min-width:0; }
+.workspace-main .topbar .quantity-top-actions { display:flex; gap:5px; flex-wrap:wrap; }
+.workspace-main .topbar .quantity-top-actions button { display:flex; align-items:center; gap:5px; padding:7px; border-radius:7px; font-size:10px; }
+.workspace-main .topbar .qv2-context-source { flex:1; min-width:100px; max-width:260px; }
+.workspace-main .topbar .qv2-context-source strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.workspace-main .topbar .qv2-version-status { min-width:85px; }
+.workspace-main .quantity-page { padding:12px 14px; }
+.workspace-main .quantity-page:has(.qv2-desk) { height:calc(100dvh - var(--workspace-header,96px)); min-height:560px; }
+.workspace-main .quantity-page .quantity-section-title { margin:0 0 10px; }
+.workspace-main .quantity-page .quantity-section-title h2 { font-size:17px; }
+.specialty-catalog-heading { display:flex; justify-content:space-between; align-items:center; margin:12px 0; color:#58708f; font-size:12px; gap:12px; }
+.specialty-catalog-heading label { display:flex; align-items:center; gap:6px; }
+.quantity-page .specialty-catalog { display:grid; grid-template-columns:repeat(auto-fill,minmax(215px,1fr)); gap:12px; }
+.specialty-card { padding:16px; display:flex; flex-direction:column; gap:15px; min-height:160px; }
+.specialty-card-title { display:flex; align-items:center; gap:9px; min-height:28px; }
+.specialty-card-title svg { color:#1764cf; flex:none; }
+.specialty-card-title h3 { flex:1; }
+.specialty-state { display:flex; align-items:center; gap:6px; font-size:11px; color:#607087; }
+.specialty-state i { font-style:normal; width:18px; height:18px; display:inline-grid; place-items:center; border-radius:50%; background:#edf2f7; }
+.specialty-state.is-processed { color:#067c5c; }.specialty-state.is-processed i {background:#d7f5e9;}
+.specialty-state.is-ready {color:#135cbb;}.specialty-state.is-ready i {background:#e4efff;}
+.specialty-state.is-error {color:#aa3028;}.specialty-state.is-error i {background:#fee6e3;}
+.specialty-card .quantity-inline-actions { margin-top:auto; }
+.specialty-management { display:flex; flex-direction:column; gap:8px; max-height:55dvh; overflow:auto; }
+.specialty-management>div { display:grid; grid-template-columns:minmax(0,1fr) 75px 75px; gap:8px; align-items:center; padding:8px; border-bottom:1px solid #e7eef9; }
+.specialty-management label { display:flex; flex-direction:row; gap:6px; align-items:center; font-size:12px; }
+.quantity-page .specialty-management input,.quantity-page .specialty-catalog-heading input { width:15px; height:15px; min-height:15px; margin:0; }
+.audit-page .audit-context-cards { display:grid; grid-template-columns:1.4fr 1fr; gap:14px; }
+.audit-page .audit-context-card { padding:16px; min-width:0; }
+.audit-page .audit-facts { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px 18px; margin:12px 0; }
+.audit-page .audit-facts>div { min-width:0; }.audit-page .audit-facts dd {margin:2px 0 0;overflow-wrap:anywhere;font-size:12px;font-weight:600;}
+.audit-page .audit-facts dt {font-size:10px;color:#6a7f99;}
+.audit-page .audit-context-card details { font-size:11px; margin-top:10px; }
+.audit-page .audit-context-card summary {cursor:pointer;color:#1a62c5;}
+.audit-page .audit-context-card pre {max-height:230px;overflow:auto;font-size:11px;background:#f4f8fc;padding:10px;white-space:pre-wrap;}
+.audit-page .audit-context-card p {overflow-wrap:anywhere;}
+.audit-page .audit-badge {display:inline-flex;align-items:center;gap:5px;}
+.audit-page .audit-result-counts>span {display:flex;justify-content:space-between;gap:8px;padding:12px;background:white;border:1px solid #dce6f5;border-radius:9px;}
+.audit-page .audit-advanced>summary {padding:12px;color:#1a62c5;border:1px solid #dce6f5;border-radius:9px;cursor:pointer;background:#fff;}
+.audit-page .audit-advanced[open]>summary {margin-bottom:10px;}
+.audit-page .audit-context-strip {font-size:11px;}.audit-page .audit-heading {margin-bottom:10px;}
+.coord-context-actions {display:flex;justify-content:flex-end;}.coord-context-actions button{display:flex;align-items:center;gap:5px;font-size:11px;color:#1d63c5;}
+[data-collapsible="icon"] .brand-header { padding:14px 8px; }
+[data-collapsible="icon"] .brand>span:not(.brand-symbol),[data-collapsible="icon"] .sidebar-footer,[data-collapsible="icon"] .audit-subnav {display:none;}
+[data-collapsible="icon"] [data-slot="sidebar-group"] {padding:8px;}
+[data-collapsible="icon"] .brand-symbol {width:32px;height:32px;padding:5px;}
+[data-collapsible="icon"] .nav-link {padding:8px!important;width:32px!important;height:36px!important;min-height:36px;}
+@media(max-width:1200px){.workspace-main .topbar {gap:8px;}.workspace-main .topbar .quantity-header-slot {order:4;flex-basis:100%;}.global-project-picker {max-width:none;}.global-model-context {max-width:220px;}.audit-page .audit-context-cards {grid-template-columns:1fr;}}
+@media(max-width:767px){.workspace-main .topbar {padding:8px 12px;}.global-project-picker {order:4;flex-basis:100%;min-width:0;}.global-model-context{order:5;max-width:none;}.workspace-main .quantity-page:has(.qv2-desk) {height:auto;min-height:0;overflow:visible;}.workspace-main .quantity-page .quantity-desk-board{min-height:600px;}.specialty-catalog-heading {align-items:start;}.specialty-catalog-heading label {white-space:nowrap;}.workspace-main .assistant-topbar .assistant-header-title {display:none;}.workspace-main .topbar .quantity-header-slot {flex-wrap:wrap;}.workspace-main .topbar .quantity-top-actions {flex-basis:100%;}}
+
+.workspace-main .topbar .quantity-header-slot:empty{display:none;}

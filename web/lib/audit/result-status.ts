@@ -1,0 +1,4 @@
+export const resultCodes=['PASS','WARNING','FAIL','NOT_EVALUATED','NOT_APPLICABLE','INFORMATIVE'] as const;
+export type ResultCode=typeof resultCodes[number];
+export const resultStatus={PASS:{label:'Cumple',symbol:'✓',className:'pass'},WARNING:{label:'Advertencia',symbol:'△',className:'warning'},FAIL:{label:'No cumple',symbol:'×',className:'fail'},NOT_EVALUATED:{label:'No evaluado',symbol:'?',className:'not-evaluated'},NOT_APPLICABLE:{label:'No aplica',symbol:'—',className:'n-a'},INFORMATIVE:{label:'Informativo',symbol:'i',className:'information'}} satisfies Record<ResultCode,{label:string;symbol:string;className:string}>;
+export function normalizeResult(value:string):ResultCode|null {const aliases:Record<string,ResultCode>={'NOT EVALUATED':'NOT_EVALUATED','N/A':'NOT_APPLICABLE',INFORMATION:'INFORMATIVE'};return (resultCodes as readonly string[]).includes(value)?value as ResultCode:aliases[value]??null;}
