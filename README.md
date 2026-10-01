@@ -1,6 +1,6 @@
 # Plataforma BIM + IA
 
-Base web de la Etapa 0.1, con inicio y nueve módulos navegables. «BIM + IA» es una etiqueta de trabajo tomada del roadmap, no una marca comercial definitiva.
+Plataforma Autodesk + IA en desarrollo, organizada por empresa/cuenta y proyecto. «BIM + IA» es una etiqueta de trabajo, no una marca comercial definitiva.
 
 ## Abrir localmente
 
@@ -29,4 +29,4 @@ La aplicación y sus instrucciones técnicas están en [web/README.md](web/READM
 - [Propuesta original de alcance](docs/ETAPA-0.1-PROPUESTA.md).
 - [Entrega y verificación de la Etapa 0.1](docs/ETAPA-0.1-ENTREGA.md).
 
-La portada permite conectar una cuenta real de Autodesk mediante OAuth y verificar el nombre del usuario. Ver [conexión Autodesk](docs/AUTODESK-OAUTH.md). Los módulos técnicos siguen pendientes: todavía no consulta modelos ni datos de proyecto, no ejecuta análisis ni utiliza IA.
+La entrada Empresa → Proyecto → Inicio conserva el contexto entre Asistente documental, Chat BIM, Auditoría BIM, Coordinación Normativa y Cubicaciones. Las capacidades pendientes se identifican dentro de la aplicación. Ver [arquitectura actual](ARCHITECTURE.md), [plan de migración](MIGRATION_PLAN.md), [seguridad](SECURITY.md) y [benchmark Centro Español](docs/benchmark-centro-espanol.md).

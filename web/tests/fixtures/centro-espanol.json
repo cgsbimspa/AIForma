@@ -1,0 +1,9 @@
+{
+  "kind": "VERIFIED_PROJECT_IDENTITY_ONLY",
+  "observedOn": "2026-10-01",
+  "source": "Autodesk account/project selectors in authenticated app.cgsbim.cl/auditoria-bim",
+  "company": {"id": "b.9ca7e254-cf8f-41c9-9d77-308867877159", "name": "AEC Shift"},
+  "project": {"id": "b.ba716411-aa34-440f-a1a1-cb201db4e26b", "name": "2025.03.25 Centro Español"},
+  "technicalBaseline": null,
+  "baselineStatus": "NOT_VALIDATED"
+}

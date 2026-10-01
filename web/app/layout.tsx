@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import "./workspace-context.css";
+import "./project-home.css";
 import { WorkspaceShell } from "@/components/workspace-shell";
 
 export const metadata: Metadata = {
-  title: "Espacio de trabajo | BIM + IA",
-  description: "Base de desarrollo de la plataforma Autodesk + IA. Accede a los módulos del roadmap.",
+  title: "Proyectos | BIM + IA",
+  description: "Modelos, documentación, auditorías y cubicaciones en el contexto de tu proyecto Autodesk.",
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",

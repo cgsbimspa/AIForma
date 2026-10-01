@@ -26,7 +26,7 @@ La navegación pública no requiere cuentas. La conexión real de Autodesk y el 
 - Next.js 16.3.4 con App Router y compilación estándar para Vercel.
 - Tailwind CSS 4.2.1, componentes locales Shadcn y Lucide React para iconos.
 - Las versiones resueltas se encuentran en `package-lock.json`.
-- Se retiraron Vinext y la configuración de Cloudflare/Sites al elegir Vercel para esta aplicación. No hay autenticación simulada ni configuración de bases de datos.
+- Se retiraron Vinext y la configuración de Cloudflare/Sites al elegir Vercel. Autodesk OAuth y PostgreSQL son integraciones reales; ver ../ARCHITECTURE.md y ../SECURITY.md.
 - El despliegue usa un proyecto independiente; no comparte configuración con Repositorio de Links.
 
 ## Publicación en Vercel
@@ -43,7 +43,8 @@ El estado real de publicación se registra en `../docs/DESPLIEGUE.md`.
 | --- | --- |
 | `app/layout.tsx` | Idioma, metadatos y estructura compartida |
 | `components/workspace-shell.tsx` | Navegación lateral, encabezado y menú móvil |
-| `app/page.tsx` | Inicio y accesos a módulos |
+| `app/page.tsx`, `components/project-home.tsx` | Empresa → Proyecto → Inicio del proyecto |
+| `app/api/projects/summary`, `lib/projects/` | Resumen autorizado de referencias y ejecuciones guardadas |
 | `lib/modules.ts` | Nombres, rutas y propósito planificado según el roadmap |
 | `app/[module]/page.tsx` | Estado vacío de los módulos pendientes |
 | `app/asistente/page.tsx` | Explorador Forma y consultas mediante OpenAI |
@@ -53,8 +54,8 @@ El estado real de publicación se registra en `../docs/DESPLIEGUE.md`.
 
 ## Continuar con un módulo
 
-Definir primero su alcance y sus fuentes. Cuando exista una implementación autorizada, crear su ruta específica en `app/<ruta>/page.tsx`, que podrá sustituir su página vacía compartida, o extraer componentes propios. Actualizar también el estado mostrado en el inicio. El Asistente ya tiene explorador y consultas de metadatos; los demás módulos siguen pendientes.
+Definir primero alcance y fuentes. Reutilizar contexto de proyecto, proveedores y motores existentes antes de crear implementaciones. Asistente documental, Chat BIM, Auditoría, Normativa y Cubicaciones ya tienen rutas operativas. Consultar ../CURRENT_ARCHITECTURE.md y ../MIGRATION_PLAN.md para límites y evolución.
 
 Las descripciones del catálogo son objetivos del roadmap, no resultados de análisis. El estado de cada módulo se informa explícitamente. No añadir datos ficticios ni convertir ausencia de evidencia en un cero.
 
-La autenticación Autodesk, la consulta de metadatos y la búsqueda recursiva en texto de documentos usan APIs reales. El almacenamiento persistente de proyectos, la indexación persistente y los motores técnicos siguen pendientes. Ver alcance y formatos en `../docs/ASISTENTE-IA.md`.
+La identidad del proyecto proviene de Autodesk. Configuraciones e historiales usan PostgreSQL con RLS y cifrado. El cálculo v2 en sesión de visor todavía se diferencia de una ejecución persistida. Ver alcance documental en `../docs/ASISTENTE-IA.md` y arquitectura vigente en `../ARCHITECTURE.md`.
