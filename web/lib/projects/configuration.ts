@@ -2,7 +2,11 @@ import {z} from 'zod';
 import {sourceSchema,type QuantitySource} from '../quantities/contracts.ts';
 import {quantitySpecialties} from '../quantities/catalog.ts';
 
-export const disciplineCatalog=[...quantitySpecialties.map(s=>({...s,name:s.code==='structure'?'Estructura':s.code==='hvac'?'Climatización':s.name})),{code:'water',name:'Agua Potable'},{code:'stormwater',name:'Aguas Lluvias'},{code:'landscape',name:'Paisajismo'},{code:'coordination',name:'Coordinación'}];
+// MEP remains an engine family for existing records, never a selectable discipline.
+export const disciplineCatalog=[...quantitySpecialties.filter(s=>s.code!=='mep').map(s=>({...s,name:s.code==='structure'?'Estructura':s.name})),{code:'stormwater',name:'Aguas Lluvias'},{code:'landscape',name:'Paisajismo'},{code:'coordination',name:'Coordinación'}];
+export function availableDisciplines(rows:Pick<ProjectDiscipline,'code'>[]){return disciplineCatalog.filter(d=>!rows.some(r=>r.code===d.code));}
+export function selectableDiscipline(code:string,rows:Pick<ProjectDiscipline,'code'>[]){const options=availableDisciplines(rows);return code==='custom'||options.some(d=>d.code===code)?code:options[0]?.code??'custom';}
+export function sourceInProject(source:QuantitySource|null|undefined,scope:{hubId:string;projectId:string}){return !!source&&source.scope.hubId===scope.hubId&&source.scope.projectId===scope.projectId;}
 export const disciplineSchema=z.object({id:z.string().uuid(),code:z.string().min(1).max(80),name:z.string().trim().min(1).max(150),enabled:z.boolean(),source:sourceSchema.nullable(),lastValidatedAt:z.string().datetime({offset:true}).nullable()}).strict();
 export const configurationSchema=z.object({companyId:z.string().min(1),projectId:z.string().min(1),projectName:z.string().min(1).max(2000),revision:z.number().int().nonnegative(),configuredAt:z.string().datetime({offset:true}),updatedAt:z.string().datetime({offset:true}),updatedBy:z.string(),disciplines:z.array(disciplineSchema).max(40)}).strict();
 export const configurationInput=z.object({revision:z.number().int().nonnegative(),projectName:z.string().min(1).max(2000),disciplines:z.array(disciplineSchema).max(40)}).strict().superRefine((c,ctx)=>{if(new Set(c.disciplines.map(d=>d.id)).size!==c.disciplines.length||new Set(c.disciplines.map(d=>d.code)).size!==c.disciplines.length)ctx.addIssue({code:'custom',message:'Especialidades duplicadas'});});

@@ -4,7 +4,7 @@ import {randomBytes,randomUUID} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
 import {PGlite} from '@electric-sql/pglite';
 import {createConfigurationStore} from '../lib/projects/configuration-store.ts';
-import {configurationInput,activeDiscipline,auditDiscipline,sourceIdentity} from '../lib/projects/configuration.ts';
+import {configurationInput,activeDiscipline,auditDiscipline,sourceIdentity,availableDisciplines,selectableDiscipline,sourceInProject} from '../lib/projects/configuration.ts';
 import {projectIntent} from '../lib/projects/intent.ts';
 import {snapshotState,validateCapture,createSnapshotStore} from '../lib/projects/snapshots.ts';
 import {calculateQuantities,defaultSettings} from '../public/quantity-v2/quantity-service.js';
@@ -12,6 +12,21 @@ import {calculateQuantities,defaultSettings} from '../public/quantity-v2/quantit
 const actor={organizationId:'TEST_HUB',projectId:'TEST_PROJECT',userId:'TEST_USER'},now='2026-10-01T12:00:00.000Z';
 const source={scope:{kind:'file',hubId:actor.organizationId,projectId:actor.projectId,folderIds:['TEST_FOLDER'],itemId:'TEST_ITEM'},projectName:'TEST project',fileName:'TEST.rvt',path:'TEST / TEST.rvt',version:{id:'TEST_V1',number:1,name:'TEST.rvt',createdAt:now,modelId:'TEST_URN',webUrl:null,endpoint:'https://developer.api.autodesk.com/TEST',fetchedAt:now},view:{id:'TEST_VIEW',name:'TEST view',role:'3d',endpoint:'https://developer.api.autodesk.com/TEST',fetchedAt:now},versionPolicy:'manual'};
 const discipline=()=>({id:randomUUID(),code:'structure',name:'Estructura TEST',enabled:true,source,lastValidatedAt:now});
+test('adding a discipline uses an available selection after structure is recovered; MEP is not a discipline',()=>{
+ const rows=[discipline()];assert.equal(selectableDiscipline('structure',rows),'architecture');
+ assert.equal(selectableDiscipline('cold-water',rows),'cold-water');
+ const options=availableDisciplines(rows);assert.ok(!options.some(d=>d.code==='mep'));
+ for(const code of ['architecture','sewer','cold-water','hot-water','ventilation','hvac','electricity'])assert.ok(options.some(d=>d.code===code));
+ assert.equal(selectableDiscipline('',options),'structure');
+ assert.equal(selectableDiscipline('custom',rows),'custom');
+ assert.ok(configurationInput.safeParse({revision:0,projectName:'TEST',disciplines:[{...discipline(),source:null,lastValidatedAt:null}]}).success);
+});
+test('legacy sources must match both company and project, regardless of matching names',()=>{
+ const scope={hubId:actor.organizationId,projectId:actor.projectId};assert.ok(sourceInProject(source,scope));
+ assert.equal(sourceInProject({...source,scope:{...source.scope,projectId:'OTHER'}},scope),false);
+ assert.equal(sourceInProject({...source,scope:{...source.scope,hubId:'OTHER'}},scope),false);
+ assert.equal(sourceInProject(null,scope),false);
+});
 test('central discipline selection never chooses among ambiguous sources or infers unsupported engineering families',()=>{
  const a=discipline(),b={...discipline(),code:'sewer'};assert.equal(activeDiscipline({disciplines:[a,b]},''),null);assert.equal(activeDiscipline({disciplines:[a,b]},b.id),b);assert.equal(activeDiscipline({disciplines:[a,{...b,enabled:false}]},''),a);assert.equal(auditDiscipline('landscape'),null);assert.equal(auditDiscipline('structure'),'ESTRUCTURA');
  assert.equal(configurationInput.safeParse({revision:0,projectName:'TEST',disciplines:[a,a]}).success,false);

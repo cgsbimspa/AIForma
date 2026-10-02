@@ -31,7 +31,8 @@ export async function POST(request:NextRequest){try{
  if(command.action==='validate'){const source=await verify(command.source),latest=await modelVersion(session.accessToken,source.scope,undefined,fetch,request.signal);return reply({source,latest,validatedAt:new Date().toISOString()});}
  if(command.action==='save'){
   const disciplines=[];
-  for(const d of command.configuration.disciplines){const source=d.source?await verify(d.source):null;if(d.enabled&&(!source?.view||source.view.role!=='3d'))throw new DataError('audit_view_required',422);disciplines.push({...d,source,lastValidatedAt:source?new Date().toISOString():null});}
+  // Draft disciplines can be saved; execution still requires a verified 3D view below.
+  for(const d of command.configuration.disciplines){const source=d.source?await verify(d.source):null;if(source?.view&&source.view.role!=='3d')throw new DataError('audit_view_required',422);disciplines.push({...d,source,lastValidatedAt:source?new Date().toISOString():null});}
   return reply({configuration:await store.save(actor,{...command.configuration,disciplines})});
  }
  const central=await store.read(actor);if(!central||central.revision!==command.revision)throw new DataError('configuration_conflict',409);

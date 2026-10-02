@@ -8,7 +8,7 @@ import type {Entry} from '@/lib/autodesk/data';
 import type {QuantitySource} from '@/lib/quantities/contracts';
 import {ProjectSession,projectSessionKey,readProjectCursor} from '@/lib/project-session';
 import {quantityResponse} from '@/lib/quantities/client';
-import {activeDiscipline,type ProjectConfiguration} from '@/lib/projects/configuration';
+import {activeDiscipline,sourceInProject,type ProjectConfiguration} from '@/lib/projects/configuration';
 
 function useProjectValue(){
  const [owner,setOwner]=useState(''),[hubId,setHubId]=useState(''),[projectId,setProjectId]=useState('');
@@ -37,7 +37,8 @@ function useProjectValue(){
  async function moreProjects(){if(nextPage===null)return;const epoch=generation.current;setBusy(true);try{const p=await quantityBrowse({operation:'projects',hubId,page:nextPage});if(epoch!==generation.current)return;setProjects(old=>[...new Map([...old,...p.entries].map(e=>[e.id,e])).values()]);setNextPage(p.evidence.nextPage);}catch(e){if(epoch===generation.current)setError((e as Error).message);}finally{if(epoch===generation.current)setBusy(false);}}
  const sourceKey=projectSessionKey(owner,hubId,projectId,activeModule);
  const publishSource=useCallback((value:QuantitySource|null)=>{setSources(old=>old[sourceKey]===value?old:{...old,[sourceKey]:value});},[sourceKey]);
- const source=selectedDiscipline?.source??sources[sourceKey]??null;
+ const candidateSource=selectedDiscipline?selectedDiscipline.source:sources[sourceKey]??null;
+ const source=sourceInProject(candidateSource,{hubId,projectId})?candidateSource:null;
  const project=useMemo(()=>({kind:'project' as const,hubId,projectId}),[hubId,projectId]);
  return {owner,connection,hubId,projectId,hubs,projects,nextPage,busy,error,setHub,setProject,selectProject,moreProjects,refresh:()=>setRevision(v=>v+1),project,source,publishSource,session:session,configuration,configurationError,configurationLoading,selectedDiscipline,selectDiscipline,adoptConfiguration,reloadConfiguration:()=>setConfigurationRevision(n=>n+1)};
 }

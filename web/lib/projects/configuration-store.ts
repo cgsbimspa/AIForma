@@ -6,7 +6,7 @@ import {configurationSchema,assertConfigurationScope,type ProjectConfiguration,t
 export function createConfigurationStore(transaction:Transaction,key:Buffer){
  const binding=(a:Actor,id:string)=>JSON.stringify(['project-configuration-v1',a.organizationId,a.projectId,id]);
  return {
-  read:(a:Actor)=>transaction(a,async q=>{const [r]=await q('SELECT id,payload FROM project_configuration WHERE organization_id=$1 AND project_id=$2 ORDER BY revision DESC LIMIT 1',[a.organizationId,a.projectId]);return r?assertConfigurationScope(configurationSchema.parse(decryptHistory(String(r.payload),key,binding(a,String(r.id))))):null;}),
+  read:(a:Actor)=>transaction(a,async q=>{const [r]=await q('SELECT id,payload FROM project_configuration WHERE organization_id=$1 AND project_id=$2 ORDER BY revision DESC LIMIT 1',[a.organizationId,a.projectId]);if(!r)return null;const c=assertConfigurationScope(configurationSchema.parse(decryptHistory(String(r.payload),key,binding(a,String(r.id)))));if(c.companyId!==a.organizationId||c.projectId!==a.projectId)throw new DataError('out_of_scope',403);return c;}),
   save:(a:Actor,input:{revision:number;projectName:string;disciplines:ProjectDiscipline[]})=>transaction(a,async q=>{
    await q('SELECT pg_advisory_xact_lock(hashtext($1))',[JSON.stringify(['project-configuration',a.organizationId,a.projectId])]);
    const [r]=await q('SELECT revision,created_at FROM project_configuration WHERE organization_id=$1 AND project_id=$2 ORDER BY revision DESC LIMIT 1',[a.organizationId,a.projectId]);
