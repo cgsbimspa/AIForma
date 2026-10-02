@@ -18,7 +18,7 @@ export function checkedBimPlan(raw:unknown,catalog:BimCatalog):BimPlan {
 }
 export async function planBim(input:{question:string;catalog:BimCatalog;previous:{question:string;plan:BimPlan}[];selectionCount:number;filterActive?:boolean;filteredCount?:number},config:{key:string;model:string},signal:AbortSignal,fetcher:typeof fetch=fetch) {
   const response=await fetcher('https://api.openai.com/v1/responses',{method:'POST',headers:{Authorization:`Bearer ${config.key}`,'Content-Type':'application/json'},cache:'no-store',redirect:'error',signal,body:JSON.stringify({model:config.model,store:false,reasoning:{effort:'low'},max_output_tokens:2200,instructions,input:[{role:'user',content:JSON.stringify(input)}],text:{format}})});
-  if(!response.ok)throw new DataError(response.status===429?'ai_rate_limited':'ai_unavailable');
+  if(!response.ok)throw new DataError(response.status===429?'ai_rate_limited':response.status===401||response.status===403?'ai_auth_failed':response.status===404?'ai_model_unavailable':response.status===400?'ai_request_rejected':'ai_unavailable');
   try { const body=await response.json();if(body.status!=='completed')throw Error();const text=body.output.filter((o:{type:string})=>o.type==='message').flatMap((o:{content:{type:string;text?:string}[]})=>o.content).filter((c:{type:string})=>c.type==='output_text').map((c:{text:string})=>c.text).join('');return checkedBimPlan(JSON.parse(text),input.catalog);}
   catch{throw new DataError('ai_invalid_response');}
 }

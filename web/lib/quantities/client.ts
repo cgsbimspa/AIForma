@@ -35,6 +35,9 @@ const errors: Record<string, string> = {
   viewer_resource_unavailable: "Autodesk no pudo entregar los archivos de visualización de este modelo.",
   ai_not_configured: "La conexión con OpenAI no está configurada. Las acciones directas del visor siguen disponibles.",
   ai_unavailable: "OpenAI no pudo interpretar la consulta. Intenta nuevamente o usa los botones de selección.",
+  ai_auth_failed: "OpenAI rechazó las credenciales o permisos del servidor. La conexión Autodesk y el modelo están disponibles; falta revisar la configuración de IA.",
+  ai_model_unavailable: "El modelo de IA configurado no está disponible para esta cuenta. Revisa OPENAI_MODEL en la configuración del servidor.",
+  ai_request_rejected: "OpenAI rechazó el formato de esta consulta. No se aplicaron acciones ni se generaron resultados; la integración requiere revisión.",
   ai_rate_limited: "OpenAI está limitando las consultas. Espera unos momentos y vuelve a intentarlo.",
   ai_invalid_response: "No pude convertir la petición en una acción verificable. No apliqué cambios; indica un parámetro o elemento más concreto.",
 };
