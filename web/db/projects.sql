@@ -1,0 +1,23 @@
+BEGIN;
+CREATE TABLE project_schema_version(version integer PRIMARY KEY);
+CREATE TABLE project_configuration(id uuid PRIMARY KEY,organization_id text NOT NULL,project_id text NOT NULL,revision integer NOT NULL CHECK(revision>0),payload text NOT NULL,created_by text NOT NULL,created_at timestamptz NOT NULL,UNIQUE(organization_id,project_id,revision));
+CREATE FUNCTION project_configuration_immutable() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'project_configuration_is_immutable'; END $$;
+CREATE TRIGGER project_configuration_immutable BEFORE UPDATE OR DELETE ON project_configuration FOR EACH ROW EXECUTE FUNCTION project_configuration_immutable();
+DO $$ BEGIN
+ IF NOT EXISTS(SELECT FROM pg_roles WHERE rolname='ai_forma_projects') THEN CREATE ROLE ai_forma_projects NOLOGIN NOSUPERUSER NOBYPASSRLS; END IF;
+ EXECUTE format('GRANT ai_forma_projects TO %I',current_user);
+END $$;
+GRANT USAGE ON SCHEMA public TO ai_forma_projects;
+GRANT SELECT,INSERT ON project_configuration TO ai_forma_projects;
+ALTER TABLE project_configuration ENABLE ROW LEVEL SECURITY;
+ALTER TABLE project_configuration FORCE ROW LEVEL SECURITY;
+CREATE POLICY project_configuration_tenant ON project_configuration TO ai_forma_projects USING(organization_id=current_setting('app.organization_id',true) AND project_id=current_setting('app.project_id',true)) WITH CHECK(organization_id=current_setting('app.organization_id',true) AND project_id=current_setting('app.project_id',true) AND created_by=current_setting('app.user_id',true));
+INSERT INTO project_schema_version VALUES(1);
+CREATE TABLE project_quantity_capture(id uuid PRIMARY KEY,organization_id text NOT NULL,project_id text NOT NULL,metadata text NOT NULL,payload text NOT NULL,digest text NOT NULL,created_by text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),UNIQUE(organization_id,project_id,digest));
+CREATE TRIGGER project_quantity_capture_immutable BEFORE UPDATE OR DELETE ON project_quantity_capture FOR EACH ROW EXECUTE FUNCTION project_configuration_immutable();
+GRANT SELECT,INSERT ON project_quantity_capture TO ai_forma_projects;
+GRANT SELECT ON project_quantity_capture TO ai_forma_quantities;
+ALTER TABLE project_quantity_capture ENABLE ROW LEVEL SECURITY;
+ALTER TABLE project_quantity_capture FORCE ROW LEVEL SECURITY;
+CREATE POLICY project_quantity_capture_tenant ON project_quantity_capture TO ai_forma_projects,ai_forma_quantities USING(organization_id=current_setting('app.organization_id',true) AND project_id=current_setting('app.project_id',true)) WITH CHECK(organization_id=current_setting('app.organization_id',true) AND project_id=current_setting('app.project_id',true) AND created_by=current_setting('app.user_id',true));
+COMMIT;

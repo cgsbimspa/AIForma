@@ -1,6 +1,7 @@
 'use client';
 import { useProjectContext, useProjectState } from '../project-context';
 import { createContext,useContext,useEffect,useMemo,useState,useCallback,type ReactNode } from 'react';
+import {activateProjectModule} from '@/lib/projects/client';
 import { quantityResponse } from '@/lib/quantities/client';
 import type { Entry } from '@/lib/autodesk/data';
 import type { QuantityProject } from '@/lib/quantities/contracts';
@@ -17,14 +18,15 @@ export async function auditResponse<T>(scope:QuantityProject,command?:unknown,qu
  return quantityResponse<T>(`/api/audit${command?'':`?scope=${encodeURIComponent(JSON.stringify(scope))}${query}`}`,command?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({scope,command}),signal}:{signal});
 }
 export function AuditProvider({children}:{children:ReactNode}){
- const {hubs,projects,hubId,projectId,nextPage,setHub,setProject,moreProjects}=useProjectContext();
- const [workspace,setWorkspace]=useProjectState<AuditWorkspace|null>("audit.workspace",null),[run,setRun]=useProjectState<AuditReport|null>("audit.report",null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
+ const {hubs,projects,hubId,projectId,nextPage,setHub,setProject,moreProjects,selectedDiscipline,configuration}=useProjectContext();
+ const disciplineId=selectedDiscipline?.id,centralRevision=configuration?.revision;
+ const [workspace,setWorkspace]=useProjectState<AuditWorkspace|null>(`audit.workspace:${disciplineId??"none"}`,null),[run,setRun]=useProjectState<AuditReport|null>(`audit.report:${disciplineId??"none"}`,null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
  const project=useMemo<QuantityProject>(()=>({kind:'project',hubId,projectId}),[hubId,projectId]);
- useEffect(()=>{if(!projectId)return;const abort=new AbortController();void auditResponse<AuditWorkspace>(project,undefined,'',abort.signal).then(setWorkspace).catch(e=>{if(!abort.signal.aborted)setError(e.message);}).finally(()=>{if(!abort.signal.aborted)setBusy(false);});return()=>abort.abort();},[project,projectId,setWorkspace]);
+ useEffect(()=>{if(!projectId)return;const abort=new AbortController();queueMicrotask(()=>{if(!abort.signal.aborted)setBusy(true);});void (disciplineId&&centralRevision?activateProjectModule<AuditWorkspace>(project,disciplineId,centralRevision,'audit',abort.signal):auditResponse<AuditWorkspace>(project,undefined,'',abort.signal)).then(value=>{if(!abort.signal.aborted)setWorkspace(value);}).catch(e=>{if(!abort.signal.aborted)setError(e.message);}).finally(()=>{if(!abort.signal.aborted)setBusy(false);});return()=>abort.abort();},[project,projectId,setWorkspace,disciplineId,centralRevision]);
  const reload=useCallback(async()=>{if(!projectId)return;setBusy(true);setError('');try{setWorkspace(await auditResponse<AuditWorkspace>(project));}catch(e){setError((e as Error).message);}finally{setBusy(false);}},[project,projectId,setWorkspace]);
  async function command(c:unknown){setBusy(true);setError('');setNotice('');try{const result=await auditResponse<AuditWorkspace|AuditReport>(project,c);if('findings'in result){setRun(result);setWorkspace(await auditResponse<AuditWorkspace>(project));setNotice('Ejecución guardada con su vista, versión, reglas y evidencia.');}else if('configuration'in result){setWorkspace(result);setNotice('Configuración guardada. Las ejecuciones anteriores conservan sus criterios originales.');}return result;}catch(e){setError((e as Error).message);throw e;}finally{setBusy(false);}}
  async function openRun(id:string){setBusy(true);setError('');try{setRun(await auditResponse<AuditReport>(project,undefined,`&run=${encodeURIComponent(id)}`));}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
  return <AuditContext.Provider value={{hubs,projects,hubId,projectId,project,workspace,run,busy,error,notice,nextPage,setHub,setProject,moreProjects,reload,command,openRun,setNotice}}>{children}</AuditContext.Provider>;
 }
 
-export function AuditProjectProvider({children}:{children:ReactNode}){const p=useProjectContext();return <AuditProvider key={`${p.owner}:${p.hubId}:${p.projectId}`}>{children}</AuditProvider>;}
+export function AuditProjectProvider({children}:{children:ReactNode}){const p=useProjectContext();return <AuditProvider key={`${p.owner}:${p.hubId}:${p.projectId}:${p.selectedDiscipline?.id}:${p.configuration?.revision}`}>{children}</AuditProvider>;}

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import "./workspace-context.css";
 import "./project-home.css";
+import "./project-navigation.css";
 import { WorkspaceShell } from "@/components/workspace-shell";
 
 export const metadata: Metadata = {

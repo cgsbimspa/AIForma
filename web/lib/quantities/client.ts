@@ -2,6 +2,9 @@ import { autodeskFetch } from "../autodesk/client";
 import type { DataPage, DataQuery } from "../autodesk/data";
 import type { QuantityProject } from "./contracts";
 const errors: Record<string, string> = {
+  audit_discipline_required:'Esta especialidad no tiene una familia de auditoría definida. Selecciona Arquitectura, Estructura o una especialidad MEP compatible.',
+  quantity_rules_required:'Esta especialidad todavía no tiene un motor de cubicación habilitado. La fuente se conserva en Configuración.',
+  source_not_configured:'Selecciona y guarda el archivo y la vista en Configuración del proyecto.',
   coordination_view_required:'Selecciona y guarda un archivo RVT con una vista 3D publicada.',
   coordination_scope_required:'Confirma qué sistema sanitario representa el alcance seleccionado antes de ejecutar.',
   coordination_empty_scope:'No se recuperaron elementos que coincidan con el sistema configurado. Revisa su parámetro y valor.',

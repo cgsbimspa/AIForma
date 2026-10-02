@@ -39,4 +39,19 @@ ADR-005: ActivityLogger de este incremento es observabilidad operacional, no his
 
 ## Pruebas
 
+## Actualización funcional 2026-10-01: configuración compartida
+
+Esta actualización sustituye ADR-002/003 sólo en cuanto a configuración: incorpora una migración aditiva `web/db/projects.sql`, sin borrar datos ni reemplazar motores. Inicio sigue siendo de lectura.
+
+- `ProjectConfiguration`: empresa/hub, proyecto, revisiones inmutables y especialidades habilitadas. Cada especialidad conserva archivo lógico Autodesk, versión, fecha, vista y fecha de validación. `ProjectContext` comparte la especialidad activa; la configuración técnica es persistente, no usa la retención de conversación de cinco días.
+- `ProjectConfigurationService`: `/api/projects/configuration`, autorización Autodesk y origen de mutación, verificación de cada fuente, control optimista de revisión y aislamiento RLS. Los payloads se cifran con el mecanismo existente. `ai_forma_projects` sólo puede leer e insertar sus tablas dentro del proyecto autorizado.
+- Adaptadores `activate`: sincronizan la fuente explícita con las configuraciones existentes de Audit, Quantity y Regulatory. Conservan catálogos, reglas e historiales. Las referencias por dbId se reinician si cambia la fuente. Normativa requiere volver a confirmar el alcance. No se deduce la familia de una especialidad personalizada.
+- `/consultar-ia` integra los componentes documental y BIM existentes. El enrutamiento local interpreta intención; no calcula datos técnicos. Documentos se limita al proyecto activo. Las consultas de modelo usan la especialidad configurada y piden elegir cuando falta. El visor es contextual: ocultarlo mantiene montada la sesión y sus filtros. Las rutas antiguas redirigen a la nueva entrada.
+- Las consultas a auditoría, cantidades, normativa e incidencias sólo muestran registros disponibles y enlaces a evidencia. No hay síntesis LLM transversal de informes en esta entrega; no se generan afirmaciones de cumplimiento desde recuentos.
+- `project_quantity_capture`: historial inmutable de capturas de los motores determinísticos del visor. El servidor valida contrato, pertenencia al proyecto, versión/vista real y criterios guardados; calcula totales a partir de los registros recibidos. **Origen VIEWER_CAPTURE**, no inspección independiente en servidor. Se conserva evidencia completa comprimida y cifrada, procedencia, motor, criterios y huella de contenido. Límite comprimido 2,8 MB antes de enviar; un exceso o error se informa y no se presenta como guardado.
+- Estados: coincidencia con fuente configurada, histórico de otra versión/vista y publicación por verificar se muestran separadamente. Una captura no prueba que Autodesk no tenga una publicación posterior. Las comparaciones identifican cambios de reglas y de vista.
+- Migración: `node --env-file=<entorno autorizado> scripts/migrate-projects.mjs`, después de las migraciones existentes de cubicación/auditoría. No se requieren nuevas credenciales ni permisos Autodesk.
+
+Ver navegación y límites de aceptación en `UI_NAVIGATION.md`. Pruebas añadidas: selección ambigua, familias no inferidas, intención, revisiones/conflictos, RLS entre empresas/proyectos, inmutabilidad, captura idempotente y rechazo de procedencia incompatible.
+
 Regresión Node/PGlite: aislamiento cuenta/proyecto, descifrado contextual de referencias, recuentos completos sin payload de informes, deduplicación por archivo y conservación de versión/vista, fuentes parciales y desconocidos. Centro Español: protocolo y evidencia en `docs/benchmark-centro-espanol.md`. Las pruebas sintéticas no sustituyen aceptación BIM real.

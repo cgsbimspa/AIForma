@@ -28,7 +28,7 @@ const errors: Record<string, string> = {
 function errorText(code: string) { return errors[code] ?? "No se pudo completar la operación. Inténtalo nuevamente."; }
 function connectForm(label: string) { return <form action="/api/autodesk/connect?returnTo=/asistente" method="post"><button className="assistant-primary" type="submit"><Unplug size={16}/>{label}</button></form>; }
 
-export function AssistantWorkspace() {
+export function AssistantWorkspace({initialQuestion="",onQuestionHandled,compact=false}:{initialQuestion?:string;onQuestionHandled?:()=>void;compact?:boolean}={}) {
   const headerStatus = useContext(HeaderStatusContext);
   const [auth, setAuth] = useState<Auth | null>(null);
   const [revision, setRevision] = useState(0);
@@ -57,7 +57,7 @@ export function AssistantWorkspace() {
   const ready = auth?.connected && auth.dataAccess && auth.user;
   return <div className="page-content assistant-page">
     {headerStatus && createPortal(<div className="assistant-identity" role="status">{auth === null ? <><LoaderCircle size={15} className="spin"/>Verificando conexión</> : auth.error === "unavailable" ? <><LoaderCircle size={15} className="spin"/><span>Conexión por verificar<br/>Reintentando automáticamente…</span></> : auth.connected ? <><span className="connected-dot"/><span>Conectado con<br/><strong>{auth.user?.name}</strong></span></> : <><span className="disconnected-dot"/><span>Autodesk sin conectar</span></>}</div>, headerStatus)}
-    {ready ? <ConnectedWorkspace key={auth.user!.id} aiConfigured={Boolean(auth.aiConfigured)} invalidate={invalidate}/> : <div className="assistant-split assistant-locked">
+    {ready ? <ConnectedWorkspace initialQuestion={initialQuestion} onQuestionHandled={onQuestionHandled} compact={compact} key={auth.user!.id} aiConfigured={Boolean(auth.aiConfigured)} invalidate={invalidate}/> : <div className="assistant-split assistant-locked">
       <section className="forma-panel"><PanelHeading icon={<Folder size={20}/>} title="Mi información de Forma" subtitle="Cuentas, proyectos y carpetas"/><div className="panel-empty"><Database size={38}/><h3>{auth === null ? "Comprobando tu sesión…" : auth.connected ? "Autoriza el acceso a tus proyectos" : "Conecta tu cuenta de Autodesk"}</h3><p>{auth?.connected ? "La sesión actual permite identificarte. Para ver tus carpetas necesitamos también el permiso de lectura de Forma." : "Aquí aparecerán los proyectos y las carpetas a los que tiene acceso tu usuario."}</p>{auth !== null && connectForm(auth.connected ? "Autorizar proyectos y carpetas" : "Conectar Autodesk")}{auth?.error && <p className="assistant-error" role="alert">{errorText(auth.error)}</p>}{callbackError && <p className="assistant-error">La autorización no se completó. Puedes volver a conectar.</p>}<button type="button" className="assistant-link" onClick={() => setRevision(n => n + 1)}>Volver a comprobar</button></div></section>
       <section className="chat-panel"><PanelHeading icon={<BrainCircuit size={21}/>} title="Tu asistente de proyectos" subtitle="Conexión con OpenAI"/><div className="panel-empty chat-intro"><span className="chat-orb"><BrainCircuit size={33}/></span><h3>Todo empieza con tu información</h3><p>Conecta Autodesk para elegir un proyecto o consultar toda tu base de Forma desde este espacio.</p><div className="evidence-note"><ShieldCheck size={16}/> Respuestas vinculadas a datos verificables.</div></div></section>
     </div>}
@@ -65,32 +65,34 @@ export function AssistantWorkspace() {
 }
 function PanelHeading({ icon, title, subtitle, children }: { icon: React.ReactNode; title: string; subtitle: string; children?: React.ReactNode }) { return <header className="assistant-panel-heading"><span className="panel-heading-icon">{icon}</span><div><h2>{title}</h2><p>{subtitle}</p></div>{children}</header>; }
 type Selection = { initialMode?: DocumentMode | "search"; scope: DataScope; label: string; path?: string };
-function ConnectedWorkspace({ aiConfigured, invalidate }: { aiConfigured: boolean; invalidate: (code: string) => void }) {
+function ConnectedWorkspace({ aiConfigured, invalidate,initialQuestion,onQuestionHandled,compact }: { aiConfigured: boolean; invalidate: (code: string) => void;initialQuestion:string;onQuestionHandled?:()=>void;compact:boolean }) {
+  const [explorerOpen,setExplorerOpen]=useState(!compact);
   const projectContext=useProjectContext();
   const [navigation,setNavigation]=useProjectState<{selection:Selection;previous:Selection[];initial?:ConversationSnapshot<ChatSnapshot>}>("assistant.navigation",()=>({selection:projectContext.projectId?{scope:projectContext.project,label:projectContext.projects.find(p=>p.id===projectContext.projectId)?.name??"Proyecto activo"}:{scope:{kind:"all"},label:"Toda mi base de Forma"},previous:[]}));
-  const selection=navigation.selection;
+  const selection=navigation.selection.scope.kind==="all"?{scope:projectContext.project,label:"Todo el proyecto"}:navigation.selection;
   const [snapshotMap]=useProjectState("assistant.snapshots",()=>new Map<string,ConversationSnapshot<ChatSnapshot>>());
   const snapshots=useRef(snapshotMap);
-  const setSelection=useCallback((next:Selection)=>{if(next.scope.kind!=="all"&&(next.scope.projectId!==projectContext.projectId||next.scope.hubId!==projectContext.hubId)){projectContext.session.set(projectSessionKey(projectContext.owner,next.scope.hubId,next.scope.projectId,"assistant.navigation"),{selection:next,previous:[]});projectContext.selectProject(next.scope.hubId,next.scope.projectId);return;}setNavigation(current=>JSON.stringify(current.selection.scope)===JSON.stringify(next.scope)?current:{selection:next,previous:[...current.previous,current.selection],initial:recallConversation(snapshots.current,JSON.stringify(next.scope))});},[projectContext,setNavigation]);
+  const setSelection=useCallback((next:Selection)=>{if(compact&&(next.scope.kind==="all"||next.scope.projectId!==projectContext.projectId||next.scope.hubId!==projectContext.hubId))return;if(next.scope.kind!=="all"&&(next.scope.projectId!==projectContext.projectId||next.scope.hubId!==projectContext.hubId)){projectContext.session.set(projectSessionKey(projectContext.owner,next.scope.hubId,next.scope.projectId,"assistant.navigation"),{selection:next,previous:[]});projectContext.selectProject(next.scope.hubId,next.scope.projectId);return;}setNavigation(current=>JSON.stringify(current.selection.scope)===JSON.stringify(next.scope)?current:{selection:next,previous:[...current.previous,current.selection],initial:recallConversation(snapshots.current,JSON.stringify(next.scope))});},[projectContext,setNavigation,compact]);
   const back=()=>setNavigation(current=>current.previous.length?{selection:current.previous.at(-1)!,previous:current.previous.slice(0,-1),initial:recallConversation(snapshots.current,JSON.stringify(current.previous.at(-1)!.scope))}:current);
   const saveSnapshot=useCallback((key:string,data:ChatSnapshot,expiresAt:number)=>rememberConversation(snapshots.current,key,data,expiresAt),[]);
   const [chatRevision,setChatRevision]=useState(0);
   function restoreSelection(scope:DataScope,initial:ConversationSnapshot<ChatSnapshot>){
+    if(compact&&(scope.kind==="all"||scope.projectId!==projectContext.projectId||scope.hubId!==projectContext.hubId))return;
     setNavigation(current=>({selection:[current.selection,...current.previous].find(row=>JSON.stringify(row.scope)===JSON.stringify(scope))??{scope,label:scope.kind==='file'?'Archivo de la conversación':scope.kind==='folder'?'Carpeta de la conversación':'Proyecto de la conversación'},previous:[...current.previous,current.selection],initial}));
     setChatRevision(n=>n+1);
   }
   const [revision, setRevision] = useState(0);
   const [filter, setFilter] = useState("");
   const scopeKey = JSON.stringify(selection.scope);
-  return <div className="assistant-split">
+  return <div className={`assistant-split${compact?" unified-documents":""}${explorerOpen?"":" explorer-closed"}`}>{compact&&<button className="assistant-explorer-toggle quantity-secondary" onClick={()=>setExplorerOpen(v=>!v)}>{explorerOpen?"Ocultar archivos":"Explorar archivos del proyecto"}</button>}
     <section className="forma-panel" aria-label="Explorador de Forma">
       <PanelHeading icon={<Folder size={20}/>} title="Mi información de Forma" subtitle="Datos de tu cuenta Autodesk"><button type="button" className="icon-button" aria-label="Actualizar explorador" title="Actualizar explorador" onClick={() => { setRevision(n => n + 1); }}><RefreshCw size={16}/></button></PanelHeading>
-      <div className="scope-picker"><span className="small-label">ALCANCE DE LA CONSULTA</span><button type="button" aria-pressed={selection.scope.kind === "all"} className={`scope-all ${selection.scope.kind === "all" ? "selected" : ""}`} onClick={() => setSelection({ scope: { kind: "all" }, label: "Toda mi base de Forma" })}><Globe2 size={18}/><span><strong>Toda mi base de Forma</strong><small>Todos los proyectos accesibles</small></span>{selection.scope.kind === "all" && <CircleCheck size={18}/>}</button><p>Selecciona el círculo junto a un proyecto, carpeta o archivo. La flecha abre su contenido.</p>{selection.scope.kind !== "all" && <div className="scope-location" role="status"><strong>{selection.scope.kind === "file" ? "Sólo este archivo" : selection.scope.kind === "folder" ? "Esta carpeta y sus subcarpetas" : "Todo este proyecto"}</strong><span>{selection.path ?? selection.label}</span><small>Cada ubicación conserva su conversación. Puedes volver a la consulta anterior.</small></div>}</div>
+      <div className="scope-picker"><span className="small-label">ALCANCE DE LA CONSULTA</span><button type="button" aria-pressed={selection.scope.kind === "project"} className={`scope-all ${selection.scope.kind === "all" ? "selected" : ""}`} onClick={() => setSelection({ scope: projectContext.project, label: "Todo el proyecto" })}><Globe2 size={18}/><span><strong>Todo el proyecto</strong><small>Documentos del proyecto activo</small></span>{selection.scope.kind === "all" && <CircleCheck size={18}/>}</button><p>Selecciona el círculo junto a un proyecto, carpeta o archivo. La flecha abre su contenido.</p>{selection.scope.kind !== "all" && <div className="scope-location" role="status"><strong>{selection.scope.kind === "file" ? "Sólo este archivo" : selection.scope.kind === "folder" ? "Esta carpeta y sus subcarpetas" : "Todo este proyecto"}</strong><span>{selection.path ?? selection.label}</span><small>Cada ubicación conserva su conversación. Puedes volver a la consulta anterior.</small></div>}</div>
       <label className="explorer-search"><Search size={16}/><input value={filter} onChange={e => setFilter(e.target.value)} placeholder="Filtrar proyectos cargados" aria-label="Filtrar proyectos cargados"/></label>
-      <div className="forma-tree" key={revision}><Branch query={{ operation: "hubs", hubId: null, projectId: null, folderId: null, page: 0 }} selection={selection} select={setSelection} invalidate={invalidate} filter={filter}/></div>
+      <div className="forma-tree" key={revision}><Branch query={{ operation: "roots", hubId: projectContext.hubId, projectId: projectContext.projectId, folderId: null, page: 0 }} selection={selection} select={setSelection} invalidate={invalidate} filter={filter}/></div>
       <footer className="explorer-footer"><ShieldCheck size={15}/><span>Sólo lectura · Abre las carpetas para ver su contenido. Los permisos de Autodesk se respetan.</span></footer>
     </section>
-    <ChatPanel key={`${scopeKey}:${chatRevision}`} restoreSelection={restoreSelection} initial={navigation.initial??recallConversation(snapshotMap,scopeKey)} saveSnapshot={saveSnapshot} onBack={navigation.previous.length?back:undefined} previousLabel={navigation.previous.at(-1)?.label} select={setSelection} selection={selection} aiConfigured={aiConfigured} invalidate={invalidate}/>
+    <ChatPanel initialQuestion={initialQuestion} onQuestionHandled={onQuestionHandled} key={`${scopeKey}:${chatRevision}`} restoreSelection={restoreSelection} initial={navigation.initial??recallConversation(snapshotMap,scopeKey)} saveSnapshot={saveSnapshot} onBack={navigation.previous.length?back:undefined} previousLabel={navigation.previous.at(-1)?.label} select={setSelection} selection={selection} aiConfigured={aiConfigured} invalidate={invalidate}/>
   </div>;
 }
 type BranchProps = { query: DataQuery; selection: Selection; select: (selection: Selection) => void; invalidate: (code: string) => void; filter: string; folderIds?: string[]; path?: string };
@@ -152,10 +154,10 @@ type Message = { historical?: boolean; expires_at?: string; role: "user" | "assi
 type ChatState={messages:Message[];draft:string;mode:DocumentMode|"search";conversationId?:string;historyExpiresAt?:string;memoryNotice:string;error:string;activeSearch:number|null;scrollTop:number};
 type LocalChat={id:string;title:string;expiresAt:number;data:ChatState};
 type ChatSnapshot=ChatState&{archives?:LocalChat[]};
-function ChatPanel({ restoreSelection, selection, select, aiConfigured, invalidate, initial, saveSnapshot, onBack, previousLabel }: { restoreSelection:(scope:DataScope,snapshot:ConversationSnapshot<ChatSnapshot>)=>void; initial?:ConversationSnapshot<ChatSnapshot>;saveSnapshot:(key:string,data:ChatSnapshot,expiresAt:number)=>void;onBack?:()=>void;previousLabel?:string; select: (selection: Selection) => void; selection: Selection; aiConfigured: boolean; invalidate: (code: string) => void }) {
+function ChatPanel({ initialQuestion,onQuestionHandled,restoreSelection, selection, select, aiConfigured, invalidate, initial, saveSnapshot, onBack, previousLabel }: { initialQuestion:string;onQuestionHandled?:()=>void;restoreSelection:(scope:DataScope,snapshot:ConversationSnapshot<ChatSnapshot>)=>void; initial?:ConversationSnapshot<ChatSnapshot>;saveSnapshot:(key:string,data:ChatSnapshot,expiresAt:number)=>void;onBack?:()=>void;previousLabel?:string; select: (selection: Selection) => void; selection: Selection; aiConfigured: boolean; invalidate: (code: string) => void }) {
   const documentSelection = selection.scope.kind === "file" || selection.scope.kind === "folder";
   const [mode, setMode] = useState<DocumentMode | "search">(initial?.data.mode ?? selection.initialMode ?? (selection.scope.kind === "file" ? "ask" : "search"));
-  const [messages, setMessages] = useState<Message[]>(initial?.data.messages??[]), [draft, setDraft] = useState(initial?.data.draft??"");
+  const [messages, setMessages] = useState<Message[]>(initial?.data.messages??[]), [draft, setDraft] = useState(initialQuestion||initial?.data.draft||"");
   const [archives,setArchives]=useState<LocalChat[]>(initial?.data.archives??[]);
   const [historyRevision,setHistoryRevision]=useState(0);
   const conversationId = useRef<string | undefined>(initial?.data.conversationId);
@@ -251,6 +253,7 @@ function ChatPanel({ restoreSelection, selection, select, aiConfigured, invalida
     finally { if (!abort.signal.aborted) setBusy(false); }
   }
   function selectHit(hit: SearchHit) { if (hit.type === "items" && JSON.stringify(hit.scope) === JSON.stringify(selection.scope)) { setMode("ask"); return; } if (hit.scope) select({ initialMode: hit.type === "items" ? "ask" : "search", scope: hit.scope, label: hit.name, path: hit.path }); }
+  const seeded=useRef(false);
   async function send(text: string, requestedMode = mode) {
     if (!text.trim() || busy || !aiConfigured) return;
     if ((requestedMode === "search" || requestedMode === "ask") && documentSelection && isGeneralSummaryRequest(text)) { requestedMode = "summary"; setMode("summary"); }
@@ -276,6 +279,7 @@ function ChatPanel({ restoreSelection, selection, select, aiConfigured, invalida
     } catch (e) { if (!abort.signal.aborted) { setError(errorText(e instanceof Error ? e.message : "ai_unavailable")); setDraft(text); } }
     finally { if (!abort.signal.aborted) setBusy(false); }
   }
+  useEffect(()=>{if(initialQuestion&&aiConfigured&&!seeded.current){seeded.current=true;onQuestionHandled?.();void send(initialQuestion);}},[initialQuestion,aiConfigured]); // eslint-disable-line react-hooks/exhaustive-deps
   const suggestion = selection.scope.kind === "all" ? "Muéstrame los proyectos a los que tengo acceso." : selection.scope.kind === "folder" ? "Muéstrame el contenido de esta carpeta." : selection.scope.kind === "file" ? "Muéstrame el archivo seleccionado." : "Muéstrame las carpetas raíz de este proyecto.";
   return <section className="chat-panel" aria-label="Asistente IA con OpenAI">
     <PanelHeading icon={<BrainCircuit size={21}/>} title="Tu asistente de proyectos" subtitle="OpenAI · Consultas con fuentes"><button type="button" className="icon-button" disabled={!messages.length && !draft && !busy} aria-label="Limpiar conversación" title="Iniciar una nueva conversación" onClick={newConversation}><Trash2 size={16}/></button></PanelHeading>

@@ -11,6 +11,7 @@ export function createProjectReader(transactions:{audit:Transaction;coordination
       // All queries remain under existing least-privilege RLS roles. Never load run payloads.
       const table=module==='audit'?'audit_record':module==='coordination'?'coordination_record':'quantity_run';
       const [totals]=await q(`SELECT count(*) AS runs,max(created_at) AS latest FROM ${table} WHERE organization_id=$1 AND project_id=$2${module==='quantities'?'':" AND kind='run'"}`,[actor.organizationId,actor.projectId]);
+      if(module==='quantities'){const [installed]=await q("SELECT to_regclass('public.project_quantity_capture') AS name");if(installed?.name){const [captures]=await q('SELECT count(*) AS runs,max(created_at) AS latest FROM project_quantity_capture WHERE organization_id=$1 AND project_id=$2',[actor.organizationId,actor.projectId]);totals.runs=Number(totals.runs)+Number(captures.runs);if(captures.latest&&(!totals.latest||new Date(String(captures.latest))>new Date(String(totals.latest))))totals.latest=captures.latest;}}
       const rows=module==='quantities'
         ?await q('SELECT id,payload,updated_at AS updated FROM quantity_configuration WHERE organization_id=$1 AND project_id=$2',[actor.organizationId,actor.projectId])
         :module==='audit'

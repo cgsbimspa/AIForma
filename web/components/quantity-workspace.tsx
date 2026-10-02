@@ -1,5 +1,6 @@
 "use client";
 import { useProjectContext, useProjectState } from "./project-context";
+import {activateProjectModule} from '@/lib/projects/client';
 import {specialtyState,type ProcessReceipt} from "@/lib/quantities/specialty-state";
 import {projectSessionKey} from "@/lib/project-session";
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
@@ -24,16 +25,17 @@ import type { ModelVersion, ModelView, QuantityComparison, QuantityConfiguration
 const stateLabels = { NOT_CONFIGURED: "Sin configurar", READY: "Configurada · sin procesar", PROCESSING: "Procesando", CURRENT: "Actualizada", STALE: "Nueva versión disponible", ERROR: "Por verificar" };
 export function QuantityWorkspace() {
   const headerSlot=useContext(QuantityHeaderContext);
-  const {hubId,projectId,projects,project:projectScope,error}=useProjectContext();
+  const {hubId,projectId,projects,project:projectScope,error,selectedDiscipline,configuration}=useProjectContext();
   const project = projects.find(p => p.id === projectId);
   return <QuantityHeaderContext.Provider value={headerSlot}><div className="page-content quantity-page">
     {error && <p role="alert" className="quantity-error">{error}</p>}
-    {project ? <ProjectQuantities key={`${hubId}:${projectId}`} project={projectScope} name={project.name}/> : <section className="quantity-welcome quantity-panel"><div className="quantity-welcome-icon"><Boxes size={32}/></div><h2>Configuración de Cubicaciones</h2><p>Selecciona un proyecto de Autodesk para acceder a sus especialidades y configurar las fuentes BIM.</p><div className="quantity-flow"><span>Especialidad</span><ArrowRight/><span>Plantilla</span><ArrowRight/><span>RVT + versión + vista</span><ArrowRight/><span>Cubicación</span></div><p className="quantity-help">Se mostrarán únicamente los proyectos y archivos accesibles para tu cuenta.</p></section>}
+    {project ? <ProjectQuantities key={`${hubId}:${projectId}:${selectedDiscipline?.id}:${configuration?.revision}`} project={projectScope} name={project.name}/> : <section className="quantity-welcome quantity-panel"><div className="quantity-welcome-icon"><Boxes size={32}/></div><h2>Configuración de Cubicaciones</h2><p>Selecciona un proyecto de Autodesk para acceder a sus especialidades y configurar las fuentes BIM.</p><div className="quantity-flow"><span>Especialidad</span><ArrowRight/><span>Plantilla</span><ArrowRight/><span>RVT + versión + vista</span><ArrowRight/><span>Cubicación</span></div><p className="quantity-help">Se mostrarán únicamente los proyectos y archivos accesibles para tu cuenta.</p></section>}
   </div></QuantityHeaderContext.Provider>;
 }
 
 function ProjectQuantities({ project, name }: { project: QuantityProject; name: string }) {
   const context=useProjectContext();
+  const disciplineId=context.selectedDiscipline?.id,disciplineCode=context.selectedDiscipline?.code,centralRevision=context.configuration?.revision;
   const [management,setManagement]=useState(false),[showHidden,setShowHidden]=useState(false);
   const [filterSlot,setFilterSlot]=useState<HTMLElement|null>(null);
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
@@ -49,19 +51,19 @@ function ProjectQuantities({ project, name }: { project: QuantityProject; name: 
     const controller = new AbortController();
     async function load() {
       setBusy(true); setError("");
-      try { setWorkspace(await quantityCommand<Workspace>(project, { action: "prepare-templates" }, controller.signal)); }
+      try { const w=disciplineId&&centralRevision?await activateProjectModule<Workspace>(project,disciplineId,centralRevision,'quantities',controller.signal):await quantityCommand<Workspace>(project,{action:'prepare-templates'},controller.signal);if(!controller.signal.aborted){setWorkspace(w);if(disciplineCode)setSelected(w.configurations.find(c=>c.specialtyCode===disciplineCode)?.id??null);} }
       catch (e) { if (!controller.signal.aborted) setError((e as Error).message); }
       finally { if (!controller.signal.aborted) setBusy(false); }
     }
     void load(); return () => controller.abort();
-  }, [project, retry]);
+  }, [project, retry,disciplineId,disciplineCode,centralRevision,setSelected]);
   const checkVersion = useCallback(async (id: string, signal?: AbortSignal) => {
     setLatest(old => ({ ...old, [id]: undefined })); setVersionErrors(old => ({ ...old, [id]: "" }));
     try { const result = await quantityCommand<{ latest: ModelVersion }>(project, { action: "latest", configurationId: id }, signal); setLatest(old => ({ ...old, [id]: result.latest })); }
     catch (e) { if (!signal?.aborted) setVersionErrors(old => ({ ...old, [id]: (e as Error).message })); }
   }, [project]);
   async function openSpecialty(code:string,configure:boolean){
-    setBusy(true);setError('');try{let c=workspace?.configurations.find(c=>c.specialtyCode===code);if(!c){c=await quantityCommand<QuantityConfiguration>(project,{action:'add',specialtyCode:code});setWorkspace(await quantityResponse<Workspace>(`/api/quantities?scope=${encodeURIComponent(JSON.stringify(project))}`));}setOpenConfiguration(configure||!c.source?.view);setSelected(c.id);}catch(e){setError((e as Error).message);}finally{setBusy(false);}
+    const active=context.configuration?.disciplines.find(d=>d.code===code&&d.enabled);if(active){context.selectDiscipline(active.id);return;}setBusy(true);setError('');try{let c=workspace?.configurations.find(c=>c.specialtyCode===code);if(!c){c=await quantityCommand<QuantityConfiguration>(project,{action:'add',specialtyCode:code});setWorkspace(await quantityResponse<Workspace>(`/api/quantities?scope=${encodeURIComponent(JSON.stringify(project))}`));}setOpenConfiguration(configure||!c.source?.view);setSelected(c.id);}catch(e){setError((e as Error).message);}finally{setBusy(false);}
   }
   async function visibility(code:string,enabled:boolean,hidden:boolean){
     setBusy(true);setError('');try{let c=workspace?.configurations.find(c=>c.specialtyCode===code);if(!c)c=await quantityCommand<QuantityConfiguration>(project,{action:'add',specialtyCode:code});await quantityCommand(project,{action:'visibility',id:c.id,revision:c.revision,enabled,hidden});setWorkspace(await quantityResponse<Workspace>(`/api/quantities?scope=${encodeURIComponent(JSON.stringify(project))}`));}catch(e){setError((e as Error).message);}finally{setBusy(false);}
@@ -79,7 +81,7 @@ function ProjectQuantities({ project, name }: { project: QuantityProject; name: 
     <Dialog open={mepSetup} onOpenChange={setMepSetup}><DialogContent className="quantity-page quantity-modal"><DialogTitle>Plantillas por especialidad MEP</DialogTitle><DialogDescription>Crear las especialidades MEP faltantes. Las configuraciones existentes se conservan.</DialogDescription><p>Agua fría, agua caliente, alcantarillado, electricidad, ventilación, gas, incendio, HVAC, telecomunicaciones y las tres especialidades exteriores.</p><label>Fuente inicial<select aria-label="Fuente inicial para plantillas MEP" value={mepSource} disabled={busy} onChange={e=>setMepSource(e.target.value)}><option value="">Configurar el archivo y vista de cada especialidad después</option>{workspace?.configurations.filter(c=>isMEPTemplate(c.specialtyCode)&&c.source?.view).map(c=><option key={c.id} value={c.id}>{specialtyName(c.specialtyCode)} · {c.source!.fileName} · V{c.source!.version.number} · {c.source!.view!.name}</option>)}</select></label><p className="quantity-help">Si eliges una fuente, se verifica en Autodesk y se copian su vista y criterios confirmados sólo a las nuevas especialidades. Después puedes cambiar cada archivo y vista por separado. No se asignan elementos por el nombre de la plantilla.</p><button className="quantity-primary" disabled={busy} onClick={()=>void prepareMEP()}>{busy?'Creando plantillas…':'Crear plantillas MEP'}</button></DialogContent></Dialog>
     {configuration && workspace ? <QuantityDesk key={(configuration.specialtyCode==='structure'||isMEPTemplate(configuration.specialtyCode))?`${configuration.id}:v2`:`${configuration.id}:${configuration.revision}`} project={project} configuration={configuration} savedSuccessfully={savedRevision === `${configuration.id}:${configuration.revision}`} openConfiguration={openConfiguration} projectName={name} templates={workspace.templates.filter(t => t.specialtyCode === configuration.specialtyCode)} runs={workspace.runs.filter(r => r.specialtyCode === configuration.specialtyCode)} historyPartial={workspace.historyPartial} latest={latest[configuration.id]} versionError={versionErrors[configuration.id]} checkVersion={checkVersion} onSave={value => { setSavedRevision(`${value.id}:${value.revision}`); setWorkspace(old => old && { ...old, configurations: old.configurations.map(c => c.id === value.id ? value : c) }); }} onTemplate={value => setWorkspace(old => old && { ...old, templates: [value, ...old.templates] })}/> : workspace && <>
       <div className="specialty-catalog-heading"><p>Elige una especialidad para configurar su fuente o abrir su tablero.</p><label><input type="checkbox" checked={showHidden} onChange={e=>setShowHidden(e.target.checked)}/>Mostrar ocultas</label></div>
-      <div className="quantity-cards specialty-catalog">{quantitySpecialties.filter(s=>showHidden||!workspace.configurations.find(c=>c.specialtyCode===s.code)?.hidden).map(s=>{
+      <div className="quantity-cards specialty-catalog">{quantitySpecialties.filter(s=>(!context.configuration||context.configuration.disciplines.some(d=>d.code===s.code&&d.enabled))&&(showHidden||!workspace.configurations.find(c=>c.specialtyCode===s.code)?.hidden)).map(s=>{
         const c=workspace.configurations.find(c=>c.specialtyCode===s.code),run=workspace.runs.find(r=>r.specialtyCode===s.code);
         const receipt=c?context.session.get<ProcessReceipt|null>(projectSessionKey(context.owner,context.hubId,context.projectId,`quantity.receipt:${c.id}`),()=>null):null;
         const state=specialtyState(c,run,receipt,c?versionErrors[c.id]:undefined);

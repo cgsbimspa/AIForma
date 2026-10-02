@@ -7,6 +7,8 @@ import {autodeskStatus} from '@/lib/autodesk/client';
 import type {Entry} from '@/lib/autodesk/data';
 import type {QuantitySource} from '@/lib/quantities/contracts';
 import {ProjectSession,projectSessionKey,readProjectCursor} from '@/lib/project-session';
+import {quantityResponse} from '@/lib/quantities/client';
+import {activeDiscipline,type ProjectConfiguration} from '@/lib/projects/configuration';
 
 function useProjectValue(){
  const [owner,setOwner]=useState(''),[hubId,setHubId]=useState(''),[projectId,setProjectId]=useState('');
@@ -15,6 +17,15 @@ function useProjectValue(){
  const [connection,setConnection]=useState<'checking'|'connected'|'disconnected'|'unavailable'>('checking');
  const [session]=useState(()=>new ProjectSession()),identity=useRef(''),generation=useRef(0);
  const [sources,setSources]=useState<Record<string,QuantitySource|null>>({});
+ const contextKey=projectSessionKey(owner,hubId,projectId,'configuration');
+ const [configurationState,setConfigurationState]=useState<{key:string;value:ProjectConfiguration|null}>({key:'',value:null});
+ const [configurationError,setConfigurationError]=useState(''),[configurationLoading,setConfigurationLoading]=useState(false),[configurationRevision,setConfigurationRevision]=useState(0);
+ const [activeSelection,setActiveSelection]=useState<{key:string;id:string}>({key:'',id:''});
+ const configuration=configurationState.key===contextKey?configurationState.value:null;
+ const selectedDiscipline=activeDiscipline(configuration,activeSelection.key===contextKey?activeSelection.id:session.get(contextKey+':discipline',()=>''));
+ const selectDiscipline=useCallback((id:string)=>{session.set(contextKey+':discipline',id);setActiveSelection({key:contextKey,id});},[contextKey,session]);
+ const adoptConfiguration=useCallback((value:ProjectConfiguration)=>{if(value.companyId!==hubId||value.projectId!==projectId)return;setConfigurationState({key:contextKey,value});},[contextKey,hubId,projectId]);
+ useEffect(()=>{if(!owner||!hubId||!projectId)return;const abort=new AbortController();queueMicrotask(()=>{if(!abort.signal.aborted){setConfigurationLoading(true);setConfigurationError('');}});void quantityResponse<{configuration:ProjectConfiguration|null}>(`/api/projects/configuration?scope=${encodeURIComponent(JSON.stringify({kind:'project',hubId,projectId}))}`,{signal:abort.signal}).then(r=>{if(!abort.signal.aborted)setConfigurationState({key:contextKey,value:r.configuration});}).catch(e=>{if(!abort.signal.aborted)setConfigurationError(e.message);}).finally(()=>{if(!abort.signal.aborted)setConfigurationLoading(false);});return()=>abort.abort();},[contextKey,owner,hubId,projectId,configurationRevision]);
  const pathname=usePathname(),activeModule=pathname.split('/')[1]||'inicio';
  useEffect(()=>{let disposed=false,inFlight=false;const abort=new AbortController();async function check(){if(inFlight)return;inFlight=true;try{const r=await autodeskStatus(abort.signal),v=await r.json();if(disposed)return;const id=v.connected&&typeof v.user?.id==='string'?v.user.id:'';if(v.error==='unavailable'){setConnection('unavailable');return;}setConnection(id?'connected':'disconnected');if(id!==identity.current){generation.current++;identity.current=id;session.clear();setSources({});setOwner(id);setHubs([]);setProjects([]);let cursor=null;try{cursor=readProjectCursor(sessionStorage.getItem('aiforma-project-cursor'),id);if(!id)sessionStorage.removeItem('aiforma-project-cursor');}catch{}setHubId(cursor?.hubId??'');setProjectId(cursor?.projectId??'');}}catch{if(!disposed)setConnection('unavailable');/* Keep context during transient network failures; server authorization still applies. */}finally{inFlight=false;}}void check();const timer=setInterval(()=>{if(document.visibilityState==='visible')void check();},60000);window.addEventListener('focus',check);return()=>{disposed=true;abort.abort();clearInterval(timer);window.removeEventListener('focus',check);};},[session,revision]);
  useEffect(()=>{if(!owner)return;try{sessionStorage.setItem('aiforma-project-cursor',JSON.stringify({owner,hubId,projectId}));}catch{}},[owner,hubId,projectId]);
@@ -26,9 +37,9 @@ function useProjectValue(){
  async function moreProjects(){if(nextPage===null)return;const epoch=generation.current;setBusy(true);try{const p=await quantityBrowse({operation:'projects',hubId,page:nextPage});if(epoch!==generation.current)return;setProjects(old=>[...new Map([...old,...p.entries].map(e=>[e.id,e])).values()]);setNextPage(p.evidence.nextPage);}catch(e){if(epoch===generation.current)setError((e as Error).message);}finally{if(epoch===generation.current)setBusy(false);}}
  const sourceKey=projectSessionKey(owner,hubId,projectId,activeModule);
  const publishSource=useCallback((value:QuantitySource|null)=>{setSources(old=>old[sourceKey]===value?old:{...old,[sourceKey]:value});},[sourceKey]);
- const source=sources[sourceKey]??null;
+ const source=selectedDiscipline?.source??sources[sourceKey]??null;
  const project=useMemo(()=>({kind:'project' as const,hubId,projectId}),[hubId,projectId]);
- return {owner,connection,hubId,projectId,hubs,projects,nextPage,busy,error,setHub,setProject,selectProject,moreProjects,refresh:()=>setRevision(v=>v+1),project,source,publishSource,session:session};
+ return {owner,connection,hubId,projectId,hubs,projects,nextPage,busy,error,setHub,setProject,selectProject,moreProjects,refresh:()=>setRevision(v=>v+1),project,source,publishSource,session:session,configuration,configurationError,configurationLoading,selectedDiscipline,selectDiscipline,adoptConfiguration,reloadConfiguration:()=>setConfigurationRevision(n=>n+1)};
 }
 const Context=createContext<ReturnType<typeof useProjectValue>|null>(null);
 export function ProjectProvider({children}:{children:ReactNode}){return <Context.Provider value={useProjectValue()}>{children}</Context.Provider>;}
