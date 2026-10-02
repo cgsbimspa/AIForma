@@ -1,6 +1,6 @@
 "use client";
 import {useProjectContext,useProjectState,useModelContext} from "./project-context";
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type SetStateAction } from 'react';
 import Link from 'next/link';
 import { Box, MessageSquare, ArrowUp, Settings2, RefreshCw, ExternalLink, Plus, ShieldCheck } from 'lucide-react';
 import { QuantitySourcePicker } from './quantity-source-picker';
@@ -31,13 +31,18 @@ type Reply={catalog?:unknown;result?:unknown;error?:string};
 const quickActions:[string,BimPlan['action']][]=[['Ver propiedades','properties'],['Quitar filtro','clearFilter']];
 
 function BimModelSession({project,source,initialQuestion,onQuestionHandled,contextual}:{project:QuantityProject;source:QuantitySource;initialQuestion:string;onQuestionHandled?:()=>void;contextual:boolean}){
+  const sessionKey=`bim.conversation:${source.scope.itemId}:${source.version.id}:${source.view!.id}`;
+  const [conversation,setConversation]=useProjectState<{createdAt:number;turns:Turn[]}>(sessionKey,()=>({createdAt:Date.now(),turns:[]}));
+  const [openedAt]=useState(Date.now);
+  const turns=useMemo(()=>openedAt-conversation.createdAt<5*86400000?conversation.turns:[],[openedAt,conversation]);
+  const setTurns=useCallback((update:SetStateAction<Turn[]>)=>setConversation(old=>({...old,turns:(typeof update==='function'?update(old.turns):update).slice(-100)})),[setConversation]);
   const [viewerOpen,setViewerOpen]=useState(!contextual),[maximized,setMaximized]=useState(false);
   const frame=useRef<HTMLIFrameElement>(null),bottom=useRef<HTMLDivElement>(null);
   const pending=useRef(new Map<string,{resolve:(r:Reply)=>void;reject:(e:Error)=>void;timer:ReturnType<typeof setTimeout>}>());
-  const controller=useRef<AbortController|null>(null),revision=useRef(0),createdAt=useRef(Date.now());
+  const controller=useRef<AbortController|null>(null),revision=useRef(0),createdAt=useRef(conversation.createdAt);
   const invalidate=useCallback(()=>{revision.current++;controller.current?.abort();},[]);
   const [frameUrl,setFrameUrl]=useState(''),[status,setStatus]=useState('Verificando la versión y vista…'),[loadError,setLoadError]=useState('');
-  const [catalog,setCatalog]=useState<BimCatalog|null>(null),[selectionCount,setSelectionCount]=useState(0),[filteredCount,setFilteredCount]=useState(0),[filterActive,setFilterActive]=useState(false),[turns,setTurns]=useState<Turn[]>([]),[question,setQuestion]=useState(initialQuestion),[busy,setBusy]=useState(false);
+  const [catalog,setCatalog]=useState<BimCatalog|null>(null),[selectionCount,setSelectionCount]=useState(0),[filteredCount,setFilteredCount]=useState(0),[filterActive,setFilterActive]=useState(false),[question,setQuestion]=useState(initialQuestion),[busy,setBusy]=useState(false);
   const post=useCallback((data:Record<string,unknown>)=>frame.current?.contentWindow?.postMessage({...data,type:'aiforma-bim-request',viewId:source.view!.id,urn:source.version.modelId},window.location.origin),[source]);
   const requestFrame=useCallback((operation:string,plan?:BimPlan)=>new Promise<Reply>((resolve,reject)=>{
     if(!frame.current?.contentWindow){reject(Error('El visor no está disponible.'));return;}
@@ -65,7 +70,7 @@ function BimModelSession({project,source,initialQuestion,onQuestionHandled,conte
     return()=>{loading.abort();invalidate();window.removeEventListener('message',receive);for(const job of queue.values()){clearTimeout(job.timer);job.reject(Error('La vista cambió.'));}queue.clear();};
   },[project,source,requestFrame,invalidate]);
   useEffect(()=>{if(turns.length||busy)bottom.current?.scrollIntoView({block:'nearest'});},[turns,busy]);
-  const reset=useCallback(()=>{revision.current++;controller.current?.abort();for(const job of pending.current.values()){clearTimeout(job.timer);job.reject(Error('Conversación cancelada.'));}pending.current.clear();post({operation:'cancel',requestId:crypto.randomUUID(),resetFilter:true});setFilterActive(false);setFilteredCount(0);setSelectionCount(0);setTurns([]);setQuestion('');setBusy(false);createdAt.current=Date.now();},[post]);
+  const reset=useCallback(()=>{revision.current++;controller.current?.abort();for(const job of pending.current.values()){clearTimeout(job.timer);job.reject(Error('Conversación cancelada.'));}pending.current.clear();post({operation:'cancel',requestId:crypto.randomUUID(),resetFilter:true});setFilterActive(false);setFilteredCount(0);setSelectionCount(0);setConversation({createdAt:Date.now(),turns:[]});setQuestion('');setBusy(false);createdAt.current=Date.now();},[post,setConversation]);
   useEffect(()=>{const timer=setInterval(()=>{if(Date.now()-createdAt.current>=5*86400000)reset();},30000);return()=>clearInterval(timer);},[reset]);
   const seeded=useRef(false);
   useEffect(()=>{if(initialQuestion&&catalog&&!seeded.current){seeded.current=true;onQuestionHandled?.();void submit(initialQuestion);}},[initialQuestion,catalog]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -97,7 +102,7 @@ function BimModelSession({project,source,initialQuestion,onQuestionHandled,conte
       <div className="bim-chat-context"><strong>{source.projectName}</strong><span>{source.fileName} · V{source.version.number} · {source.view!.name}</span></div>
       <div className="bim-chat-messages" aria-live="polite">
         {!turns.length&&<div className="bim-chat-intro"><div><MessageSquare size={28}/></div><h3>¿Qué quieres ver en el modelo?</h3><p>Puedo encontrar elementos por sus propiedades, dejarlos filtrados y ayudarte a revisar la vista.</p>{['Muéstrame los hormigones','Filtra las vigas','Muéstrame los elementos de Cubierta'].map(q=><button key={q} disabled={!catalog||busy} onClick={()=>void submit(q)}>{q}<ArrowUp size={14}/></button>)}<small>Después puedes decir «aíslalos» o «píntalos de rojo».</small></div>}
-        {turns.map(turn=><article key={turn.id} className="bim-chat-turn"><p className="bim-chat-question">{turn.question}</p><div className={`bim-chat-answer${turn.error?' is-error':''}`}><strong>Chat BIM IA</strong><p>{turn.answer??'Consultando el modelo…'}</p>{turn.result&&<BimEvidence result={turn.result} source={source}/>}</div></article>)}<div ref={bottom}/>
+        {turns.map(turn=><article key={turn.id} className="bim-chat-turn"><p className="bim-chat-question">{turn.question}</p><div className={`bim-chat-answer${turn.error?' is-error':''}`}><strong>Chat BIM IA</strong><p>{turn.answer??(busy?'Consultando el modelo…':'Consulta interrumpida. Vuelve a enviar la pregunta para consultar la fuente.')}</p>{turn.result&&<BimEvidence result={turn.result} source={source}/>}</div></article>)}<div ref={bottom}/>
       </div>
       <div className="bim-chat-tools"><div className="bim-chat-actions" aria-label="Filtro del modelo"><span>{filterActive?`${filteredCount.toLocaleString('es-CL')} elementos filtrados`:'Sin filtro activo'}</span>{quickActions.map(([label,act])=><button key={act} disabled={!catalog||busy||!filterActive||(act==='properties'&&!filteredCount)} onClick={()=>action(act,label)}>{label}</button>)}</div></div>
       <form className="bim-chat-composer" onSubmit={e=>{e.preventDefault();void submit(question);}}><label className="sr-only" htmlFor="bim-chat-question">Pregunta sobre el modelo</label><textarea id="bim-chat-question" value={question} maxLength={2000} disabled={!catalog} onChange={e=>setQuestion(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.nativeEvent.isComposing){e.preventDefault();void submit(question);}}} placeholder={catalog?'Muéstrame elementos, consulta propiedades o pide una acción…':'Selecciona una vista y espera a que termine su lectura…'}/><button className="quantity-primary" aria-label="Enviar al chat BIM" disabled={!catalog||busy||!question.trim()}><ArrowUp size={19}/></button></form>
