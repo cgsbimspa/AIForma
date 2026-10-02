@@ -13,11 +13,11 @@
 Prueba en producción del 01-10-2026, con sesión real de Autodesk:
 
 - AEC Shift → 2025.03.25 Centro Español. Se recuperó y guardó la fuente existente de Estructura: `CES-EST-Edif_A1_RV25.rvt`, V3, vista `{3D}`. Autodesk verificó esa selección; no se modificó el archivo RVT.
-- Auditoría recibió la fuente compartida sin pedir nuevamente archivo ni vista. La ejecución informó `audit_derivative_pending`: la API de propiedades de Autodesk devolvió preparación pendiente. No se guardó un informe ficticio.
+- Auditoría recibió la fuente compartida sin pedir nuevamente archivo ni vista. El primer intento informó `audit_derivative_pending`; al reintentar se guardó la revisión del 01-10-2026 22:10:10 (Chile): 1.723 elementos, 10 niveles AEC y 31 grillas AEC. Resultados: 78 comprobaciones no evaluadas y 30 informativas, sin comprobaciones PASS/WARNING/FAIL/NOT_APPLICABLE. La lectura correcta no implica cumplimiento técnico: siguen faltando entradas o reglas para esas comprobaciones.
 - Cubicaciones abrió la misma fuente y leyó 1.723 elementos. La captura quedó persistida con motor `view-quantities-v2.5`, revisión de configuración 2, fecha 01-10-2026 21:59:48 (Chile). Se abrió el historial y se verificó su presencia.
-- Consultar IA recibió esa fuente y leyó un catálogo de 100 campos. Abrir y cerrar el visor conservó la pregunta. La primera llamada a OpenAI falló (`ai_unavailable`); se dejó explícito `OPENAI_MODEL=gpt-5-mini` en producción después de verificar una respuesta HTTP 200/completed con la integración. Falta verificar la consulta BIM tras el nuevo despliegue.
+- Consultar IA recibió esa fuente: 1.723 elementos geométricos y un catálogo de 100 campos. Abrir, cerrar, maximizar y restaurar el visor conserva la conversación. La consulta BIM de producción identificó `ai_auth_failed`: OpenAI rechaza las credenciales o permisos del servidor, aunque Autodesk y el catálogo están disponibles. El modelo configurado es `gpt-5-mini`, cuya compatibilidad se verificó con la integración local; esto no valida la credencial de producción. La sustitución de `OPENAI_API_KEY` quedó preparada en Vercel para el usuario. Falta repetir las consultas BIM y documental después del guardado y nuevo despliegue; no se afirma aceptación de respuestas IA.
 - Cambio a Distrito Verde: se limpió la especialidad y no se mostró la fuente de Centro Español en el contexto del nuevo proyecto.
-- Navegación compacta en la ventana integrada de 435 px; la verificación local anterior cubrió escritorio. No se afirma una aceptación visual exhaustiva de todas las pantallas heredadas.
+- Navegación compacta en la ventana integrada de 435 px y configuración publicada en Chrome a 1.920 px. Se validó la configuración desde la interfaz: versión actual verificada. Captura local: `web/work/configuracion-centro-espanol-publicada.jpg`. Sin errores de consola observados en la comprobación de escritorio. No se afirma una aceptación visual exhaustiva de todas las pantallas heredadas.
 
 La conversación BIM se conserva durante la navegación de esta sesión, separada por usuario, proyecto, archivo, versión y vista; expira como máximo a los cinco días de su creación y se borra con Nueva conversación. No se persiste como conocimiento técnico.
 
@@ -27,3 +27,5 @@ La conversación BIM se conserva durante la navegación de esta sesión, separad
 - Un Bridge/Direct no disponible permanece pendiente; no se generan ni comparan datos de ejemplo.
 - Capturas de cubicación: máximo 2,8 MB comprimidos por solicitud; lectura original limitada a 100 MB al descomprimir. Los errores de guardado se muestran y conservan la lectura temporal.
 - No se consolida un total de errores críticos de ejecuciones históricas incompatibles.
+- Inicio muestra modelos configurados y recuentos reales de ejecuciones. Quedan pendientes los indicadores técnicos consolidados y la cronología completa de actividad de la especificación.
+- Las capturas persistidas se identifican como `VIEWER_CAPTURE`: el servidor valida fuente, estructura y agregación determinística; no vuelve a extraer independientemente todas las propiedades Autodesk recibidas del visor.
