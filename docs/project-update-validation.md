@@ -23,6 +23,16 @@ La conversación BIM se conserva durante la navegación de esta sesión, separad
 
 ## Límites conocidos
 
+### Restablecimiento de OpenAI — 01-10-2026, 23:21–23:28 (Chile)
+
+- El usuario actualizó `OPENAI_API_KEY` de Production; despliegue Vercel `9yp3M8d1p4kutmE245TVht6qnzjM` Ready, asociado a `app.cgsbim.cl`. No se leyó ni registró la clave.
+- Consulta BIM real «Muéstrame las vigas»: 312 coincidencias sobre 1.723 elementos geométricos del archivo de Estructura V3. Evidencia visible: categoría `Revit Structural Framing`, ejemplos Concrete-Rectangular Beam y enlace a la versión Autodesk. Esto verifica el filtro de categoría aplicado, no una auditoría independiente de todos los tipos estructurales.
+- Búsqueda documental real: encontró carpetas Órdenes de Compra DS 19 / DS 49 y Resumen OC, con rutas y enlaces; búsqueda terminada. La consulta de contenido de carpeta recuperó sus diez subcarpetas.
+- Lectura de `OC1-CE-BIM.pdf`: 1 documento con texto leído de 1 procesado mediante OCR. Pregunta por subtotal respondió que no podía confirmar el dato con respaldo suficiente. La autenticación quedó restablecida; esta prueba no valida la extracción correcta del subtotal y conserva ese pendiente.
+- Evidencia de interfaz local: `web/work/ia-restablecida-bim.jpg`.
+
+### Pendientes funcionales
+
 - Consultas a informes guardados: recuentos y acceso a evidencia; la síntesis conversacional transversal no está implementada.
 - Un Bridge/Direct no disponible permanece pendiente; no se generan ni comparan datos de ejemplo.
 - Capturas de cubicación: máximo 2,8 MB comprimidos por solicitud; lectura original limitada a 100 MB al descomprimir. Los errores de guardado se muestran y conservan la lectura temporal.
