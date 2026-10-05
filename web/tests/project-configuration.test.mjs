@@ -4,7 +4,7 @@ import {randomBytes,randomUUID} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
 import {PGlite} from '@electric-sql/pglite';
 import {createConfigurationStore} from '../lib/projects/configuration-store.ts';
-import {configurationInput,activeDiscipline,auditDiscipline,sourceIdentity,availableDisciplines,selectableDiscipline,sourceInProject} from '../lib/projects/configuration.ts';
+import {configurationInput,activeDiscipline,auditDiscipline,sourceIdentity,availableDisciplines,selectableDiscipline,sourceInProject,sourceCheckMatches} from '../lib/projects/configuration.ts';
 import {projectIntent} from '../lib/projects/intent.ts';
 import {snapshotState,validateCapture,createSnapshotStore} from '../lib/projects/snapshots.ts';
 import {calculateQuantities,defaultSettings} from '../public/quantity-v2/quantity-service.js';
@@ -55,4 +55,17 @@ test('project configuration uses append-only history, optimistic conflicts and t
   assert.equal((await captures.list(actor)).runs.length,1);assert.equal((await captures.list({...actor,projectId:'OTHER'})).runs.length,0);assert.equal(await captures.read({...actor,organizationId:'OTHER'},saved.id),null);
   assert.equal(snapshotState(saved,source),'NOT_VERIFIED');assert.equal(snapshotState(saved,source,source.version.id),'CURRENT');assert.equal(snapshotState(saved,source,'TEST_V2'),'OUTDATED');assert.equal(snapshotState(saved,{...source,view:{...source.view,id:'OTHER'}},source.version.id),'OUTDATED');
  }finally{await db.close();}
+});
+
+test('unconfigured disciplines and stale source checks remain pending without crashing',()=>{
+ assert.equal(sourceCheckMatches(null,undefined),false);
+ assert.equal(sourceCheckMatches(source,undefined),false);
+ assert.equal(sourceCheckMatches(null,source),false);
+ assert.equal(sourceCheckMatches(source,source),true);
+ for(const changed of [
+  {...source,scope:{...source.scope,itemId:'OTHER_ITEM'}},
+  {...source,scope:{...source.scope,projectId:'OTHER_PROJECT'}},
+  {...source,version:{...source.version,id:'OTHER_VERSION'}},
+  {...source,view:{...source.view,id:'OTHER_VIEW'}}
+ ])assert.equal(sourceCheckMatches(changed,source),false);
 });

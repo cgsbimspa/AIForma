@@ -19,3 +19,8 @@ export function activeDiscipline(c:ProjectConfiguration|null,id:string){const ro
 export function auditDiscipline(code:string):'ESTRUCTURA'|'ARQUITECTURA'|'MEP'|null{return code==='structure'?'ESTRUCTURA':code==='architecture'?'ARQUITECTURA':['mep','gas','fire-protection','sewer','cold-water','hot-water','ventilation','electricity','hvac','telecommunications','external-water','external-sewer','external-electricity','water','stormwater'].includes(code)?'MEP':null;}
 export const regulatoryDisciplines:Record<string,string[]>= {'SAN-01':['sewer'],'SAN-02':['external-sewer'],'SAN-03':['cold-water','water'],'SAN-04':['external-water'],'SAN-05':['hot-water']};
 export function assertConfigurationScope(c:ProjectConfiguration){for(const d of c.documents??[])if(d.scope.hubId!==c.companyId||d.scope.projectId!==c.projectId)throw Error('out_of_scope');for(const d of c.disciplines)if(d.source&&(d.source.scope.hubId!==c.companyId||d.source.scope.projectId!==c.projectId))throw Error('out_of_scope');return c;}
+
+// A missing source or an old check is never evidence of a verified version.
+export function sourceCheckMatches(source:QuantitySource|null|undefined,checkedSource:QuantitySource|null|undefined){
+ return Boolean(source&&checkedSource&&sourceIdentity(source)===sourceIdentity(checkedSource));
+}
