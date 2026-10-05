@@ -1,3 +1,6 @@
+import {projectModules} from '@/lib/projects/modules';
+import {createConfigurationStore} from '@/lib/projects/configuration-store';
+import {projectTransaction} from '@/lib/memory/database';
 import {NextRequest,NextResponse} from 'next/server';
 import {apiError} from '@/lib/autodesk/authorize';
 import {privateHeaders} from '@/lib/autodesk/http';
@@ -23,6 +26,7 @@ export async function GET(request:NextRequest){
     }));
     const summary=summarizeProject(scope,inputs,new Date().toISOString());
     logProjectRead(actor,started,summary.state==='AVAILABLE'?'success':'partial');
-    return NextResponse.json(summary,{headers:privateHeaders});
+    const moduleConfiguration=await Promise.all(projectModules.map(async m=>{try{const c=await createConfigurationStore(projectTransaction,storageKey(),m.id).read(actor);const enabled=c?.disciplines.filter(d=>d.enabled)??[];return {module:m.id,state:!c?'NOT_CONFIGURED':m.id==='documents'?(c.documents.length?'CONFIGURED':'INCOMPLETE'):enabled.length&&enabled.every(d=>d.source?.view)?'CONFIGURED':'INCOMPLETE',revision:c?.revision??null,updatedAt:c?.updatedAt??null};}catch{return {module:m.id,state:'NOT_AVAILABLE',revision:null,updatedAt:null};}}));
+    return NextResponse.json({...summary,moduleConfiguration},{headers:privateHeaders});
   }catch(error){return apiError(error);}
 }

@@ -10,14 +10,24 @@ import {ProjectSession,projectSessionKey,readProjectCursor} from '@/lib/project-
 import {quantityResponse} from '@/lib/quantities/client';
 import {activeDiscipline,sourceInProject,type ProjectConfiguration} from '@/lib/projects/configuration';
 
+import {moduleForPath} from '@/lib/projects/modules';
+import type {AppProject} from '@/lib/projects/registry';
+
 function useProjectValue(){
+ const pathname=usePathname(),moduleId=moduleForPath(pathname);
+ const [registry,setRegistry]=useState<{key:string;project:AppProject}>(),[registryError,setRegistryError]=useState('');
  const [owner,setOwner]=useState(''),[hubId,setHubId]=useState(''),[projectId,setProjectId]=useState('');
  const [hubs,setHubs]=useState<Entry[]>([]),[projects,setProjects]=useState<Entry[]>([]),[nextPage,setNextPage]=useState<number|null>(null);
  const [error,setError]=useState(''),[busy,setBusy]=useState(false),[revision,setRevision]=useState(0);
  const [connection,setConnection]=useState<'checking'|'connected'|'disconnected'|'unavailable'>('checking');
  const [session]=useState(()=>new ProjectSession()),identity=useRef(''),generation=useRef(0);
  const [sources,setSources]=useState<Record<string,QuantitySource|null>>({});
- const contextKey=projectSessionKey(owner,hubId,projectId,'configuration');
+ const projectKey=projectSessionKey(owner,hubId,projectId,'project');
+ const contextKey=projectSessionKey(owner,hubId,projectId,'configuration:'+moduleId);
+ const appProject=registry?.key===projectKey?registry.project:null;
+ const [legacyState,setLegacyState]=useState<{key:string;value:ProjectConfiguration|null}>({key:'',value:null});
+ const legacyConfiguration=legacyState.key===contextKey?legacyState.value:null;
+ useEffect(()=>{if(!owner||!hubId||!projectId)return;const abort=new AbortController();queueMicrotask(()=>{if(!abort.signal.aborted)setRegistryError('');});void quantityResponse<{project:AppProject}>('/api/projects/enter',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind:'project',hubId,projectId}),signal:abort.signal}).then(r=>{if(!abort.signal.aborted&&r.project.autodeskHubId===hubId&&r.project.autodeskProjectId===projectId)setRegistry({key:projectKey,project:r.project});}).catch(e=>{if(!abort.signal.aborted)setRegistryError(e.message);});return()=>abort.abort();},[owner,hubId,projectId,projectKey,revision]);
  const [configurationState,setConfigurationState]=useState<{key:string;value:ProjectConfiguration|null}>({key:'',value:null});
  const [configurationError,setConfigurationError]=useState(''),[configurationLoading,setConfigurationLoading]=useState(false),[configurationRevision,setConfigurationRevision]=useState(0);
  const [activeSelection,setActiveSelection]=useState<{key:string;id:string}>({key:'',id:''});
@@ -25,8 +35,8 @@ function useProjectValue(){
  const selectedDiscipline=activeDiscipline(configuration,activeSelection.key===contextKey?activeSelection.id:session.get(contextKey+':discipline',()=>''));
  const selectDiscipline=useCallback((id:string)=>{session.set(contextKey+':discipline',id);setActiveSelection({key:contextKey,id});},[contextKey,session]);
  const adoptConfiguration=useCallback((value:ProjectConfiguration)=>{if(value.companyId!==hubId||value.projectId!==projectId)return;setConfigurationState({key:contextKey,value});},[contextKey,hubId,projectId]);
- useEffect(()=>{if(!owner||!hubId||!projectId)return;const abort=new AbortController();queueMicrotask(()=>{if(!abort.signal.aborted){setConfigurationLoading(true);setConfigurationError('');}});void quantityResponse<{configuration:ProjectConfiguration|null}>(`/api/projects/configuration?scope=${encodeURIComponent(JSON.stringify({kind:'project',hubId,projectId}))}`,{signal:abort.signal}).then(r=>{if(!abort.signal.aborted)setConfigurationState({key:contextKey,value:r.configuration});}).catch(e=>{if(!abort.signal.aborted)setConfigurationError(e.message);}).finally(()=>{if(!abort.signal.aborted)setConfigurationLoading(false);});return()=>abort.abort();},[contextKey,owner,hubId,projectId,configurationRevision]);
- const pathname=usePathname(),activeModule=pathname.split('/')[1]||'inicio';
+ useEffect(()=>{if(!owner||!hubId||!projectId||!moduleId)return;const abort=new AbortController();queueMicrotask(()=>{if(!abort.signal.aborted){setConfigurationLoading(true);setConfigurationError('');}});void quantityResponse<{configuration:ProjectConfiguration|null;legacy:ProjectConfiguration|null}>(`/api/projects/configuration?module=${moduleId}&scope=${encodeURIComponent(JSON.stringify({kind:'project',hubId,projectId}))}`,{signal:abort.signal}).then(r=>{if(!abort.signal.aborted){setConfigurationState({key:contextKey,value:r.configuration});setLegacyState({key:contextKey,value:r.legacy});}}).catch(e=>{if(!abort.signal.aborted)setConfigurationError(e.message);}).finally(()=>{if(!abort.signal.aborted)setConfigurationLoading(false);});return()=>abort.abort();},[contextKey,owner,hubId,projectId,moduleId,configurationRevision]);
+ const activeModule=moduleId??'inicio';
  useEffect(()=>{let disposed=false,inFlight=false;const abort=new AbortController();async function check(){if(inFlight)return;inFlight=true;try{const r=await autodeskStatus(abort.signal),v=await r.json();if(disposed)return;const id=v.connected&&typeof v.user?.id==='string'?v.user.id:'';if(v.error==='unavailable'){setConnection('unavailable');return;}setConnection(id?'connected':'disconnected');if(id!==identity.current){generation.current++;identity.current=id;session.clear();setSources({});setOwner(id);setHubs([]);setProjects([]);let cursor=null;try{cursor=readProjectCursor(sessionStorage.getItem('aiforma-project-cursor'),id);if(!id)sessionStorage.removeItem('aiforma-project-cursor');}catch{}setHubId(cursor?.hubId??'');setProjectId(cursor?.projectId??'');}}catch{if(!disposed)setConnection('unavailable');/* Keep context during transient network failures; server authorization still applies. */}finally{inFlight=false;}}void check();const timer=setInterval(()=>{if(document.visibilityState==='visible')void check();},60000);window.addEventListener('focus',check);return()=>{disposed=true;abort.abort();clearInterval(timer);window.removeEventListener('focus',check);};},[session,revision]);
  useEffect(()=>{if(!owner)return;try{sessionStorage.setItem('aiforma-project-cursor',JSON.stringify({owner,hubId,projectId}));}catch{}},[owner,hubId,projectId]);
  useEffect(()=>{if(!owner)return;const abort=new AbortController();queueMicrotask(()=>{if(!abort.signal.aborted){setBusy(true);setError('');}});void quantityBrowse({operation:'hubs'},abort.signal).then(p=>{if(abort.signal.aborted)return;setHubs(p.entries);if(!hubId&&p.entries.length===1)setHubId(p.entries[0].id);}).catch(e=>{if(!abort.signal.aborted)setError(e.message);}).finally(()=>{if(!abort.signal.aborted)setBusy(false);});return()=>abort.abort();},[owner,revision]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -36,11 +46,11 @@ function useProjectValue(){
  const selectProject=useCallback((hub:string,project:string)=>{generation.current++;setHubId(hub);setProjectId(project);setError('');},[]);
  async function moreProjects(){if(nextPage===null)return;const epoch=generation.current;setBusy(true);try{const p=await quantityBrowse({operation:'projects',hubId,page:nextPage});if(epoch!==generation.current)return;setProjects(old=>[...new Map([...old,...p.entries].map(e=>[e.id,e])).values()]);setNextPage(p.evidence.nextPage);}catch(e){if(epoch===generation.current)setError((e as Error).message);}finally{if(epoch===generation.current)setBusy(false);}}
  const sourceKey=projectSessionKey(owner,hubId,projectId,activeModule);
- const publishSource=useCallback((value:QuantitySource|null)=>{setSources(old=>old[sourceKey]===value?old:{...old,[sourceKey]:value});},[sourceKey]);
- const candidateSource=selectedDiscipline?selectedDiscipline.source:sources[sourceKey]??null;
+ const publishSource=useCallback((value:QuantitySource|null)=>{setSources(old=>old[sourceKey]===value?old:{...old,[sourceKey]:value});},[sourceKey,setSources]);
+ const candidateSource=sources[sourceKey]??selectedDiscipline?.source??null;
  const source=sourceInProject(candidateSource,{hubId,projectId})?candidateSource:null;
  const project=useMemo(()=>({kind:'project' as const,hubId,projectId}),[hubId,projectId]);
- return {owner,connection,hubId,projectId,hubs,projects,nextPage,busy,error,setHub,setProject,selectProject,moreProjects,refresh:()=>setRevision(v=>v+1),project,source,publishSource,session:session,configuration,configurationError,configurationLoading,selectedDiscipline,selectDiscipline,adoptConfiguration,reloadConfiguration:()=>setConfigurationRevision(n=>n+1)};
+ return {appProject,registryError,moduleId,legacyConfiguration,owner,connection,hubId,projectId,hubs,projects,nextPage,busy,error,setHub,setProject,selectProject,moreProjects,refresh:()=>setRevision(v=>v+1),project,source,publishSource,session:session,configuration,configurationError,configurationLoading,selectedDiscipline,selectDiscipline,adoptConfiguration,reloadConfiguration:()=>setConfigurationRevision(n=>n+1)};
 }
 const Context=createContext<ReturnType<typeof useProjectValue>|null>(null);
 export function ProjectProvider({children}:{children:ReactNode}){return <Context.Provider value={useProjectValue()}>{children}</Context.Provider>;}

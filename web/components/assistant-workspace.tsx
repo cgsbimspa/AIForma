@@ -1,7 +1,6 @@
 "use client";
 
 import {useProjectContext,useProjectState} from "./project-context";
-import {projectSessionKey} from "@/lib/project-session";
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { navigationRetentionMs, rememberConversation, recallConversation, type ConversationSnapshot } from "@/lib/assistant/navigation";
 import { createPortal } from "react-dom";
@@ -72,12 +71,12 @@ function ConnectedWorkspace({ aiConfigured, invalidate,initialQuestion,onQuestio
   const selection=navigation.selection.scope.kind==="all"?{scope:projectContext.project,label:"Todo el proyecto"}:navigation.selection;
   const [snapshotMap]=useProjectState("assistant.snapshots",()=>new Map<string,ConversationSnapshot<ChatSnapshot>>());
   const snapshots=useRef(snapshotMap);
-  const setSelection=useCallback((next:Selection)=>{if(compact&&(next.scope.kind==="all"||next.scope.projectId!==projectContext.projectId||next.scope.hubId!==projectContext.hubId))return;if(next.scope.kind!=="all"&&(next.scope.projectId!==projectContext.projectId||next.scope.hubId!==projectContext.hubId)){projectContext.session.set(projectSessionKey(projectContext.owner,next.scope.hubId,next.scope.projectId,"assistant.navigation"),{selection:next,previous:[]});projectContext.selectProject(next.scope.hubId,next.scope.projectId);return;}setNavigation(current=>JSON.stringify(current.selection.scope)===JSON.stringify(next.scope)?current:{selection:next,previous:[...current.previous,current.selection],initial:recallConversation(snapshots.current,JSON.stringify(next.scope))});},[projectContext,setNavigation,compact]);
+  const setSelection=useCallback((next:Selection)=>{if((next.scope.kind==="all"||next.scope.projectId!==projectContext.projectId||next.scope.hubId!==projectContext.hubId))return;setNavigation(current=>JSON.stringify(current.selection.scope)===JSON.stringify(next.scope)?current:{selection:next,previous:[...current.previous,current.selection],initial:recallConversation(snapshots.current,JSON.stringify(next.scope))});},[projectContext,setNavigation]);
   const back=()=>setNavigation(current=>current.previous.length?{selection:current.previous.at(-1)!,previous:current.previous.slice(0,-1),initial:recallConversation(snapshots.current,JSON.stringify(current.previous.at(-1)!.scope))}:current);
   const saveSnapshot=useCallback((key:string,data:ChatSnapshot,expiresAt:number)=>rememberConversation(snapshots.current,key,data,expiresAt),[]);
   const [chatRevision,setChatRevision]=useState(0);
   function restoreSelection(scope:DataScope,initial:ConversationSnapshot<ChatSnapshot>){
-    if(compact&&(scope.kind==="all"||scope.projectId!==projectContext.projectId||scope.hubId!==projectContext.hubId))return;
+    if((scope.kind==="all"||scope.projectId!==projectContext.projectId||scope.hubId!==projectContext.hubId))return;
     setNavigation(current=>({selection:[current.selection,...current.previous].find(row=>JSON.stringify(row.scope)===JSON.stringify(scope))??{scope,label:scope.kind==='file'?'Archivo de la conversación':scope.kind==='folder'?'Carpeta de la conversación':'Proyecto de la conversación'},previous:[...current.previous,current.selection],initial}));
     setChatRevision(n=>n+1);
   }

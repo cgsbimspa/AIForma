@@ -4,7 +4,7 @@ export type ProjectScope = {kind:'project';hubId:string;projectId:string};
 export type SummaryModule = 'audit'|'coordination'|'quantities';
 export type ModuleOverview = {module:SummaryModule;runs:number;configurations:number;latestAt:string|null;sources:QuantitySource[]};
 export type SummaryInput = {module:SummaryModule;state:'AVAILABLE';data:ModuleOverview}|{module:SummaryModule;state:'NOT_AVAILABLE'};
-export type ProjectSummary = ReturnType<typeof summarizeProject>;
+export type ProjectSummary = ReturnType<typeof summarizeProject> & {moduleConfiguration?:{module:string;state:string;revision:number|null;updatedAt:string|null}[]};
 
 // Only configured references are counted. This is not an inventory of all cloud files.
 export function summarizeProject(scope:ProjectScope, inputs:SummaryInput[], checkedAt:string) {

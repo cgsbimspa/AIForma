@@ -35,7 +35,7 @@ export function QuantityWorkspace() {
 
 function ProjectQuantities({ project, name }: { project: QuantityProject; name: string }) {
   const context=useProjectContext();
-  const disciplineId=context.selectedDiscipline?.id,disciplineCode=context.selectedDiscipline?.code,centralRevision=context.configuration?.revision;
+  const disciplineId=context.selectedDiscipline?.source?.view?context.selectedDiscipline.id:undefined,disciplineCode=context.selectedDiscipline?.code,centralRevision=context.configuration?.revision;
   const [management,setManagement]=useState(false),[showHidden,setShowHidden]=useState(false);
   const [filterSlot,setFilterSlot]=useState<HTMLElement|null>(null);
   const [workspace, setWorkspace] = useState<Workspace | null>(null);

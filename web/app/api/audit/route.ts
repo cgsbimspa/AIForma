@@ -1,3 +1,5 @@
+import {createExecutionCache,executionKey} from '@/lib/projects/execution-cache';
+import {projectTransaction} from '@/lib/memory/database';
 import { NextRequest,NextResponse } from 'next/server';
 import { z } from 'zod';
 import { authorizeData,apiError } from '@/lib/autodesk/authorize';
@@ -11,13 +13,13 @@ import { verifiedSource } from '@/lib/quantities/autodesk';
 import { configSchema,catalogSchema,type AuditRun } from '@/lib/audit/contracts';
 import { createAuditStore } from '@/lib/audit/store';
 import { readAuditView,property } from '@/lib/audit/provider';
-import { executeAudit,score } from '@/lib/audit/engine';
-import { auditRules } from '@/lib/audit/catalog';
+import { executeAudit,score,auditEngineVersion } from '@/lib/audit/engine';
+import { auditRules,auditRuleSetVersion } from '@/lib/audit/catalog';
 export const runtime='nodejs';export const dynamic='force-dynamic';export const maxDuration=120;
 const schema=z.object({scope:projectScope,command:z.discriminatedUnion('action',[
  z.object({action:z.literal('save'),revision:z.number().int().nonnegative(),configuration:configSchema}).strict(),
  z.object({action:z.literal('catalog'),origin:z.enum(['COMPANY','PROJECT']),revision:z.number().int().nonnegative(),catalog:catalogSchema}).strict(),
- z.object({action:z.literal('run'),revision:z.number().int().nonnegative()}).strict(),
+ z.object({action:z.literal('run'),revision:z.number().int().nonnegative(),force:z.boolean().default(false)}).strict(),
  z.object({action:z.literal('issue'),runId:z.string().uuid(),findingId:z.string().uuid()}).strict(),
 ])}).strict();
 const response=(value:unknown)=>NextResponse.json(value,{headers:privateHeaders});
@@ -50,7 +52,9 @@ export async function POST(request:NextRequest){try{
  if(!c?.source?.view)throw new DataError('audit_view_required',422);
  const startedAt=new Date().toISOString();
  const source=await verifiedSource(session.accessToken,c.source.scope,c.source.version.id,c.source.view.id,request.signal);
+ const cache=createExecutionCache(projectTransaction),digest=executionKey('audit',source,{...c,source:null,configurationRevision:workspace.revision},{company:workspace.companyCatalog,project:workspace.projectCatalog,rules:auditRules,version:auditRuleSetVersion},auditEngineVersion);
+ if(!command.force){const previous=await cache.read(actor,'audit',digest);if(previous)return response({...report(await db.run(actor,previous)),reused:true});}
  const inventory=await readAuditView(session.accessToken,source,request.signal);
  const run=executeAudit({configuration:{...c,source},inventory,companyCatalog:workspace.companyCatalog,projectCatalog:workspace.projectCatalog,createdBy:actor.userId,startedAt});
- await db.appendRun(actor,run);return response(report(run));
+ await db.appendRun(actor,run);if(run.status==='COMPLETED')await cache.save(actor,'audit',digest,run.id);return response({...report(run),reused:false});
 }catch(e){return apiError(e);}}

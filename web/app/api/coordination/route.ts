@@ -1,3 +1,7 @@
+import {createExecutionCache,executionKey} from '@/lib/projects/execution-cache';
+import {projectTransaction} from '@/lib/memory/database';
+import {engineVersion} from '@/lib/coordination/catalog';
+import {ridaaRules,ridaaSource} from '@/lib/coordination/ridaa';
 import {NextRequest,NextResponse} from 'next/server';
 import {z} from 'zod';
 import {authorizeData,apiError} from '@/lib/autodesk/authorize';
@@ -16,7 +20,7 @@ export const runtime='nodejs';export const dynamic='force-dynamic';export const 
 const schema=z.object({scope:projectScope,command:z.discriminatedUnion('action',[
  z.object({action:z.literal('save'),revision:z.number().int().nonnegative(),configuration:configurationSchema}).strict(),
  z.object({action:z.literal('inspect'),source:sourceSchema}).strict(),
- z.object({action:z.literal('run'),systemId,revision:z.number().int().nonnegative()}).strict(),
+ z.object({action:z.literal('run'),systemId,revision:z.number().int().nonnegative(),force:z.boolean().default(false)}).strict(),
  z.object({action:z.literal('annotate'),runId:z.string().uuid(),findingId:z.string().uuid(),kind:z.enum(['issue','comment','reviewed']),text:z.string().trim().min(1).max(3000)}).strict(),
  z.object({action:z.literal('compare'),previous:z.string().uuid(),current:z.string().uuid()}).strict(),
 ])}).strict();
@@ -48,6 +52,8 @@ export async function POST(request:NextRequest){try{
  if(!saved?.configuration.source?.view)throw new DataError('coordination_view_required',422);
  if(saved.revision!==command.revision)throw new DataError('configuration_conflict',409);
  const c=saved.configuration,s=c.source!,source=await verifiedSource(session.accessToken,s.scope,s.version.id,s.view!.id,request.signal);
+ const cache=createExecutionCache(projectTransaction),digest=executionKey('coordination',source,{...c,source:null,revision:saved.revision},{rules:ridaaRules,source:ridaaSource},engineVersion);
+ if(!command.force){const previous=await cache.read(actor,'coordination',digest);if(previous)return response({...report(await db.run(actor,previous)),reused:true});}
  const run=executeReview({...c,source},await readAuditView(session.accessToken,source,request.signal),actor.userId,saved.revision);
- await db.append(actor,run);return response(report(run));
+ await db.append(actor,run);if(run.status==='COMPLETED')await cache.save(actor,'coordination',digest,run.id);return response({...report(run),reused:false});
 }catch(e){return apiError(e);}}
