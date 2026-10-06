@@ -1,3 +1,5 @@
+import {createConfigurationStore} from '@/lib/projects/configuration-store';
+import {projectAuditConfiguration,projectAuditResult} from '@/lib/audit/project';
 import {createExecutionCache,executionKey} from '@/lib/projects/execution-cache';
 import {projectTransaction} from '@/lib/memory/database';
 import { NextRequest,NextResponse } from 'next/server';
@@ -20,6 +22,7 @@ const schema=z.object({scope:projectScope,command:z.discriminatedUnion('action',
  z.object({action:z.literal('save'),revision:z.number().int().nonnegative(),configuration:configSchema}).strict(),
  z.object({action:z.literal('catalog'),origin:z.enum(['COMPANY','PROJECT']),revision:z.number().int().nonnegative(),catalog:catalogSchema}).strict(),
  z.object({action:z.literal('run'),revision:z.number().int().nonnegative(),force:z.boolean().default(false)}).strict(),
+ z.object({action:z.literal('run-discipline'),disciplineId:z.string().uuid(),revision:z.number().int().positive(),force:z.boolean().default(false)}).strict(),
  z.object({action:z.literal('issue'),runId:z.string().uuid(),findingId:z.string().uuid()}).strict(),
 ])}).strict();
 const response=(value:unknown)=>NextResponse.json(value,{headers:privateHeaders});
@@ -28,6 +31,13 @@ function preview(value:unknown):unknown {return Array.isArray(value)&&value.leng
 function report(run:AuditRun){return {...run,metrics:score(run.findings),inventory:{...run.inventory,elements:[],levels:run.inventory.levels.map(e=>{const value=property(e,['Elevation','Elevación'])?.value;return {...e,publishedElevation:typeof value==='string'||typeof value==='number'?value:null,properties:{}};}),grids:run.inventory.grids.map(e=>({...e,properties:{}}))},findings:run.findings.map(f=>({...f,affectedCount:f.affectedElements.length,facets:Object.fromEntries(['category','family','type','level'].map(key=>[key,[...new Set(f.affectedElements.map(e=>e[key as 'category']).filter(Boolean))]])),affectedElements:f.affectedElements.slice(0,50),observedValue:preview(f.observedValue),evidence:f.evidence.map(e=>({...e,observedValue:preview(e.observedValue),viewerReference:{...e.viewerReference,dbIds:e.viewerReference.dbIds.slice(0,50)}}))}))};}
 export async function GET(request:NextRequest){try{
  const scope=projectScope.parse(JSON.parse(request.nextUrl.searchParams.get('scope')??'null')),actor=await memoryActor(request,scope),db=store();
+ if(request.nextUrl.searchParams.get('overview')==='1'){
+  const central=await createConfigurationStore(projectTransaction,storageKey(),'audit').read(actor),workspace=await db.workspace(actor),cache=createExecutionCache(projectTransaction);
+  const rows=[];for(const row of central?.disciplines.filter(d=>d.enabled)??[]){const c=projectAuditConfiguration(row,workspace.configuration);let result=null;
+   if(c){const digest=executionKey('audit',c.source!,{...c,source:null},{company:workspace.companyCatalog,project:workspace.projectCatalog,rules:auditRules,version:auditRuleSetVersion},auditEngineVersion);const id=await cache.read(actor,'audit',digest);if(id)result=projectAuditResult(await db.run(actor,id));}
+   rows.push({id:row.id,name:row.name,source:row.source,ready:!!c,reason:c?null:!row.source?'Falta seleccionar archivo':!row.source.view||row.source.view.role!=='3d'?'Falta una vista 3D publicada':'Especialidad sin reglas de auditoría asociadas',result});
+  }return response({revision:central?.revision??0,rows});
+ }
  const runId=request.nextUrl.searchParams.get('run');if(!runId)return response(await db.workspace(actor));
  const run=await db.run(actor,z.string().uuid().parse(runId)),findingId=request.nextUrl.searchParams.get('finding');
  if(findingId){const f=run.findings.find(f=>f.id===findingId);if(!f)throw new DataError('not_found',404);const page=z.coerce.number().int().min(0).max(10000).parse(request.nextUrl.searchParams.get('page')??0);return response({elements:f.affectedElements.slice(page*100,(page+1)*100),total:f.affectedElements.length,ids:f.affectedElements.map(e=>({dbId:e.dbId,uniqueId:e.uniqueId})),nextPage:(page+1)*100<f.affectedElements.length?page+1:null});}
@@ -47,14 +57,18 @@ export async function POST(request:NextRequest){try{
   if(source?.view&&source.view.role!=='3d')throw new DataError('audit_view_required',422);
   await db.save(actor,command.revision,{...c,source});return response(await db.workspace(actor));
  }
- const workspace=await db.workspace(actor),c=workspace.configuration;
- if(workspace.revision!==command.revision)throw new DataError('configuration_conflict',409);
+ const workspace=await db.workspace(actor);let c=workspace.configuration;
+ if(command.action==='run-discipline'){
+  const central=await createConfigurationStore(projectTransaction,storageKey(),'audit').read(actor);
+  if(!central||central.revision!==command.revision)throw new DataError('configuration_conflict',409);
+  const row=central.disciplines.find(d=>d.id===command.disciplineId);c=row?projectAuditConfiguration(row,workspace.configuration):null;
+ }else if(workspace.revision!==command.revision)throw new DataError('configuration_conflict',409);
  if(!c?.source?.view)throw new DataError('audit_view_required',422);
  const startedAt=new Date().toISOString();
  const source=await verifiedSource(session.accessToken,c.source.scope,c.source.version.id,c.source.view.id,request.signal);
- const cache=createExecutionCache(projectTransaction),digest=executionKey('audit',source,{...c,source:null,configurationRevision:workspace.revision},{company:workspace.companyCatalog,project:workspace.projectCatalog,rules:auditRules,version:auditRuleSetVersion},auditEngineVersion);
- if(!command.force){const previous=await cache.read(actor,'audit',digest);if(previous)return response({...report(await db.run(actor,previous)),reused:true});}
+ const cache=createExecutionCache(projectTransaction),digest=executionKey('audit',source,{...c,source:null,...(command.action==='run-discipline'?{}:{configurationRevision:workspace.revision})},{company:workspace.companyCatalog,project:workspace.projectCatalog,rules:auditRules,version:auditRuleSetVersion},auditEngineVersion);
+ if(!command.force){const previous=await cache.read(actor,'audit',digest);if(previous){const saved=await db.run(actor,previous);if(saved.status==='COMPLETED')return response(command.action==='run-discipline'?{result:projectAuditResult(saved),reused:true}:{...report(saved),reused:true});}}
  const inventory=await readAuditView(session.accessToken,source,request.signal);
  const run=executeAudit({configuration:{...c,source},inventory,companyCatalog:workspace.companyCatalog,projectCatalog:workspace.projectCatalog,createdBy:actor.userId,startedAt});
- await db.appendRun(actor,run);if(run.status==='COMPLETED')await cache.save(actor,'audit',digest,run.id);return response({...report(run),reused:false});
+ await db.appendRun(actor,run);if(run.status==='COMPLETED'||command.action==='run-discipline')await cache.save(actor,'audit',digest,run.id);return response(command.action==='run-discipline'?{result:projectAuditResult(run),reused:false}:{...report(run),reused:false});
 }catch(e){return apiError(e);}}

@@ -1,2 +1,2 @@
-import { AuditPage } from '@/components/audit/audit-page';
-export default function Page(){return <AuditPage section=""/>;}
+import {AuditProjectOverview} from '@/components/audit/audit-project-overview';
+export default function Page(){return <AuditProjectOverview/>;}

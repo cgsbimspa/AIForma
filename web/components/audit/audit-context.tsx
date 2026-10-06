@@ -1,4 +1,5 @@
 'use client';
+import {usePathname,useSearchParams} from 'next/navigation';
 import { useProjectContext, useProjectState } from '../project-context';
 import { createContext,useContext,useEffect,useMemo,useState,useCallback,type ReactNode } from 'react';
 import {activateProjectModule} from '@/lib/projects/client';
@@ -19,14 +20,16 @@ export async function auditResponse<T>(scope:QuantityProject,command?:unknown,qu
 }
 export function AuditProvider({children}:{children:ReactNode}){
  const {hubs,projects,hubId,projectId,nextPage,setHub,setProject,moreProjects,selectedDiscipline,configuration}=useProjectContext();
+ const pathname=usePathname(),query=useSearchParams(),requestedRun=query.get('run');
  const disciplineId=selectedDiscipline?.source?.view?selectedDiscipline.id:undefined,centralRevision=configuration?.revision;
  const [workspace,setWorkspace]=useProjectState<AuditWorkspace|null>(`audit.workspace:${disciplineId??"none"}`,null),[run,setRun]=useProjectState<AuditReport|null>(`audit.report:${disciplineId??"none"}`,null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
  const project=useMemo<QuantityProject>(()=>({kind:'project',hubId,projectId}),[hubId,projectId]);
- useEffect(()=>{if(!projectId)return;const abort=new AbortController();queueMicrotask(()=>{if(!abort.signal.aborted)setBusy(true);});void (disciplineId&&centralRevision?activateProjectModule<AuditWorkspace>(project,disciplineId,centralRevision,'audit',abort.signal):auditResponse<AuditWorkspace>(project,undefined,'',abort.signal)).then(value=>{if(!abort.signal.aborted)setWorkspace(value);}).catch(e=>{if(!abort.signal.aborted)setError(e.message);}).finally(()=>{if(!abort.signal.aborted)setBusy(false);});return()=>abort.abort();},[project,projectId,setWorkspace,disciplineId,centralRevision]);
+ useEffect(()=>{if(!projectId||pathname==='/auditoria-bim')return;const abort=new AbortController();queueMicrotask(()=>{if(!abort.signal.aborted)setBusy(true);});void (!requestedRun&&disciplineId&&centralRevision?activateProjectModule<AuditWorkspace>(project,disciplineId,centralRevision,'audit',abort.signal):auditResponse<AuditWorkspace>(project,undefined,'',abort.signal)).then(value=>{if(!abort.signal.aborted)setWorkspace(value);}).catch(e=>{if(!abort.signal.aborted)setError(e.message);}).finally(()=>{if(!abort.signal.aborted)setBusy(false);});return()=>abort.abort();},[project,projectId,setWorkspace,disciplineId,centralRevision,pathname,requestedRun]);
  const reload=useCallback(async()=>{if(!projectId)return;setBusy(true);setError('');try{setWorkspace(await auditResponse<AuditWorkspace>(project));}catch(e){setError((e as Error).message);}finally{setBusy(false);}},[project,projectId,setWorkspace]);
  async function command(c:unknown){setBusy(true);setError('');setNotice('');try{const result=await auditResponse<AuditWorkspace|AuditReport>(project,c);if('findings'in result){setRun(result);setWorkspace(await auditResponse<AuditWorkspace>(project));setNotice('reused' in result&&result.reused?'Resultado vigente para esta fuente y configuración. No existen cambios desde la última ejecución.':'Ejecución guardada con su vista, versión, reglas y evidencia.');}else if('configuration'in result){setWorkspace(result);setNotice('Configuración guardada. Las ejecuciones anteriores conservan sus criterios originales.');}return result;}catch(e){setError((e as Error).message);throw e;}finally{setBusy(false);}}
- async function openRun(id:string){setBusy(true);setError('');try{setRun(await auditResponse<AuditReport>(project,undefined,`&run=${encodeURIComponent(id)}`));}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
- return <AuditContext.Provider value={{hubs,projects,hubId,projectId,project,workspace,run,busy,error,notice,nextPage,setHub,setProject,moreProjects,reload,command,openRun,setNotice}}>{children}</AuditContext.Provider>;
+ const openRun=useCallback(async(id:string)=>{setBusy(true);setError('');try{setRun(await auditResponse<AuditReport>(project,undefined,`&run=${encodeURIComponent(id)}`));}catch(e){setError((e as Error).message);}finally{setBusy(false);}},[project,setRun]);
+ useEffect(()=>{if(!requestedRun)return;const controller=new AbortController();void auditResponse<AuditReport>(project,undefined,'&run='+encodeURIComponent(requestedRun),controller.signal).then(value=>{if(!controller.signal.aborted)setRun(value);}).catch(e=>{if(!controller.signal.aborted)setError(e.message);});return()=>controller.abort();},[project,requestedRun,setRun]);
+ return <AuditContext.Provider value={{hubs,projects,hubId,projectId,project,workspace,run:requestedRun&&run?.id!==requestedRun?null:run,busy,error,notice,nextPage,setHub,setProject,moreProjects,reload,command,openRun,setNotice}}>{children}</AuditContext.Provider>;
 }
 
 export function AuditProjectProvider({children}:{children:ReactNode}){const p=useProjectContext();return <AuditProvider key={`${p.owner}:${p.hubId}:${p.projectId}:${p.selectedDiscipline?.id}:${p.configuration?.revision}`}>{children}</AuditProvider>;}
